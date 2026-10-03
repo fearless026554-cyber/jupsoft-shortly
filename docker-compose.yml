@@ -13,6 +13,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend-nestjs/src/db/schema.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-jlmp}"]
       interval: 5s
@@ -47,11 +48,11 @@ services:
         condition: service_healthy
     environment:
       - PORT=3000
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      - DB_NAME=${DB_NAME:-jlmp}
+      - PG_HOST=postgres
+      - PG_PORT=5432
+      - PG_USER=${DB_USER:-postgres}
+      - PG_PASSWORD=${DB_PASSWORD:-postgres}
+      - PG_DATABASE=${DB_NAME:-jlmp}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5000}
