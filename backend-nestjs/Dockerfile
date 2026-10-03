@@ -6,8 +6,8 @@ WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # Copy package files
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --ignore-scripts
+COPY package.json ./
+RUN pnpm install --ignore-scripts
 
 # Copy source code and build
 COPY . .
@@ -19,8 +19,8 @@ FROM node:20-alpine
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+COPY package.json ./
+RUN pnpm install --prod --ignore-scripts
 
 COPY --from=builder /app/dist ./dist
 
