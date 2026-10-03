@@ -58,7 +58,7 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - DEFAULT_DOMAIN_ID=00000000-0000-0000-0000-000000000000
     ports:
-      - "3000:3000"
+      - "3001:3000"
 
   frontend:
     build:
@@ -72,7 +72,7 @@ services:
       - NEXT_PUBLIC_BACKEND_URL=http://backend:3000
       - CMS_API_KEY=${CMS_API_KEY:-YOUR_SUPER_SECRET_CMS_KEY_HERE}
     ports:
-      - "5000:5000"
+      - "5001:5000"
 
 volumes:
   postgres_data:
