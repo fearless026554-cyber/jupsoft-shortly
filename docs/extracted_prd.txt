@@ -1,0 +1,628 @@
+=== PAGE 1 ===
+Jupsoft Link Management Platform (JLMP)
+— PRD v1.0
+ Sep 28, 2026  ·  @Sachin Sharma
+Executive summary
+JLMP is a branded short-link, QR code and click-attribution layer for Jupsoft products,
+launched internally first and opened to paying customers only after it proves value. Its
+edge is not shortening links; it is connecting a click to a business result inside the Jupsoft
+ecosystem, such as a fee paid, an enquiry raised or an admission confirmed.
+The MVP ships multi-tenant from day one, so the commercial launch needs no redesign. It
+deliberately defers billing, white labelling and heavy analytics infrastructure until usage
+justifies them.
+Problem statement
+Jupsoft products send thousands of links to parents, students and prospects, but cannot
+show whether those links led to action. Today these links are long, unbranded or routed
+through third-party shorteners.
+Cost and length: long URLs push SMS past the 160-character segment limit, raising
+message cost.
+Trust: parents increasingly ignore generic short links (bit.ly, tinyurl) because they
+resemble phishing.
+Item Detail
+Product Jupsoft Link Management Platform (JLMP)
+Document version 1.0 (draft for review)
+Owner Sachin, Director, Jupsoft Systems Pvt. Ltd.
+Audience Product, engineering, QA, DevOps, sales
+leadership
+Stack Node.js (TypeScript), PostgreSQL, Redis,
+Cloudflare
+Release strategy Internal MVP → internal rollout → commercial
+launch
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 1 of 15
+
+=== PAGE 2 ===
+Compliance: TRAI requires URLs in commercial SMS to be whitelisted on the DLT
+platform; third-party shortener domains complicate this.
+No attribution: schools cannot see whether a fee reminder led to a payment, or an
+admission campaign to an enquiry.
+Dependency: third-party services can change pricing, rate-limit, expire links or hold
+click data outside Jupsoft's control.
+The opportunity is to turn every link Jupsoft products send into a measurable, trusted
+touchpoint, and to offer that capability to customers as part of the Jupsoft ecosystem.
+Vision, positioning and objectives
+JLMP's vision is to make every link an organization sends trusted, trackable and tied to an
+outcome. It is positioned as the communication and attribution layer of the Jupsoft
+ecosystem, not a standalone Bitly competitor.
+Positioning statement: JLMP helps organizations send branded, secure links and QR
+codes, and see which messages actually drive payments, enquiries and admissions, by
+connecting link activity to the Jupsoft systems they already use.
+Why this wins where generic shorteners don't: Bitly, Rebrandly, Short.io and open-
+source tools compete on price and features. JLMP competes on attribution inside Jupsoft
+ERP, Admission CRM, CRM, LMS and DigifyNext campaigns, which generic tools cannot
+see.
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 2 of 15
+
+=== PAGE 3 ===
+Target users and roles
+The MVP serves Jupsoft's own products and their institutional customers; external
+businesses and agencies come with the commercial launch.
+Objective
+type
+Objective Measured by
+Business Replace third-party shorteners
+across all Jupsoft products
+Share of product-sent links on JLMP
+Business Add measurable value to existing
+ERP and CRM contracts
+Customer usage of link reports
+Business Create a future SaaS revenue line Paid tenants after commercial
+launch
+Customer Show institutions which
+communication drives action
+Click-to-outcome reports in use
+Technical Multi-tenant, API-first from the MVP No redesign needed for commercial
+launch
+Technical Fast, reliable redirects Latency and uptime targets (see
+Non-functional requirements)
+Segment Examples Phase Primary need
+Internal
+products
+eConnect ERP, Admission
+CRM, CRM, LMS
+MVP Short links via API inside
+existing notifications
+Education
+customers
+Schools, colleges,
+universities, coaching
+institutes
+MVP (via
+ERP)
+Trusted fee, admission and
+circular links; outcome
+reports
+Jupsoft
+marketing
+DigifyNext campaigns MVP Campaign links, UTM
+tracking, QR codes
+Businesses SMEs, healthcare,
+manufacturing, NGOs,
+retail
+Commercial Branded links and
+campaign analytics
+Agencies Digital marketing and SEO
+agencies
+Commercial Multi-client link
+management, white label
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 3 of 15
+
+=== PAGE 4 ===
+Scope by phase
+The MVP is limited to what Jupsoft's own products need to replace third-party
+shorteners and show click-to-outcome data.
+Role Can do
+Platform Super Admin (Jupsoft) Manage tenants, plans, domains, abuse reports,
+global settings
+Tenant Admin Manage users, links, campaigns, domains and API
+keys for one tenant
+Manager Create links and campaigns; view all tenant
+analytics
+User Create and manage own links; view own analytics
+Read Only View reports only
+Capability MVP Phase 2 Phase 3
+Tenant and user management with roles Yes
+Short links (random code + tenant-scoped alias) Yes
+Redirect service (302/307) with expiry and disable Yes
+Malicious-URL screening and abuse reporting Yes
+Static QR codes (PNG, SVG) Yes
+Dynamic QR codes (editable destination) Yes
+Basic analytics: clicks, unique clicks, device,
+referrer, date
+Yes
+REST API with API keys Yes
+Bulk link creation (API and CSV) Yes
+Outcome attribution hooks (fee paid, enquiry
+created)
+Yes
+Campaigns and UTM builder Yes
+Tenant subdomains and customer custom domains Yes
+Billing, plans and usage metering Yes
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 4 of 15
+
+=== PAGE 5 ===
+Out of scope for all phases in this PRD: link-in-bio pages, digital business cards, and a
+public self-service free tier. Each can be proposed separately once the core platform is
+proven.
+Functional requirements
+The MVP has 16 functional requirements; each must pass its acceptance criteria before
+internal rollout.
+Capability MVP Phase 2 Phase 3
+White label (logo, colours, branded reports) Yes
+Report exports (CSV, Excel, PDF) Yes
+SSO for enterprise tenants Yes
+Funnel reports (admission, fee collection) Yes
+AI campaign insights and send-time
+recommendations
+Yes
+ID Requirement Acceptance criteria Phase
+FR-01 Create tenant Super Admin creates, suspends and reactivates
+a tenant; a suspended tenant's links show a
+neutral "link unavailable" page
+MVP
+FR-
+02
+Manage users and
+roles
+Tenant Admin invites users and assigns one of
+five roles; every action checks role and tenant
+MVP
+FR-
+03
+Create short link Input: destination URL, optional alias, expiry,
+max clicks, tag. Output: short URL and QR code
+in under 500 ms
+MVP
+FR-
+04
+Short code generation Random base62 code, 6–7 characters,
+excluding look-alikes (0/O, 1/l/I); unique
+constraint in database
+MVP
+FR-
+05
+Tenant-scoped alias Readable aliases are unique within a tenant
+only, served under a tenant prefix (e.g.
+/hw/admission-2027); reserved words blocked
+MVP
+FR-
+06
+Redirect Active link redirects with HTTP 302 by default
+(307 optional); 301 is not offered
+MVP
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 5 of 15
+
+=== PAGE 6 ===
+ID Requirement Acceptance criteria Phase
+FR-
+07
+Link lifecycle Links can be edited, disabled, archived, cloned;
+expired or max-click links show a tenant-
+branded expiry page
+MVP
+FR-
+08
+Destination screening Every destination is checked against a
+malicious-URL service at creation and re-
+checked periodically; flagged links are blocked
+MVP
+FR-
+09
+Abuse reporting Public "report this link" page; reports queue for
+Super Admin review
+MVP
+FR-10 QR codes Every link gets a QR code downloadable as
+PNG and SVG; dynamic QR codes keep the
+same code when the destination changes
+MVP
+FR-11 Click logging Each click records timestamp, link, tenant,
+device type, browser, OS, referrer, country
+(from IP) and a hashed visitor key; raw IP is not
+stored
+MVP
+FR-12 Analytics dashboard Per-link and per-tenant totals, unique clicks,
+device, referrer and daily trend over a chosen
+date range
+MVP
+FR-13 REST API Every UI action is available via versioned API
+authenticated with tenant API keys
+MVP
+FR-14 API keys Create, name, scope, rotate and revoke keys;
+last-used time shown
+MVP
+FR-15 Bulk creation Up to 10,000 links per API batch or CSV upload,
+processed asynchronously with a status
+endpoint
+MVP
+FR-16 Outcome attribution Products can attach an external reference (e.g.
+fee invoice ID) to a link and post an outcome
+event back; reports show clicks versus
+outcomes
+MVP
+FR-17 Campaigns and UTM Group links into campaigns; UTM builder
+appends parameters; campaign-level reports
+Phase
+2
+FR-18 Custom domains Tenant adds a domain, verifies via DNS record,
+SSL issued automatically, health monitored
+Phase
+2
+FR-19 Billing and metering Plans, subscriptions, invoices; metering of links,
+clicks, API calls and users
+Phase
+2
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 6 of 15
+
+=== PAGE 7 ===
+FR-16 is the requirement that differentiates JLMP; it should be designed with the ERP and
+Admission CRM teams before development starts.
+Domain strategy and SMS compliance
+JLMP uses two dedicated short domains, separate from jupsoft.com, so an abuse flag on
+public traffic can never break school fee links or company email.
+Domain selection rules
+5–7 characters before the TLD, easy to read aloud and type from a printed circular.
+Recognizably connected to Jupsoft or its purpose, so recipients trust it.
+Prefer .in : short, stable under NIXI, familiar to Indian users. Avoid spam-associated
+TLDs (.xyz, .top, .tk) and foreign ccTLDs with unpredictable registry rules.
+Registrar lock, auto-renewal, DNSSEC and Cloudflare in front, from day one.
+SMS DLT compliance
+Each short domain must be whitelisted on the DLT platform before use in SMS, for
+Jupsoft and for each sender entity (school) where required.
+SMS templates must reference the whitelisted domain; the SMS vendor must confirm
+the exact whitelisting process before the MVP pilot.
+ID Requirement Acceptance criteria Phase
+FR-
+20
+White label Tenant logo, colours and domain on dashboard,
+expiry pages and reports
+Phase
+2
+FR-21 Exports Reports exported as CSV, Excel and PDF Phase
+2
+Domain Used for Phase
+Internal short domain Links sent by Jupsoft products (ERP,
+Admission CRM, CRM, LMS) and DigifyNext
+MVP
+Public short domain Links created by external commercial
+tenants
+Commercial
+launch
+Tenant subdomains Readable branded links, e.g. hillwoods.
+<domain>/admission-2027
+Phase 2
+Customer custom
+domains
+Premium tenants' own domains, e.g.
+go.school.edu.in
+Phase 2
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 7 of 15
+
+=== PAGE 8 ===
+The admin console will show each tenant's DLT whitelisting status for its domains.
+Alias collisions are avoided by scoping readable aliases to a tenant prefix in the MVP and
+to tenant subdomains in Phase 2. Random codes remain the default.
+Non-functional requirements
+Targets are set for realistic MVP volumes and reviewed once internal usage data exists.
+If the redirect service fails, links already cached at the edge should keep resolving; this is
+a design goal for Phase 2.
+Architecture and technology stack
+JLMP runs as two Node.js services on a shared PostgreSQL and Redis base: a lean
+redirect service on the hot path and a full admin API for everything else.
+Area MVP target Later target
+Redirect latency
+(server, p95)
+Under 50 ms on cache hit, under 150
+ms on miss
+Under 30 ms at edge
+API latency (p95) Under 500 ms for single operations Same
+Availability, redirect
+service
+99.9% monthly 99.95%
+Availability, admin and
+API
+99.5% monthly 99.9%
+Capacity 1 million active links; 5 million clicks per
+month
+Re-planned from real
+growth
+Click logging Never delays a redirect; asynchronous,
+at-least-once
+Same
+Data retention Raw clicks 13 months; daily aggregates
+kept for tenant lifetime
+Configurable per plan
+Recovery Daily backups, point-in-time recovery;
+RPO 1 hour, RTO 4 hours
+RPO 15 minutes
+Browser support Last two versions of Chrome, Edge,
+Safari, Firefox; mobile responsive
+Same
+Accessibility Admin console meets WCAG 2.1 AA for
+core flows
+Same
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 8 of 15
+
+=== PAGE 9 ===
+A click is answered from the Redis cache and logged through a queue, so database load
+never slows a redirect. The admin API refreshes the cache whenever a link changes.
+JLMP architecture · redirect path and admin path
+Layer Choice Reason
+Language TypeScript only (Node.js LTS) Type safety across both services;
+no plain JavaScript
+Redirect
+service
+Fastify Minimal overhead on the latency-
+critical path
+Admin API NestJS Modules, guards and dependency
+injection suit multi-tenant RBAC
+Web console React-based SPA (framework to
+confirm)
+Tenant dashboard, analytics, link
+management
+Database PostgreSQL with Row-Level
+Security
+Relational core; RLS as a second
+line of tenant isolation
+Data access Drizzle or Prisma (team to choose) Typed queries and migrations
+Cache and
+queue
+Redis with BullMQ One system for link cache and click
+queue; replaces RabbitMQ
+Edge Cloudflare (DNS, TLS, WAF, rate
+limiting)
+DDoS protection and bot filtering
+in front of redirects
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 9 of 15
+
+=== PAGE 10 ===
+Deliberately deferred: ClickHouse, RabbitMQ and Kubernetes. They are reconsidered
+only if monthly clicks outgrow partitioned PostgreSQL.
+Data model
+Every tenant-owned table carries tenant_id , and PostgreSQL Row-Level Security
+enforces it even if application code misses a filter.
+Layer Choice Reason
+Hosting AWS containers (ECS) Consistent with existing AWS
+usage; Kubernetes not needed at
+MVP
+Observability Structured logs, metrics and alerts
+on redirect latency and queue
+depth
+Early warning before users notice
+Table Key fields Notes
+tenants id, code, name, status, plan_id,
+created_at
+Code doubles as MVP alias
+prefix (e.g. hw)
+users id, tenant_id, name, email, role,
+status, last_login_at
+Five roles; Super Admins have no
+tenant_id
+domains id, tenant_id, hostname, type,
+verification_status, dlt_status
+Internal, public, subdomain or
+custom
+links id, tenant_id, domain_id,
+short_code, alias, destination_url,
+redirect_type, status, expires_at,
+max_clicks, tag, external_ref,
+created_by, created_at
+Unique (domain_id, short_code);
+unique (tenant_id, alias)
+qr_codes id, link_id, style, is_dynamic,
+created_at
+Files generated on demand,
+cached in object storage
+clicks id, link_id, tenant_id, clicked_at,
+visitor_hash, device, browser, os,
+country, referrer, is_bot
+Partitioned by month; raw IP
+never stored
+click_daily tenant_id, link_id, date, clicks,
+unique_clicks, by_device,
+by_country, by_referrer
+Rollups used by all dashboards
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 10 of 15
+
+=== PAGE 11 ===
+Phase 2 adds plans, subscriptions, invoices, usage_counters, campaigns and
+tenant_branding without changing the tables above.
+API overview
+The REST API is versioned under /api/v1 , authenticated with an X-API-Key  header, and
+documented as an OpenAPI specification generated from code.
+Table Key fields Notes
+outcomes id, tenant_id, link_id, external_ref,
+outcome_type, value, occurred_at
+Posted by Jupsoft products (FR-
+16)
+api_keys id, tenant_id, name, key_hash,
+scopes, last_used_at, revoked_at
+Only the hash is stored
+screening_results id, link_id, provider, verdict,
+checked_at
+Supports blocking and audit
+abuse_reports id, link_id, reporter_contact,
+reason, status, created_at
+Reviewed by Super Admin
+audit_log id, tenant_id, actor_id, action,
+entity, before, after, created_at
+All admin and API changes
+Method Endpoint Purpose
+POST /api/v1/links Create a short link (returns short URL
+and QR URL)
+POST /api/v1/links/bulk Create up to 10,000 links asynchronously
+GET /api/v1/links/bulk/{jobId} Check bulk job status and download
+results
+GET /api/v1/links List and search links
+GET /api/v1/links/{id} Get one link
+PATCH /api/v1/links/{id} Update destination, expiry, status or tag
+DELETE /api/v1/links/{id} Archive a link
+GET /api/v1/links/{id}/qr Download QR as PNG or SVG
+GET /api/v1/links/{id}/analytics Clicks and breakdowns for a date range
+GET /api/v1/analytics Tenant-level analytics
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 11 of 15
+
+=== PAGE 12 ===
+Conventions: idempotency keys on create endpoints, cursor pagination, per-key rate
+limits (starting at 60 requests per minute, raised for internal products), and consistent
+error codes. Signed webhooks for link events are a Phase 2 item.
+Security, abuse prevention and privacy
+The biggest operational risk is a short domain being blacklisted for phishing, so abuse
+controls are MVP requirements, not later additions.
+Security
+HTTPS only with HSTS; TLS terminated at Cloudflare and re-encrypted to origin.
+Tenant isolation in application code plus PostgreSQL Row-Level Security.
+API keys stored as hashes, scoped, rotatable; admin console with strong passwords
+and optional two-factor authentication.
+Rate limiting at the edge and per API key; WAF rules on the admin and API hosts.
+Audit log for every admin and API change; dependency scanning in CI; annual third-
+party penetration test before commercial launch.
+Abuse prevention
+Destination URLs screened against a malicious-URL service on creation and re-
+checked on a schedule.
+Block redirects to other shorteners (no chaining) and to known phishing patterns.
+Public "report this link" page; Super Admin can disable a link or suspend a tenant in one
+action.
+Internal and public traffic on separate domains so abuse by external tenants cannot
+affect school links.
+New commercial tenants start with low limits until verified.
+Privacy (Digital Personal Data Protection Act, 2023)
+Default analytics are aggregate: counts by device, country, referrer and date. Raw IP
+addresses are not stored.
+Method Endpoint Purpose
+POST /api/v1/outcomes Record an outcome against a link or
+external reference
+GET/POST/DELETE /api/v1/api-keys Manage API keys (Tenant Admin only)
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 12 of 15
+
+=== PAGE 13 ===
+Per-recipient tracking (for example, which parent opened a fee link) is only available
+when the tenant sends a recipient-specific link from a Jupsoft product and has given
+notice to recipients. This must be reviewed by legal counsel before release, including
+rules for children's data.
+Raw click data deleted after 13 months; tenants can request deletion of their data.
+Data hosted in India (AWS Mumbai region).
+Success metrics
+The commercial launch is gated on internal adoption and a measurable outcome
+improvement, not on link volume alone. Baselines marked "to measure" must be captured
+before the MVP pilot starts.
+Risks, assumptions and open questions
+The two risks most likely to derail JLMP are DLT whitelisting delays and team capability on
+the new Node.js stack; both must be resolved before development starts.
+Metric Baseline Target By
+Share of links sent by Jupsoft
+products that use JLMP
+0% 100% End of internal
+rollout
+Pilot schools using link
+reports monthly
+0 At least 5 End of pilot
+SMS segments per fee
+reminder
+To measure Reduced to 1 where
+message allows
+End of pilot
+Fee-reminder click-through
+rate
+To measure Measurable uplift
+versus baseline
+End of pilot
+Fee payments attributed to
+reminder links
+Not possible
+today
+Reported for every
+pilot school
+End of pilot
+Redirect latency (p95, server) n/a Under 50 ms cache hit Continuous
+Redirect uptime n/a 99.9% monthly Continuous
+Domain blacklisting incidents n/a Zero Continuous
+Paid external tenants 0 Set at commercial
+launch decision
+Commercial
+phase
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 13 of 15
+
+=== PAGE 14 ===
+Assumptions
+Jupsoft products can call the JLMP API from their notification flows.
+The ERP can post fee-payment events with a reference that matches the link.
+Pilot schools agree to share baseline communication data.
+Open questions
+Risk Impact Likelihood Mitigation
+DLT whitelisting slow or
+rejected for the short domain
+SMS links blocked Medium Start whitelisting with
+the SMS vendor during
+domain purchase
+Short domain blacklisted for
+abuse
+All links on that
+domain fail
+Medium Separate internal and
+public domains;
+screening; fast
+takedown
+Limited Node.js/TypeScript
+experience in a .NET-heavy
+team
+Slower delivery,
+weaker code
+Medium Confirm team skills;
+appoint a Node lead;
+code review standards
+Privacy non-compliance on
+per-recipient tracking
+Legal and
+reputational
+exposure
+Medium Aggregate by default;
+legal review before
+release
+Crowded shortener market
+limits commercial uptake
+Revenue below
+plan
+High Compete on ecosystem
+attribution, not
+standalone features
+Scope creep toward a full
+marketing suite
+MVP delay Medium Hold to the phase table;
+new ideas go to later
+phases
+Which short domain names are available, and which are chosen for internal and public
+use?
+Which Jupsoft products and product names are integrated first (confirm current
+names, e.g. Admission CRM, LMS)?
+Does the team have Node.js/TypeScript developers, and who leads?
+Web console framework: confirm React-based choice.
+Which malicious-URL screening provider and at what cost?
+What is the SMS vendor's exact DLT process for new domains?
+Which schools join the pilot?
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 14 of 15
+
+=== PAGE 15 ===
+Roadmap and milestones
+JLMP is delivered in five stages, and no stage starts until the gate before it is passed.
+Durations and dates will be set after the team is confirmed and the effort estimate is
+done.
+The pilot is the decisive stage: it is where JLMP must show that links lead to payments and
+enquiries, which is the case for everything after it.
+What pricing model will be tested at commercial launch?
+JLMP delivery roadmap · 5 stages, 4 gates
+Jupsoft Link Management Platform (JLMP) — PRD v1.0
+Page 15 of 15
+

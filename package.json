@@ -1,0 +1,11 @@
+{
+  "name": "jupsoft-shortly-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Jupsoft Link Management Platform (JLMP)",
+  "scripts": {
+    "dev": "pnpm --filter @jlmp/backend dev",
+    "build": "pnpm --filter @jlmp/backend build",
+    "start": "pnpm --filter @jlmp/backend start"
+  }
+}
