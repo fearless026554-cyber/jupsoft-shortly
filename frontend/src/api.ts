@@ -414,6 +414,7 @@ export const api = {
     const res = await fetch(`${API_BASE_URL}/domains/${id}/verify`, {
       method: 'POST',
       headers,
+      body: JSON.stringify({}),
     });
     return res.json();
   },

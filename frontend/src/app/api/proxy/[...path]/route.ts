@@ -13,7 +13,6 @@ async function handleRequest(req: NextRequest, { params }: { params: Promise<{ p
   const targetUrl = `${BACKEND_URL}/api/v1/${targetPath}${queryString ? `?${queryString}` : ''}`;
   
   const headers = new Headers();
-  headers.set('Content-Type', 'application/json');
 
   // Forward authorization header if client provided one
   const authHeader = req.headers.get('authorization');
@@ -40,6 +39,7 @@ async function handleRequest(req: NextRequest, { params }: { params: Promise<{ p
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     const bodyText = await req.text();
     if (bodyText) {
+      headers.set('Content-Type', 'application/json');
       options.body = bodyText;
     }
   }
