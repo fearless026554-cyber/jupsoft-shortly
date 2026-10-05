@@ -171,15 +171,12 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
       {/* Header Banner */}
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
+          <div className="w-9 h-9 rounded-md bg-slate-100 flex items-center justify-center text-slate-600">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-base font-bold text-slate-800 flex items-center gap-2">
+            <h1 className="text-base font-semibold text-slate-900">
               Outcomes & Conversions
-              <span className="text-[10px] bg-indigo-100 text-indigo-800 font-mono px-2 py-0.5 rounded-full font-semibold">
-                Verified Ledger
-              </span>
             </h1>
             <p className="text-xs text-slate-500">
               Track successful fee payments and admission registrations.
@@ -193,16 +190,16 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
               loadReport();
               loadOutcomes();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-[10px] font-bold uppercase tracking-wider shadow-2xs transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition-colors"
           >
-            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
           <button
             onClick={handleExportLedger}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold uppercase tracking-wider shadow-xs transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-xs transition-colors"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-3.5 h-3.5" />
             Export CSV
           </button>
         </div>
@@ -225,57 +222,65 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
         </div>
       )}
 
-      {/* Jupsoft Signature Compact Metrics Grid (4 in a row) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        <div className="p-2.5 bg-white border border-slate-200 rounded-lg hover:border-emerald-400 transition-colors group block cursor-default shadow-2xs">
-          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            <span>Attributed Rev</span>
-            <DollarSign className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>Attributed Revenue</span>
+            <DollarSign className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="mt-1 flex items-baseline justify-between">
-            <span className="text-xl font-black text-emerald-600 tracking-tight">
-              {formatMoney(totalRev)}
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {totalRev > 0 ? formatMoney(totalRev) : '—'}
             </span>
-            <span className="text-[10px] text-emerald-600 font-bold font-mono">Bank GW</span>
+            <span className="text-[11px] text-slate-400">
+              {totalRev > 0 ? 'Verified' : 'No conversions yet'}
+            </span>
           </div>
         </div>
 
-        <div className="p-2.5 bg-white border border-slate-200 rounded-lg hover:border-blue-400 transition-colors group block cursor-default shadow-2xs">
-          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span>Conversions</span>
-            <Receipt className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors" />
+            <Receipt className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="mt-1 flex items-baseline justify-between">
-            <span className="text-xl font-black text-slate-900 tracking-tight">
-              {totalOutcomes}
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {totalOutcomes > 0 ? formatNumber(totalOutcomes) : '—'}
             </span>
-            <span className="text-[10px] text-emerald-600 font-bold font-mono">ERP OK</span>
+            <span className="text-[11px] text-slate-400">
+              {totalOutcomes > 0 ? 'Events logged' : 'No events yet'}
+            </span>
           </div>
         </div>
 
-        <div className="p-2.5 bg-white border border-slate-200 rounded-lg hover:border-indigo-400 transition-colors group block cursor-default shadow-2xs">
-          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            <span>Conv. Rate</span>
-            <TrendingUp className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>Conversion Rate</span>
+            <TrendingUp className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="mt-1 flex items-baseline justify-between">
-            <span className="text-xl font-black text-slate-900 tracking-tight">
-              {convRate}%
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {totalOutcomes > 0 ? `${convRate}%` : '—'}
             </span>
-            <span className="text-[10px] text-indigo-600 font-bold font-mono">{totalClicks} Clicks</span>
+            <span className="text-[11px] text-slate-400">
+              {totalClicks > 0 ? `${totalClicks} clicks` : 'No clicks yet'}
+            </span>
           </div>
         </div>
 
-        <div className="p-2.5 bg-white border border-slate-200 rounded-lg hover:border-amber-400 transition-colors group block cursor-default shadow-2xs">
-          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            <span>Avg Order Val</span>
-            <CreditCard className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-500 transition-colors" />
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>Avg Order Value</span>
+            <CreditCard className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="mt-1 flex items-baseline justify-between">
-            <span className="text-xl font-black text-slate-900 tracking-tight">
-              {formatMoney(totalOutcomes > 0 ? (totalRev / totalOutcomes) : 0)}
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {totalOutcomes > 0 ? formatMoney(totalRev / totalOutcomes) : '—'}
             </span>
-            <span className="text-[10px] text-amber-600 font-bold font-mono">Per Paid</span>
+            <span className="text-[11px] text-slate-400">
+              {totalOutcomes > 0 ? 'Per transaction' : '—'}
+            </span>
           </div>
         </div>
       </div>
@@ -381,69 +386,63 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
         <div className={`${Permissions.canRecordOutcomes(currentUser?.role) ? 'lg:col-span-7' : 'lg:col-span-12'} bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-between space-y-3`}>
           <div>
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                How It Works
-              </span>
-              <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Secure
+              <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
+                Reconciliation Pipeline
               </span>
             </div>
 
             <div className="mt-3 grid grid-cols-3 gap-2.5 text-center">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="text-[10px] font-bold text-slate-400 uppercase">1. SMS Sent</div>
-                <div className="font-mono text-xs font-bold text-slate-800 mt-1">{defaultDomain}/fHXV8q</div>
-                <p className="text-[10px] text-slate-500 mt-1">SMS gateway sends link with invoice ref embedded.</p>
+                <div className="text-[11px] font-semibold text-slate-700">1. SMS Dispatched</div>
+                <div className="font-mono text-xs text-slate-600 mt-1">{defaultDomain}/fHXV8q</div>
+                <p className="text-[10px] text-slate-500 mt-1">SMS gateway sends short link with invoice reference.</p>
               </div>
 
-              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <div className="text-[10px] font-bold text-blue-600 uppercase">2. Parent Clicks</div>
-                <div className="font-mono text-xs font-bold text-blue-800 mt-1">&lt; 2ms Redirect</div>
-                <p className="text-[10px] text-slate-500 mt-1">Engine records click timestamp & device engagement.</p>
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="text-[11px] font-semibold text-slate-700">2. Link Clicked</div>
+                <div className="font-mono text-xs text-slate-600 mt-1">&lt; 2ms Redirect</div>
+                <p className="text-[10px] text-slate-500 mt-1">Engine captures click analytics and routes to fee portal.</p>
               </div>
 
-              <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200">
-                <div className="text-[10px] font-bold text-emerald-600 uppercase">3. Fee Settled</div>
-                <div className="font-mono text-xs font-bold text-emerald-800 mt-1">Ledger Matched</div>
-                <p className="text-[10px] text-slate-500 mt-1">Bank gateway webhook reconciles with link external_ref.</p>
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="text-[11px] font-semibold text-slate-700">3. Fee Settled</div>
+                <div className="font-mono text-xs text-slate-600 mt-1">Ledger Matched</div>
+                <p className="text-[10px] text-slate-500 mt-1">Payment gateway webhook reconciles with link reference.</p>
               </div>
             </div>
 
-            {/* Visual Settlement Voucher Card (Replaced Raw JSON) */}
+            {/* Visual Settlement Voucher Card */}
             <div className="mt-3.5 p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Receipt className="w-3.5 h-3.5 text-blue-600" />
+                <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5 text-slate-500" />
                   Event Preview
                 </span>
-                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                  Matched
+                <span className="text-[10px] text-slate-500 font-medium">
+                  {externalRef ? 'Ready for reconciliation' : 'Awaiting invoice #'}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
                 <div className="bg-white p-2 rounded border border-slate-200">
                   <div className="text-[10px] text-slate-400 font-medium">Invoice Number</div>
-                  <div className="font-bold text-blue-600 font-mono mt-0.5">{externalRef}</div>
+                  <div className="font-medium text-slate-800 font-mono mt-0.5 truncate">{externalRef || '—'}</div>
                 </div>
 
                 <div className="bg-white p-2 rounded border border-slate-200">
                   <div className="text-[10px] text-slate-400 font-medium">Outcome Event</div>
-                  <div className="font-semibold text-slate-800 capitalize mt-0.5">{outcomeType.replace('_', ' ')}</div>
+                  <div className="font-medium text-slate-800 capitalize mt-0.5">{outcomeType.replace('_', ' ')}</div>
                 </div>
 
                 <div className="bg-white p-2 rounded border border-slate-200">
                   <div className="text-[10px] text-slate-400 font-medium">Gross Amount</div>
-                  <div className="font-bold text-emerald-700 font-mono mt-0.5">{formatMoney(Number(value) || 0)}</div>
+                  <div className="font-medium text-slate-800 font-mono mt-0.5">{value ? formatMoney(Number(value)) : '—'}</div>
                 </div>
 
                 <div className="bg-white p-2 rounded border border-slate-200">
                   <div className="text-[10px] text-slate-400 font-medium">Reconciled Route</div>
-                  <div className="font-semibold text-slate-700 mt-0.5 flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                    <span>Encrypted & Verified</span>
+                  <div className="font-medium text-slate-700 mt-0.5 truncate">
+                    Automated ERP Match
                   </div>
                 </div>
               </div>

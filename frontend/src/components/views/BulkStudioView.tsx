@@ -222,22 +222,17 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* Top Compact Action & Context Strip (Height ~36px) */}
+      {/* Top Action & Context Strip */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs shadow-2xs">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-          <h1 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
-            Bulk Create Workspace
+          <h1 className="text-sm font-semibold text-slate-900">
+            Bulk Link Creation
           </h1>
-          <span className="text-slate-300">|</span>
-          <span className="text-[11px] text-slate-500 font-mono truncate">
-            Batch Processing
-          </span>
         </div>
 
         <div className="flex items-center gap-2">
           {Permissions.canBulkCreate(currentUser?.role) && (
-            <label className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-[10px] font-bold uppercase tracking-wider shadow-2xs transition-colors cursor-pointer">
+            <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition-colors cursor-pointer">
               <Upload className="w-3.5 h-3.5 text-blue-600" />
               Upload CSV File
               <input
@@ -250,10 +245,10 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
           )}
           <button
             onClick={downloadSampleTemplate}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-[10px] font-bold uppercase tracking-wider shadow-2xs transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />
-            Template
+            Download Template
           </button>
         </div>
       </div>
@@ -265,59 +260,35 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
         </div>
       )}
 
-      {/* Preset Campaign Chips & Queue Progress */}
+      {/* Overview & Queue Progress */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left: Quick Preset Selection Cards */}
+        {/* Left: Quick Instructions & Quick Category Tags */}
         <div className="lg:col-span-8 bg-white p-4 rounded-lg border border-slate-200 shadow-2xs space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              Campaign Category Tags
+            <span className="text-xs font-semibold text-slate-900">
+              Batch Staging ({batchRows.length} {batchRows.length === 1 ? 'row' : 'rows'})
             </span>
-            <span className="text-[11px] text-slate-400">
-              {batchRows.length} {batchRows.length === 1 ? 'Link' : 'Links'} in Staging
+            <span className="text-xs text-slate-500">
+              {validRowsCount} valid for dispatch
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            <button
-              onClick={() => applyPresetTag('Fee Collection')}
-              className="p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50/60 hover:border-blue-300 text-left transition flex items-start gap-2.5"
-            >
-              <div className="w-7 h-7 rounded bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
-                <GraduationCap className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-slate-800">Fee Collection</div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Tag: Fee Collection</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => applyPresetTag('Transport Alert')}
-              className="p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-300 text-left transition flex items-start gap-2.5"
-            >
-              <div className="w-7 h-7 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
-                <Bus className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-slate-800">Transport Alerts</div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Tag: Transport Alert</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => applyPresetTag('Admissions 2026')}
-              className="p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-purple-50/60 hover:border-purple-300 text-left transition flex items-start gap-2.5"
-            >
-              <div className="w-7 h-7 rounded bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 mt-0.5">
-                <FileCheck className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-slate-800">Admissions 2026</div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Tag: Admissions 2026</div>
-              </div>
-            </button>
+          <div className="space-y-2">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Quickly apply a common category tag to your batch or upload a CSV file with destination URLs, aliases, and tags:
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {['Fee Collection', 'Transport Alert', 'Admissions 2026', 'Examination', 'General Notice'].map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => applyPresetTag(tag)}
+                  className="px-2.5 py-1 text-xs rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium transition cursor-pointer"
+                >
+                  Set all to {tag}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

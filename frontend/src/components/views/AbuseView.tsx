@@ -100,18 +100,15 @@ export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge, currentUse
       {/* Header Banner */}
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center text-red-600">
+          <div className="w-9 h-9 rounded-md bg-slate-100 flex items-center justify-center text-slate-600">
             <ShieldAlert className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              Abuse Quarantine & Killswitch
-              <span className="text-[10px] bg-red-100 text-red-800 font-mono px-2 py-0.5 rounded-full font-semibold">
-                Automated Screening
-              </span>
+            <h1 className="text-base font-semibold text-slate-900">
+              Abuse & Security Quarantine
             </h1>
             <p className="text-xs text-slate-500">
-              Review and manage reported links and automated threat flags.
+              Review flagged destination URLs and manage safety deactivations.
             </p>
           </div>
         </div>
@@ -120,10 +117,10 @@ export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge, currentUse
           onClick={loadReports}
           aria-label="Refresh Threat Quarantine Queue"
           title="Refresh Threat Quarantine Queue"
-          className="min-h-[40px] flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-semibold shadow-2xs transition cursor-pointer"
+          className="min-h-[36px] flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition cursor-pointer"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Refresh Queue
+          <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
         </button>
       </div>
 
@@ -134,50 +131,58 @@ export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge, currentUse
         </div>
       )}
 
-      {/* Moderation KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bg-white p-4 rounded-lg border border-slate-200/80 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
+      {/* Moderation Metrics Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span>Flagged Links</span>
-            <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+            <AlertTriangle className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-2xl font-bold text-red-600 mt-2 font-mono">
-            {reports.filter((r) => r.status === 'pending').length}
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {reports.filter((r) => r.status === 'pending').length}
+            </span>
+            <span className="text-xs text-slate-400">pending review</span>
           </div>
-          <div className="text-[11px] text-red-600 font-medium mt-1">Pending review</div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-slate-200/80 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-            <span>Avg Response Time</span>
-            <Lock className="w-3.5 h-3.5 text-indigo-600" />
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>Deactivated Links</span>
+            <Ban className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 mt-2 font-mono">
-            &lt; 1m
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {reports.filter((r) => r.status === 'reviewed').length}
+            </span>
+            <span className="text-xs text-slate-400">terminated</span>
           </div>
-          <div className="text-[11px] text-slate-500 mt-1">Time to block</div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-slate-200/80 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-            <span>SafeBrowsing</span>
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>Dismissed Reports</span>
+            <CheckCircle2 className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 mt-2 font-mono">
-            Active
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {reports.filter((r) => r.status === 'dismissed').length}
+            </span>
+            <span className="text-xs text-slate-400">false positives</span>
           </div>
-          <div className="text-[11px] text-emerald-700 font-medium mt-1">Active checks</div>
         </div>
 
-        <div className="bg-white p-4 rounded-lg border border-slate-200/80 shadow-2xs">
-          <div className="flex items-center justify-between text-slate-500 text-xs font-semibold">
-            <span>Protection</span>
-            <Ban className="w-3.5 h-3.5 text-amber-500" />
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>Total Reports</span>
+            <ShieldCheck className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-2xl font-bold text-slate-900 mt-2 font-mono">
-            Enforced
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {reports.length}
+            </span>
+            <span className="text-xs text-slate-400">all time</span>
           </div>
-          <div className="text-[11px] text-slate-500 mt-1">Active</div>
         </div>
       </div>
 

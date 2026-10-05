@@ -333,16 +333,15 @@ export const LinksView: React.FC<LinksViewProps> = ({
 
                     {/* Tag & Invoice Reference */}
                     <td className="py-2 px-3">
-                      <div className="flex flex-col gap-1">
+                      <div className="flex flex-col gap-0.5">
                         {link.tag && (
-                          <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded w-fit">
-                            <Tag className="w-2.5 h-2.5 text-slate-400" />
+                          <span className="text-xs text-slate-700 font-medium truncate max-w-[150px]">
                             {link.tag}
                           </span>
                         )}
                         {link.external_ref && (
-                          <span className="text-[9px] text-slate-400 font-mono uppercase tracking-wider">
-                            Ref: <strong className="text-slate-600">{link.external_ref}</strong>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            Ref: {link.external_ref}
                           </span>
                         )}
                       </div>
@@ -356,12 +355,12 @@ export const LinksView: React.FC<LinksViewProps> = ({
                     {/* Status Badge */}
                     <td className="py-2 px-3 text-center">
                       {link.status === 'active' ? (
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 w-fit mx-auto">
-                          <CheckCircle2 className="w-2.5 h-2.5" /> ACTIVE
+                        <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200 text-[9px] font-bold uppercase tracking-wider w-fit mx-auto">
-                          {link.status}
+                        <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 font-medium capitalize">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span> {link.status}
                         </span>
                       )}
                     </td>

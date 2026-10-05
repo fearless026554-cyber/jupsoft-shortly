@@ -49,16 +49,13 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
       {/* Header Banner */}
-      <div className="bg-white p-3.5 rounded-lg border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+          <h1 className="text-base font-semibold text-slate-900 tracking-tight">
             QR Studio
-            <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200/60 font-semibold px-2 py-0.5 rounded-full">
-              Print Ready
-            </span>
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Generate and customize QR codes for your short links.
+            Generate and customize vector QR codes for school campaigns and documents.
           </p>
         </div>
 
@@ -67,7 +64,7 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
             <a
               href={`${API_BASE_URL}/links/${activeLink.id}/qr?format=png&size=1024&theme=${qrTheme}`}
               download={`qr_${activeLink.short_code}_1024px.png`}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-xs transition"
             >
               <Download className="w-3.5 h-3.5" />
               Download PNG (1024px)
@@ -75,7 +72,7 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
             <a
               href={`${API_BASE_URL}/links/${activeLink.id}/qr?format=svg&theme=${qrTheme}`}
               download={`qr_${activeLink.short_code}.svg`}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-semibold shadow-2xs transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition"
             >
               <Download className="w-3.5 h-3.5 text-slate-400" />
               Vector SVG
@@ -89,11 +86,10 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
         {/* Left Column: Link Selector & Customizer Controls */}
         <div className="lg:col-span-5 bg-white p-4 rounded-lg border border-slate-200/80 shadow-2xs space-y-4">
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-            <span className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
               <Sliders className="w-3.5 h-3.5 text-blue-600" />
-              Settings
+              Configuration
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">Dynamic</span>
           </div>
 
           {/* Select Link Dropdown */}
@@ -151,7 +147,7 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
                   <Palette className="w-3.5 h-3.5 text-slate-500" />
-                  Theme
+                  Color Scheme
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
@@ -193,8 +189,8 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
               {/* Size Slider */}
               <div className="pt-1">
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1">
-                  <span>Resolution</span>
-                  <span className="font-mono text-blue-600">{size}px</span>
+                  <span>Preview Scale</span>
+                  <span className="font-mono text-slate-600">{size} × {size} px</span>
                 </div>
                 <input
                   type="range"

@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Layers,
   Copy,
+  Check,
 } from 'lucide-react';
 import { TenantItem, api, exportToCsv } from '../../api';
 import { usePagination } from '../../hooks/usePagination';
@@ -37,6 +38,7 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [copiedTenantId, setCopiedTenantId] = useState<string | null>(null);
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -101,15 +103,12 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
       {/* Header Banner */}
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-600">
+          <div className="w-9 h-9 rounded-md bg-slate-100 flex items-center justify-center text-slate-600">
             <Building2 className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-base font-bold text-slate-800 flex items-center gap-2">
+            <h1 className="text-base font-semibold text-slate-900">
               Institutions Directory
-              <span className="text-[10px] bg-purple-100 text-purple-800 font-mono px-2 py-0.5 rounded-full font-semibold">
-                Super Admin
-              </span>
             </h1>
             <p className="text-xs text-slate-500">
               Manage your school branches and subscriptions.
@@ -122,7 +121,7 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
             onClick={handleExport}
             aria-label="Export institutions CSV"
             title="Export institutions CSV"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-semibold shadow-2xs transition min-h-[40px]"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition min-h-[36px]"
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />
             Export
@@ -131,7 +130,7 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
             onClick={onOpenCreateTenantModal}
             aria-label="Add Institution"
             title="Add Institution"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold shadow-xs transition min-h-[40px] cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-xs transition min-h-[36px] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Add Institution
@@ -236,18 +235,24 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
-                            <span>ID: {tenant.id.slice(0, 18)}...</span>
+                          <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
+                            <span title={tenant.id}>ID: {tenant.id.slice(0, 8)}...{tenant.id.slice(-4)}</span>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 navigator.clipboard.writeText(tenant.id);
+                                setCopiedTenantId(tenant.id);
+                                setTimeout(() => setCopiedTenantId(null), 2000);
                               }}
                               aria-label="Copy Tenant ID"
-                              title="Copy Tenant ID"
-                              className="text-slate-400 hover:text-slate-700 p-0.5 rounded cursor-pointer"
+                              title="Copy full Tenant ID"
+                              className="text-slate-400 hover:text-slate-700 p-0.5 rounded cursor-pointer transition"
                             >
-                              <Copy className="w-2.5 h-2.5" />
+                              {copiedTenantId === tenant.id ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
                             </button>
                           </div>
                         </div>

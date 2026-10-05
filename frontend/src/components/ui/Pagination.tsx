@@ -28,6 +28,9 @@ export const Pagination: React.FC<PaginationProps> = ({
   itemLabel = 'records',
 }) => {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  if (totalPages <= 1 && totalItems <= pageSize) {
+    return null;
+  }
   const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
 
   const startItem = totalItems === 0 ? 0 : (validCurrentPage - 1) * pageSize + 1;

@@ -59,9 +59,8 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2.5">
           <div className="flex flex-col">
-            <span className="text-sm font-bold tracking-tight text-white flex items-center gap-1.5 leading-tight">
-              Jupsoft <span className="text-amber-400 font-semibold">Shortly</span>
-              <span className="text-[10px] bg-blue-600/70 text-blue-200 px-1 py-0.2 rounded font-mono font-medium">CRM</span>
+            <span className="text-sm font-semibold tracking-tight text-white flex items-center leading-tight">
+              Jupsoft Shortly
             </span>
             <span className="text-[10px] text-slate-400 font-mono leading-none mt-0.5">{defaultDomain}</span>
           </div>
@@ -168,9 +167,9 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         )}
 
-        {/* Live Backend Health Badge */}
+        {/* Live Backend Health Status */}
         {health && (
-          <span className="hidden xl:inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-900/40 text-emerald-300 border border-emerald-700/50">
+          <span className="hidden xl:inline-flex items-center gap-1.5 text-xs text-slate-300 font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
             Operational
           </span>

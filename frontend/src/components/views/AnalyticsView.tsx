@@ -111,15 +111,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
       {/* Header Banner */}
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+          <div className="w-9 h-9 rounded-md bg-slate-100 flex items-center justify-center text-slate-600">
             <BarChart3 className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-base font-bold text-slate-800 flex items-center gap-2">
+            <h1 className="text-base font-semibold text-slate-900">
               Traffic Analytics
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-mono px-2 py-0.5 rounded-full font-semibold">
-                Real-time
-              </span>
             </h1>
             <p className="text-xs text-slate-500">
               Monitor link traffic, device statistics, and geographical distribution.
@@ -128,8 +125,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Time range pills with solid fill and pressed state */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/80 shrink-0" role="group" aria-label="Select report time range">
+          {/* Time range selector */}
+          <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-md shrink-0" role="group" aria-label="Select report time range">
             {(
               [
                 { id: '7d', label: '7D', full: 'Last 7 Days' },
@@ -144,10 +141,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
                   onClick={() => setTimeRange(t.id)}
                   aria-pressed={isActive}
                   aria-label={`Filter by ${t.full}`}
-                  className={`px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all min-h-[36px] flex items-center justify-center ${
+                  className={`px-3 py-1.5 rounded text-xs font-medium transition min-h-[36px] flex items-center justify-center ${
                     isActive
-                      ? 'bg-[#0F6CBD] text-white shadow-xs ring-1 ring-[#0F6CBD]'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {t.label}
@@ -160,7 +157,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
             onClick={loadData}
             aria-label="Refresh Analytics Data"
             title="Refresh Analytics Data"
-            className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center"
+            className="p-2 hover:bg-slate-100 rounded-md text-slate-500 transition cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center border border-slate-200"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -168,63 +165,68 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
           <button
             onClick={handleExport}
             aria-label={`Export CSV (${rangeText})`}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold uppercase tracking-wider shadow-xs transition cursor-pointer min-h-[36px]"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-xs transition cursor-pointer min-h-[36px]"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-3.5 h-3.5" />
             Export CSV ({rangeText})
           </button>
         </div>
       </div>
 
-      {/* Jupsoft Signature Compact Metrics Grid (4 in a row) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        <div className="p-3 bg-white border border-slate-200 rounded-lg hover:border-blue-400 transition-colors group block cursor-default shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span>Total Clicks</span>
-            <TrendingUp className="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
+            <TrendingUp className="w-4 h-4 text-slate-400" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-2xl font-semibold text-slate-900 tracking-tight">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
               {formatNumber(totalClicks)}
             </span>
           </div>
         </div>
 
-        <div className="p-3 bg-white border border-slate-200 rounded-lg hover:border-amber-400 transition-colors group block cursor-default shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span>Active Links</span>
-            <Zap className="w-4 h-4 text-slate-400 group-hover:text-amber-500 transition-colors" />
+            <Zap className="w-4 h-4 text-slate-400" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-2xl font-semibold text-slate-900 tracking-tight">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
               {formatNumber(Number(summary?.total_active_links || 0))}
             </span>
-            <span className="text-xs text-slate-500 font-medium">links</span>
+            <span className="text-xs text-slate-400">tracked</span>
           </div>
         </div>
 
-        <div className="p-3 bg-white border border-slate-200 rounded-lg hover:border-emerald-400 transition-colors group block cursor-default shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span>Mobile Share</span>
-            <Smartphone className="w-4 h-4 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+            <Smartphone className="w-4 h-4 text-slate-400" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-2xl font-semibold text-slate-900 tracking-tight">
-              {mobilePct > 0 ? `${mobilePct}%` : '--'}
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {totalClicks > 0 ? `${mobilePct}%` : '—'}
+            </span>
+            <span className="text-xs text-slate-400">
+              {totalClicks > 0 ? `${100 - mobilePct}% desktop` : 'No clicks yet'}
             </span>
           </div>
         </div>
 
-        <div className="p-3 bg-white border border-slate-200 rounded-lg hover:border-indigo-400 transition-colors group block cursor-default shadow-sm">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span>Conversions</span>
-            <ShieldCheck className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+            <ShieldCheck className="w-4 h-4 text-slate-400" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-2xl font-semibold text-slate-900 tracking-tight">
-              {formatNumber(totalOutcomes)}
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {totalOutcomes > 0 ? formatNumber(totalOutcomes) : '—'}
             </span>
-            <span className="text-xs text-slate-500 font-medium">events</span>
+            <span className="text-xs text-slate-400">
+              {totalOutcomes > 0 ? 'Events logged' : 'No events yet'}
+            </span>
           </div>
         </div>
       </div>

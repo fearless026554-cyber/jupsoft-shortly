@@ -82,8 +82,8 @@ export const Rail: React.FC<RailProps> = ({
 
   return (
     <aside className="w-16 h-full bg-[#0d1527] border-r border-slate-800 flex flex-col justify-between items-center py-2 z-20 shrink-0 select-none">
-      {/* Top Brand Logo with Status Indicator Dots */}
-      <div className="flex flex-col items-center gap-1 mb-1.5">
+      {/* Top Brand Logo */}
+      <div className="flex flex-col items-center mb-1.5">
         <a
           href="/"
           onClick={(e) => handleNavClick(e, 'overview', '/')}
@@ -98,13 +98,6 @@ export const Rail: React.FC<RailProps> = ({
             className="w-full h-full object-contain"
           />
         </a>
-        {/* Status Indicator Dots */}
-        <div className="flex items-center gap-0.5" aria-label="System cluster health indicators">
-          <span className="w-1 h-1 rounded-full bg-red-500" title="Campaign Pipeline Active" />
-          <span className="w-1 h-1 rounded-full bg-green-500" title="Routing Engine Active" />
-          <span className="w-1 h-1 rounded-full bg-blue-500" title="Edge Cache Active" />
-          <span className="w-1 h-1 rounded-full bg-amber-400" title="Primary Database Operational" />
-        </div>
       </div>
 
       {/* Primary Semantic Links Navigation Rail (Solves G3: Real routes & semantic links) */}

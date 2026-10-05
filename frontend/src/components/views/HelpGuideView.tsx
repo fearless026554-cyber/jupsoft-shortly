@@ -138,24 +138,18 @@ export const HelpGuideView: React.FC = () => {
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* Header Banner with Single H1 Heading */}
-      <div className="bg-white p-5 rounded-lg border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3.5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/jupsoft-logo.png"
-            alt="Jupsoft Shortly"
-            className="w-12 h-12 object-contain bg-slate-50 border border-slate-200 rounded-lg p-1 shrink-0"
-          />
+      {/* Header Banner */}
+      <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-md bg-slate-100 flex items-center justify-center text-slate-600">
+            <BookOpen className="w-5 h-5" />
+          </div>
           <div>
-            <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-base font-semibold text-slate-900 tracking-tight">
               Help & Knowledge Base
-              <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200/60 font-semibold px-2 py-0.5 rounded-full">
-                Documentation
-              </span>
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Comprehensive guides, CSV specifications, and compliance references.
+              Operational guides, CSV specifications, and compliance references.
             </p>
           </div>
         </div>
@@ -286,7 +280,7 @@ export const HelpGuideView: React.FC = () => {
               </div>
               <h3 className="font-bold text-xs text-slate-900">Create a Branded Short Link</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Click the red <strong>+ Create Link</strong> button on the top right. Paste your destination URL (e.g. your eConnect fee portal) and specify an optional alias like <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-slate-800">fee-apr26</code>.
+                Click the <strong>+ Create Link</strong> button in the top navigation bar. Paste your destination URL (e.g. your school fee portal) and specify an optional alias like <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-slate-800">fee-apr26</code>.
               </p>
             </div>
 
