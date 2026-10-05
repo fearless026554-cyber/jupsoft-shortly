@@ -318,6 +318,153 @@ export default function ShortlyCRMApp() {
 
         {/* Dynamic Content Workspace Area */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-5 relative bg-[#F4F6F9]">
+          {/* Contextual Sub-Tab Bar for Grouped Modules */}
+          {(activeTab === 'links' || activeTab === 'bulk' || activeTab === 'qr') && (
+            <div className="mb-3.5 flex items-center gap-1 border-b border-slate-200 pb-2">
+              <button
+                type="button"
+                onClick={() => handleNavigate('links')}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                  activeTab === 'links'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                }`}
+              >
+                All Links
+              </button>
+              {Permissions.canBulkCreate(currentUser?.role) && (
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('bulk')}
+                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                    activeTab === 'bulk'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                  }`}
+                >
+                  Bulk CSV
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleNavigate('qr')}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                  activeTab === 'qr'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                }`}
+              >
+                QR Codes
+              </button>
+            </div>
+          )}
+
+          {(activeTab === 'analytics' || activeTab === 'outcomes') && (
+            <div className="mb-3.5 flex items-center gap-1 border-b border-slate-200 pb-2">
+              <button
+                type="button"
+                onClick={() => handleNavigate('analytics')}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                  activeTab === 'analytics'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                }`}
+              >
+                Traffic Reports
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNavigate('outcomes')}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                  activeTab === 'outcomes'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                }`}
+              >
+                Outcomes & Revenue
+              </button>
+            </div>
+          )}
+
+          {(activeTab === 'tenants' ||
+            activeTab === 'users' ||
+            activeTab === 'domains' ||
+            activeTab === 'abuse' ||
+            activeTab === 'apikeys') && (
+            <div className="mb-3.5 flex flex-wrap items-center gap-1 border-b border-slate-200 pb-2">
+              {Permissions.canManageTenants(currentUser?.role) && (
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('tenants')}
+                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                    activeTab === 'tenants'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                  }`}
+                >
+                  Schools (Tenants)
+                </button>
+              )}
+              {Permissions.canViewUsers(currentUser?.role) && (
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('users')}
+                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                    activeTab === 'users'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                  }`}
+                >
+                  Users & Roles
+                </button>
+              )}
+              {Permissions.canManageDomains(currentUser?.role) && (
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('domains')}
+                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                    activeTab === 'domains'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                  }`}
+                >
+                  Custom Domains
+                </button>
+              )}
+              {Permissions.canManageAbuse(currentUser?.role) && (
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('abuse')}
+                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                    activeTab === 'abuse'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                  }`}
+                >
+                  <span>Abuse & Security</span>
+                  {abuseCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-mono">
+                      {abuseCount}
+                    </span>
+                  )}
+                </button>
+              )}
+              {Permissions.canManageApiKeys(currentUser?.role) && (
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('apikeys')}
+                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                    activeTab === 'apikeys'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                  }`}
+                >
+                  API Keys
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Module 1: Dashboard Home */}
           {activeTab === 'overview' && (
             <DashboardView

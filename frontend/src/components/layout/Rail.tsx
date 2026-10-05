@@ -4,16 +4,9 @@ import React from 'react';
 import {
   LayoutDashboard,
   Link2,
-  DollarSign,
-  QrCode,
   BarChart3,
-  Building2,
-  Users,
-  Globe,
-  ShieldAlert,
-  Key,
+  Settings,
   HelpCircle,
-  FileSpreadsheet,
 } from 'lucide-react';
 
 import { Permissions } from '../../utils/rbac';
@@ -49,25 +42,82 @@ export const Rail: React.FC<RailProps> = ({
 }) => {
   const userRole = currentUser?.role;
 
+  // Determine default sub-tab for Settings/Admin group based on RBAC
+  const defaultAdminTab: ActiveModule | null = Permissions.canManageTenants(userRole)
+    ? 'tenants'
+    : Permissions.canViewUsers(userRole)
+    ? 'users'
+    : Permissions.canManageDomains(userRole)
+    ? 'domains'
+    : Permissions.canManageAbuse(userRole)
+    ? 'abuse'
+    : Permissions.canManageApiKeys(userRole)
+    ? 'apikeys'
+    : null;
+
+  const defaultAdminPath =
+    defaultAdminTab === 'tenants'
+      ? '/tenants'
+      : defaultAdminTab === 'users'
+      ? '/users'
+      : defaultAdminTab === 'domains'
+      ? '/domains'
+      : defaultAdminTab === 'abuse'
+      ? '/abuse'
+      : '/apikeys';
+
   const allNavItems: {
     id: ActiveModule;
     path: string;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
     badge?: number | null;
+    isActive: boolean;
     visible: boolean;
   }[] = [
-    { id: 'overview', path: '/', label: 'Home', icon: LayoutDashboard, visible: true },
-    { id: 'links', path: '/links', label: 'Links', icon: Link2, badge: linksCount > 0 ? linksCount : null, visible: true },
-    { id: 'bulk', path: '/bulk', label: 'Bulk CSV', icon: FileSpreadsheet, visible: Permissions.canBulkCreate(userRole) },
-    { id: 'outcomes', path: '/outcomes', label: 'Outcomes', icon: DollarSign, visible: true },
-    { id: 'qr', path: '/qr', label: 'QR Codes', icon: QrCode, visible: true },
-    { id: 'analytics', path: '/reports', label: 'Reports', icon: BarChart3, visible: true },
-    { id: 'tenants', path: '/tenants', label: 'Tenants', icon: Building2, visible: Permissions.canManageTenants(userRole) },
-    { id: 'users', path: '/users', label: 'Users', icon: Users, visible: Permissions.canViewUsers(userRole) },
-    { id: 'domains', path: '/domains', label: 'Domains', icon: Globe, visible: Permissions.canManageDomains(userRole) },
-    { id: 'abuse', path: '/abuse', label: 'Abuse', icon: ShieldAlert, badge: abuseCount > 0 ? abuseCount : null, visible: Permissions.canManageAbuse(userRole) },
-    { id: 'apikeys', path: '/apikeys', label: 'API Keys', icon: Key, visible: Permissions.canManageApiKeys(userRole) },
+    {
+      id: 'overview',
+      path: '/',
+      label: 'Home',
+      icon: LayoutDashboard,
+      isActive: activeTab === 'overview',
+      visible: true,
+    },
+    {
+      id: 'links',
+      path: '/links',
+      label: 'Links',
+      icon: Link2,
+      badge: linksCount > 0 ? linksCount : null,
+      isActive: activeTab === 'links' || activeTab === 'bulk' || activeTab === 'qr',
+      visible: true,
+    },
+    {
+      id: 'analytics',
+      path: '/reports',
+      label: 'Reports',
+      icon: BarChart3,
+      isActive: activeTab === 'analytics' || activeTab === 'outcomes',
+      visible: true,
+    },
+    ...(defaultAdminTab
+      ? [
+          {
+            id: defaultAdminTab,
+            path: defaultAdminPath,
+            label: 'Settings',
+            icon: Settings,
+            badge: abuseCount > 0 ? abuseCount : null,
+            isActive:
+              activeTab === 'tenants' ||
+              activeTab === 'users' ||
+              activeTab === 'domains' ||
+              activeTab === 'abuse' ||
+              activeTab === 'apikeys',
+            visible: true,
+          },
+        ]
+      : []),
   ];
 
   const navItems = allNavItems.filter((item) => item.visible);
@@ -100,27 +150,30 @@ export const Rail: React.FC<RailProps> = ({
         </a>
       </div>
 
-      {/* Primary Semantic Links Navigation Rail (Solves G3: Real routes & semantic links) */}
-      <nav className="flex-1 w-full flex flex-col items-center space-y-0.5 overflow-y-auto overflow-x-hidden py-1" aria-label="Main Navigation">
+      {/* Primary Semantic Links Navigation Rail (4 Core Operational Groups) */}
+      <nav
+        className="flex-1 w-full flex flex-col items-center space-y-1 overflow-y-auto overflow-x-hidden py-1"
+        aria-label="Main Navigation"
+      >
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.id;
+          const isActive = item.isActive;
           return (
             <a
-              key={item.id}
+              key={item.label}
               href={item.path}
               onClick={(e) => handleNavClick(e, item.id, item.path)}
               aria-label={`${item.label} Module`}
               title={item.label}
-              className={`relative w-full h-[50px] flex flex-col items-center justify-center transition-all group ${
+              className={`relative w-full h-[54px] flex flex-col items-center justify-center transition-all group ${
                 isActive
                   ? 'bg-slate-800/90 text-white font-bold'
                   : 'text-[#CBD5E1] hover:text-white hover:bg-slate-800/40'
               }`}
             >
-              {/*  Active Left Indicator Bar */}
+              {/* Active Left Indicator Bar */}
               {isActive && (
-                <span className="absolute left-0 top-1 bottom-1 w-1 bg-blue-500 rounded-r-sm" />
+                <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-blue-500 rounded-r-sm" />
               )}
 
               <div className="relative">
@@ -150,7 +203,7 @@ export const Rail: React.FC<RailProps> = ({
         })}
       </nav>
 
-      {/* Bottom Help Semantic Link (Solves G3 and Help P0) */}
+      {/* Bottom Help Semantic Link */}
       <div className="w-full flex flex-col items-center pt-1.5 border-t border-slate-800/80 shrink-0 mt-auto">
         <a
           href="/help"
