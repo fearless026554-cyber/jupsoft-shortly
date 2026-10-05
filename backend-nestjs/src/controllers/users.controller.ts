@@ -17,8 +17,9 @@ const inviteUserSchema = z.object({
 });
 
 const patchUserRoleSchema = z.object({
-  role: z.enum(ALL_USER_ROLES as any),
+  role: z.enum(ALL_USER_ROLES as any).optional(),
   status: z.enum([UserStatus.ACTIVE, UserStatus.SUSPENDED]).optional(),
+  password: z.string().min(6).optional(),
 });
 
 @Controller('api/v1/users')
@@ -57,7 +58,7 @@ export class UsersController {
     const created = await this.db.withTenantContext(tenantId, async (client) => {
       const res = await client.query(
         `INSERT INTO users (tenant_id, name, email, password_hash, role, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, status, created_at`,
-        [tenantId, dto.name, dto.email.toLowerCase(), passwordHash, dto.role, UserStatus.INVITED]
+        [tenantId, dto.name, dto.email.toLowerCase(), passwordHash, dto.role, UserStatus.ACTIVE]
       );
       return res.rows[0];
     });
@@ -73,10 +74,19 @@ export class UsersController {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
 
+    if (dto.password && auth.role !== 'super_admin' && auth.role !== 'tenant_admin') {
+      return reply.status(403).send({
+        success: false,
+        error: { code: ErrorCodes.FORBIDDEN, message: 'Only administrators can reset user passwords' },
+      });
+    }
+
+    const passwordHash = dto.password ? await bcrypt.hash(dto.password, 10) : null;
+
     const updated = await this.db.withTenantContext(tenantId, async (client) => {
       const res = await client.query(
-        `UPDATE users SET role = $1, status = COALESCE($2, status), updated_at = NOW() WHERE id = $3 AND tenant_id = $4 RETURNING id, name, email, role, status, updated_at`,
-        [dto.role, dto.status || null, id, tenantId]
+        `UPDATE users SET role = COALESCE($1, role), status = COALESCE($2, status), password_hash = COALESCE($3, password_hash), updated_at = NOW() WHERE id = $4 AND tenant_id = $5 RETURNING id, name, email, role, status, updated_at`,
+        [dto.role || null, dto.status || null, passwordHash, id, tenantId]
       );
       return res.rows[0];
     });

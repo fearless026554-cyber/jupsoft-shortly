@@ -17,6 +17,7 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState('user');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,13 +34,17 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
         name: name.trim(),
         email: email.trim().toLowerCase(),
         role,
+        password: password.trim() || undefined,
       });
 
       if (res.success) {
+        setName('');
+        setEmail('');
+        setPassword('');
         onUserInvited();
         onClose();
       } else {
-        setError(res.error?.message || 'Failed to send invite');
+        setError(res.error?.message || 'Failed to create user');
       }
     } catch (err: any) {
       setError(err.message || 'Network error');
@@ -57,8 +62,8 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
               <UserPlus className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-slate-800">Invite User</h3>
-              <p className="text-[11px] text-slate-500">Invite a user to the platform.</p>
+              <h3 className="font-bold text-sm text-slate-800">Add User</h3>
+              <p className="text-[11px] text-slate-500">Create a user account with direct credentials.</p>
             </div>
           </div>
 
@@ -109,6 +114,21 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
+              Initial Password *
+            </label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Minimum 6 characters"
+              className="w-full text-xs px-3 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">
               Role
             </label>
             <select
@@ -136,7 +156,7 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
               disabled={loading}
               className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition disabled:opacity-50"
             >
-              {loading ? 'Sending...' : 'Send Invite'}
+              {loading ? 'Creating...' : 'Create User'}
             </button>
           </div>
         </form>

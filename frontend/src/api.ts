@@ -360,12 +360,22 @@ export const api = {
     });
   },
 
-  async inviteUser(dto: { name: string; email: string; role: string }) {
+  async inviteUser(dto: { name: string; email: string; role: string; password?: string }) {
     clearApiCache('users');
     const res = await fetch(`${API_BASE_URL}/users`, {
       method: 'POST',
       headers,
       body: JSON.stringify(dto),
+    });
+    return res.json();
+  },
+
+  async resetUserPassword(id: string, password: string) {
+    clearApiCache('users');
+    const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ password }),
     });
     return res.json();
   },

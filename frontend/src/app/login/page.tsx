@@ -107,18 +107,9 @@ export default function LoginPage() {
 
             {/* Password Field with Natural Case Label */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-medium text-slate-300">
-                  Password
-                </label>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  className="text-[11px] text-blue-400 hover:text-blue-300 transition"
-                >
-                  Forgot password?
-                </button>
-              </div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                Password
+              </label>
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -138,18 +129,6 @@ export default function LoginPage() {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-            </div>
-
-            {/* Remember Me */}
-            <div className="flex items-center justify-between pt-0.5">
-              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400 hover:text-slate-300">
-                <input
-                  type="checkbox"
-                  defaultChecked
-                  className="rounded border-slate-700 bg-slate-900 text-blue-600 focus:ring-blue-500"
-                />
-                <span>Remember this device</span>
-              </label>
             </div>
 
             {/* Clean, Confident Submit Button */}

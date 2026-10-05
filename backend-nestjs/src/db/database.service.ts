@@ -53,7 +53,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         await this.pool.query(
           `INSERT INTO users (tenant_id, name, email, password_hash, role, status)
            VALUES ($1, $2, $3, $4, 'super_admin', 'active')`,
-          [tenantId, 'Sachin Sharma (Super Admin)', adminEmail, hash]
+          [tenantId, 'Sachin Sharma', adminEmail, hash]
         );
         console.log(`[Seed] Seeded default super admin user: ${adminEmail}`);
       }
