@@ -51,7 +51,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
     {
       destinationUrl: '',
       alias: '',
-      tag: 'Fee Collection',
+      tag: 'General',
       externalRef: '',
     },
   ]);
@@ -77,7 +77,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
       {
         destinationUrl: '',
         alias: '',
-        tag: 'Fee Collection',
+        tag: 'General',
         externalRef: '',
       },
     ]);
@@ -124,7 +124,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
             newRows.push({
               destinationUrl: cols[0],
               alias: cols[1] || '',
-              tag: cols[2] || 'Fee Collection',
+              tag: cols[2] || 'General',
               externalRef: cols[3] || '',
             });
           }
@@ -205,7 +205,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
   };
 
   const downloadSampleTemplate = () => {
-    const sample = `destination_url,alias,tag,external_ref\nhttps://jupsoft.com/fees/pay?inv=INV-2026-001,fee-std1-001,Class 10 Fees,INV-2026-001\nhttps://jupsoft.com/fees/pay?inv=INV-2026-002,fee-std1-002,Class 10 Fees,INV-2026-002\nhttps://jupsoft.com/notice/parent-teacher-meet,ptm-april,Academic Notices,PTM-APR-26`;
+    const sample = `destination_url,alias,tag,external_ref\nhttps://example.com/pay?inv=INV-2026-001,pay-001,Payment,INV-2026-001\nhttps://example.com/pay?inv=INV-2026-002,pay-002,Payment,INV-2026-002\nhttps://example.com/offer/summer,summer-offer,Marketing,CMP-2026-01`;
     const blob = new Blob([sample], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -278,7 +278,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
               Quickly apply a common category tag to your batch or upload a CSV file with destination URLs, aliases, and tags:
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
-              {['Fee Collection', 'Transport Alert', 'Admissions 2026', 'Examination', 'General Notice'].map((tag) => (
+              {['General', 'Marketing', 'Payment', 'Notification', 'Support'].map((tag) => (
                 <button
                   key={tag}
                   type="button"
@@ -418,12 +418,11 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                 }}
               >
                 <option value="">Select category...</option>
-                <option value="Fee Collection">Fee Collection</option>
-                <option value="Transport Alert">Transport Alert</option>
-                <option value="Admissions 2026">Admissions 2026</option>
-                <option value="Exam Notices">Exam Notices</option>
-                <option value="Annual Day">Annual Day</option>
-                <option value="General Notice">General Notice</option>
+                <option value="General">General</option>
+                <option value="Marketing">Marketing</option>
+                <option value="Payment">Payment</option>
+                <option value="Notification">Notification</option>
+                <option value="Support">Support</option>
               </select>
             </div>
 
@@ -480,7 +479,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                         type="url"
                         value={row.destinationUrl}
                         onChange={(e) => handleUpdateRow(idx, 'destinationUrl', e.target.value)}
-                        placeholder="https://jupsoft.com/fees/..."
+                        placeholder="https://example.com/landing-page"
                         className={`w-full text-xs px-2.5 py-1.5 rounded border transition focus:outline-hidden ${
                           isInvalid
                             ? 'border-red-400 bg-red-50/40 text-red-900 focus:border-red-500 focus:ring-1 focus:ring-red-400'
@@ -504,7 +503,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                           type="text"
                           value={row.alias}
                           onChange={(e) => handleUpdateRow(idx, 'alias', e.target.value)}
-                          placeholder="fee-std1"
+                          placeholder="custom-slug"
                           className="w-full text-xs px-2 py-1.5 rounded-r border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono text-blue-600 font-semibold"
                         />
                       </div>
@@ -517,11 +516,11 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                         onChange={(e) => handleUpdateRow(idx, 'tag', e.target.value)}
                         className="w-full text-xs px-2 py-1.5 rounded border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                       >
-                        <option value="Fee Collection">Fee Collection</option>
-                        <option value="Transport Alert">Transport Alert</option>
-                        <option value="Admissions 2026">Admissions 2026</option>
-                        <option value="Exam Notices">Exam Notices</option>
-                        <option value="Annual Day">Annual Day</option>
+                        <option value="General">General</option>
+                        <option value="Marketing">Marketing</option>
+                        <option value="Payment">Payment</option>
+                        <option value="Notification">Notification</option>
+                        <option value="Support">Support</option>
                       </select>
                     </td>
 

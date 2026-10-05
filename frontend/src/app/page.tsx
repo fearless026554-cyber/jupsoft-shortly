@@ -402,7 +402,7 @@ export default function ShortlyCRMApp() {
                       : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                   }`}
                 >
-                  Schools (Tenants)
+                  Tenants
                 </button>
               )}
               {Permissions.canViewUsers(currentUser?.role) && (

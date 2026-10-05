@@ -33,7 +33,7 @@ export class RedirectController {
   getExpired(@Res() reply: FastifyReply) {
     const html = TemplateService.render('expired', {
       title: 'Link Expired',
-      message: 'This communication link has expired or reached its maximum usage limit. Please contact the institution for an updated link.',
+      message: 'This link has expired or reached its maximum usage limit. Please contact the sender for an updated link.',
     });
     return reply.type('text/html').send(html);
   }

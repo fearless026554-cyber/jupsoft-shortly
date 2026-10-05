@@ -242,7 +242,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
                 )}
               </div>
               <p className="text-xs text-slate-600 mb-2.5">
-                Register your school subdomain (e.g. <span className="font-mono text-blue-600 font-semibold">link.myschool.edu.in</span>).
+                Register your custom domain (e.g. <span className="font-mono text-blue-600 font-semibold">helloworld.2bd.net</span>).
               </p>
 
               {Permissions.canManageDomains(currentUser?.role) && (
@@ -252,7 +252,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
                     required
                     value={newHostname}
                     onChange={(e) => setNewHostname(e.target.value)}
-                    placeholder="e.g. link.hillwoods.edu.in"
+                    placeholder="e.g. helloworld.2bd.net"
                     className="w-full h-9 text-xs px-2.5 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono bg-white"
                   />
                   <button
@@ -383,7 +383,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
                 No Custom Domains Connected
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Use Step 1 above to register your school domain (e.g. <code className="text-blue-600 font-mono font-semibold">link.yourdomain.com</code>).
+                Use Step 1 above to register your custom domain (e.g. <code className="text-blue-600 font-mono font-semibold">helloworld.2bd.net</code>).
               </p>
             </div>
           </div>

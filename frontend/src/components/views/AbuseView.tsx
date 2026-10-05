@@ -69,7 +69,7 @@ export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge, currentUse
           setReports((prev) =>
             prev.map((r) => (r.id === repId ? { ...r, status: 'reviewed' } : r))
           );
-          setActionMessage('URL successfully terminated and blocked across all school gateways.');
+          setActionMessage('URL successfully terminated and blocked across all routing gateways.');
           setTimeout(() => setActionMessage(null), 4000);
           if (onRefreshBadge) onRefreshBadge();
         } catch {

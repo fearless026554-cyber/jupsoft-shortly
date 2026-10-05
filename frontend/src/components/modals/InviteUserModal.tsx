@@ -107,7 +107,7 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="r.chandra@hillwoods.edu.in"
+              placeholder="user@company.com"
               className="w-full text-xs px-3 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
             />
           </div>

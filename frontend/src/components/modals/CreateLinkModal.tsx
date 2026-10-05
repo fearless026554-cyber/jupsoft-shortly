@@ -30,7 +30,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
 }) => {
   const [destinationUrl, setDestinationUrl] = useState('');
   const [alias, setAlias] = useState('');
-  const [tag, setTag] = useState('Fee Collection');
+  const [tag, setTag] = useState('General');
   const [externalRef, setExternalRef] = useState('');
   const [maxClicks, setMaxClicks] = useState<number | undefined>(undefined);
   const [expiresAt, setExpiresAt] = useState<string>('');
@@ -95,7 +95,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
         {/* Modal Header */}
         <div className="h-14 px-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-red-50 border border-red-200 flex items-center justify-center text-[#E42527]">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
               <Link2 className="w-4 h-4" />
             </div>
             <div>
@@ -143,7 +143,6 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
 
                 <div className="flex items-center justify-between text-[11px] text-emerald-800">
                   <span>Short Code: <strong>{createdData.shortCode}</strong></span>
-                  <span>Length: <strong>18 characters</strong></span>
                 </div>
               </div>
 
@@ -197,7 +196,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                   required
                   value={destinationUrl}
                   onChange={(e) => setDestinationUrl(e.target.value)}
-                  placeholder="https://jupsoft.com/econnect/fees/pay?inv=INV-2026-9021"
+                  placeholder="https://example.com/landing-page"
                   className="w-full text-xs px-3 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                 />
               </div>
@@ -215,7 +214,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                       type="text"
                       value={alias}
                       onChange={(e) => setAlias(e.target.value)}
-                      placeholder="annual-fees-26"
+                      placeholder="launch-2026"
                       className="w-full text-xs px-2.5 py-2 rounded-r border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                     />
                   </div>
@@ -223,19 +222,18 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Campaign Tag
+                    Category Tag
                   </label>
                   <select
                     value={tag}
                     onChange={(e) => setTag(e.target.value)}
                     className="w-full text-xs px-2.5 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                   >
-                    <option value="Fee Collection">Fee Collection</option>
-                    <option value="Admissions 2026">Admissions 2026</option>
-                    <option value="Transport Alert">Transport Alert</option>
-                    <option value="Exam Circular">Exam Circular</option>
-                    <option value="Annual Day">Annual Day / Sports</option>
-                    <option value="General Notice">General Notice</option>
+                    <option value="General">General</option>
+                    <option value="Marketing">Marketing</option>
+                    <option value="Payment">Payment</option>
+                    <option value="Notification">Notification</option>
+                    <option value="Support">Support</option>
                   </select>
                 </div>
               </div>
@@ -283,7 +281,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-4 py-2 rounded bg-[#E42527] hover:bg-[#c91e20] text-white font-bold text-xs shadow-xs transition disabled:opacity-50"
+                  className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
                 >
                   {loading ? 'Creating...' : 'Create Link'}
                 </button>

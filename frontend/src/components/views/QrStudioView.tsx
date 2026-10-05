@@ -55,7 +55,7 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
             QR Studio
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Generate and customize vector QR codes for school campaigns and documents.
+            Generate and customize vector QR codes for your short links.
           </p>
         </div>
 

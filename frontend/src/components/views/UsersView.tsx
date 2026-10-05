@@ -75,19 +75,19 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
       case 'tenant_admin':
         return (
           <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold text-[10px] uppercase">
-            School Principal
+            Tenant Admin
           </span>
         );
       case 'manager':
         return (
           <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold text-[10px] uppercase">
-            Accounts & Fees
+            Manager
           </span>
         );
       case 'user':
         return (
           <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold text-[10px] uppercase">
-            Staff Operator
+            Operator
           </span>
         );
       default:
@@ -230,9 +230,9 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
           >
             <option value="all">All Roles</option>
             <option value="super_admin">Super Admin</option>
-            <option value="tenant_admin">School Principal</option>
-            <option value="manager">Accounts & Fees</option>
-            <option value="user">Staff Operator</option>
+            <option value="tenant_admin">Tenant Admin</option>
+            <option value="manager">Manager</option>
+            <option value="user">Operator</option>
           </select>
         </div>
 

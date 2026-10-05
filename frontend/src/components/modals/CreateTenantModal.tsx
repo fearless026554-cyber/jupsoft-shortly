@@ -39,7 +39,7 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
         onTenantCreated();
         onClose();
       } else {
-        setError(res.error?.message || 'Failed to add institution');
+        setError(res.error?.message || 'Failed to add tenant');
       }
     } catch (err: any) {
       setError(err.message || 'Network error');
@@ -57,8 +57,8 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
               <Building2 className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-slate-800">Add Institution</h3>
-              <p className="text-[11px] text-slate-500">Create a new institution.</p>
+              <h3 className="font-bold text-sm text-slate-800">Add Tenant</h3>
+              <p className="text-[11px] text-slate-500">Create a new tenant workspace.</p>
             </div>
           </div>
 
@@ -81,14 +81,14 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
-              Institution Name *
+              Tenant Name *
             </label>
             <input
               type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Delhi Public School"
+              placeholder="e.g. Acme Corp"
               className="w-full text-xs px-3 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
@@ -103,7 +103,7 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
                 required
                 value={code}
                 onChange={(e) => setCode(e.target.value.toLowerCase())}
-                placeholder="e.g. dpsrkp"
+                placeholder="e.g. acme"
                 className="w-full text-xs px-3 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
               />
               <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -121,7 +121,7 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
                 className="w-full text-xs px-2.5 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
               >
                 <option value="internal_unlimited">Internal Unlimited</option>
-                <option value="school_standard">School Standard</option>
+                <option value="standard">Standard</option>
                 <option value="enterprise_multi_branch">Enterprise</option>
               </select>
             </div>
@@ -140,7 +140,7 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
               disabled={loading}
               className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition disabled:opacity-50"
             >
-              {loading ? 'Adding...' : 'Add Institution'}
+              {loading ? 'Adding...' : 'Add Tenant'}
             </button>
           </div>
         </form>

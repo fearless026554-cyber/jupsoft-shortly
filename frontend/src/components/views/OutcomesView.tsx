@@ -38,7 +38,7 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const [externalRef, setExternalRef] = useState('');
-  const [outcomeType, setOutcomeType] = useState('fee_paid');
+  const [outcomeType, setOutcomeType] = useState('payment');
   const [value, setValue] = useState<number | ''>('');
 
   const [ledgerEvents, setLedgerEvents] = useState<Array<{
@@ -285,10 +285,10 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
               onChange={(e) => setOutcomeType(e.target.value)}
               className="w-full h-9 text-xs px-2.5 rounded-md border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
             >
-              <option value="fee_paid">Fee Paid</option>
-              <option value="admission_fee">Admission Fee</option>
-              <option value="exam_fee">Exam Registration</option>
-              <option value="bus_fee">Transport Fee</option>
+              <option value="payment">Payment</option>
+              <option value="order">Order</option>
+              <option value="signup">Signup</option>
+              <option value="conversion">Conversion</option>
             </select>
           </div>
 

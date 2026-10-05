@@ -78,10 +78,10 @@ export const Header: React.FC<HeaderProps> = ({
               <Building2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
               <span className="max-w-[160px] truncate text-white font-semibold">
                 {activeTenantId === 'all'
-                  ? 'All Schools'
+                  ? 'All Tenants'
                   : currentTenant
                   ? `${currentTenant.name} (${currentTenant.code})`
-                  : 'Select School'}
+                  : 'Select Tenant'}
               </span>
               <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
             </button>
@@ -109,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                    <span>All Schools</span>
+                    <span>All Tenants</span>
                   </div>
                   {activeTenantId === 'all' && <Check className="w-3.5 h-3.5 text-blue-600" />}
                 </button>
@@ -151,7 +151,7 @@ export const Header: React.FC<HeaderProps> = ({
                       }}
                       className="w-full py-1.5 bg-slate-100 hover:bg-blue-50 text-blue-600 rounded text-xs font-semibold flex items-center justify-center gap-1.5 transition"
                     >
-                      <Plus className="w-3 h-3" /> Add School
+                      <Plus className="w-3 h-3" /> Add Tenant
                     </button>
                   </div>
                 )}
@@ -162,7 +162,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-1.5 bg-[#162D4A] px-2.5 py-1 rounded border border-[#1E3A5F] text-[11px] text-slate-200">
             <Building2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
             <span className="font-semibold truncate max-w-[160px]">
-              {currentTenant ? currentTenant.name : (currentUser?.tenant_code ? `School (${currentUser.tenant_code})` : 'Assigned School')}
+              {currentTenant ? currentTenant.name : (currentUser?.tenant_code ? `Tenant (${currentUser.tenant_code})` : 'Workspace')}
             </span>
           </div>
         )}
@@ -261,7 +261,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                   {currentUser?.tenant_code && (
                     <span className="px-1.5 py-0.5 rounded text-[9px] font-mono text-slate-600 bg-slate-100">
-                      School: {currentUser.tenant_code}
+                      Tenant: {currentUser.tenant_code}
                     </span>
                   )}
                 </div>

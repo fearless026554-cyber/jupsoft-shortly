@@ -199,7 +199,7 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
                       </div>
                       <div className="text-xs font-bold text-slate-800">No Custom Tokens Provisioned</div>
                       <p className="text-[11px] text-slate-500 max-w-sm">
-                        Generate scoped API keys from the header button for school ERP webhooks, SMS dispatchers, and automated clickstream analytics.
+                        Generate scoped API keys from the header button for webhooks, SMS dispatchers, and automated clickstream analytics.
                       </p>
                     </div>
                   </td>

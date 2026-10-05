@@ -29,7 +29,7 @@ export function getRoleDisplayName(role?: string): string {
     case 'super_admin':
       return 'Super Administrator';
     case 'tenant_admin':
-      return 'School Administrator';
+      return 'Tenant Administrator';
     case 'manager':
       return 'Operations Manager';
     case 'user':

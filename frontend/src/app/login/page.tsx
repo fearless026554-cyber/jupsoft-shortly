@@ -67,7 +67,7 @@ export default function LoginPage() {
             Jupsoft Shortly
           </h1>
           <p className="text-xs text-slate-400 mt-1.5">
-            Centralized School Link Management Platform
+            Enterprise Link Management Platform
           </p>
         </div>
 

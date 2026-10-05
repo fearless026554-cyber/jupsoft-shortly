@@ -90,7 +90,7 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
       tenants.map((t) => ({
         TenantID: t.id,
         Code: t.code,
-        SchoolName: t.name,
+        TenantName: t.name,
         Plan: t.plan_id,
         Status: t.status,
         CreatedAt: t.created_at,
@@ -108,10 +108,10 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
           </div>
           <div>
             <h1 className="text-base font-semibold text-slate-900">
-              Institutions Directory
+              Tenants
             </h1>
             <p className="text-xs text-slate-500">
-              Manage your school branches and subscriptions.
+              Manage tenant workspaces and subscriptions.
             </p>
           </div>
         </div>
@@ -119,8 +119,8 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={handleExport}
-            aria-label="Export institutions CSV"
-            title="Export institutions CSV"
+            aria-label="Export tenants CSV"
+            title="Export tenants CSV"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition min-h-[36px]"
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />
@@ -128,12 +128,12 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
           </button>
           <button
             onClick={onOpenCreateTenantModal}
-            aria-label="Add Institution"
-            title="Add Institution"
+            aria-label="Add Tenant"
+            title="Add Tenant"
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-xs transition min-h-[36px] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Add Institution
+            Add Tenant
           </button>
         </div>
       </div>
@@ -146,8 +146,8 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search school name or tenant code..."
-            aria-label="Search school name or tenant code"
+            placeholder="Search tenant name or code..."
+            aria-label="Search tenant name or code"
             className="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white min-h-[36px]"
           />
         </div>
@@ -175,12 +175,12 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
             </div>
             <div className="space-y-1 max-w-sm">
               <h3 className="text-sm font-bold text-slate-800">
-                No Institutions Found
+                No Tenants Found
               </h3>
               <p className="text-xs text-slate-500 leading-relaxed">
                 {search
-                  ? `No school tenants match "${search}". Try searching by code or partial name.`
-                  : 'Add an institution from the header button to start managing their short links.'}
+                  ? `No tenants match "${search}". Try searching by code or partial name.`
+                  : 'Add a tenant from the header button to start managing their short links.'}
               </p>
             </div>
           </div>
@@ -189,7 +189,7 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 uppercase text-[10px]">
               <tr>
-                <th className="px-3.5 py-2.5">Institution</th>
+                <th className="px-3.5 py-2.5">Tenant</th>
                 <th className="px-3.5 py-2.5">Code</th>
                 <th className="px-3.5 py-2.5">Plan</th>
                 <th className="px-3.5 py-2.5">Status</th>
@@ -318,7 +318,7 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
               pageSize={pagination.pageSize}
               onPageChange={pagination.setCurrentPage}
               onPageSizeChange={pagination.setPageSize}
-              itemLabel="schools"
+              itemLabel="tenants"
             />
           )}
         </div>
