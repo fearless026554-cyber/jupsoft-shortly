@@ -256,7 +256,10 @@ export default function ShortlyCRMApp() {
 
   const handleArchiveLink = async (id: string) => {
     const targetLink = links.find((l) => l.id === id);
-    const domainHost = (targetLink as any)?.domain?.hostname || 'jup.link';
+    const domainHost =
+      (targetLink as any)?.domain?.hostname ||
+      process.env.NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN ||
+      'jup.link';
     const fullUrl = targetLink ? `https://${domainHost}/${targetLink.short_code}` : 'this short link';
     setConfirmConfig({
       isOpen: true,

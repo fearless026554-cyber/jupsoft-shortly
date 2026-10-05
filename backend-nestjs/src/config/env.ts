@@ -29,8 +29,24 @@ const envSchema = z
     // Security & Networking
     CORS_ORIGINS: z.string().default('*'),
     TRUST_PROXY: z.coerce.boolean().default(false),
-    JWT_SECRET: z.string().min(16).default('jlmp-super-secret-jwt-key-2026-production!'),
+    JWT_SECRET: z
+      .string()
+      .min(32, 'JWT_SECRET is required and must be at least 32 characters long'),
     JWT_EXPIRY: z.string().default('7d'),
+
+    // Initial Seed Configuration (Optional - no hardcoded credentials in source)
+    SEED_TENANT_ID: z
+      .string()
+      .regex(
+        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+        'Invalid SEED_TENANT_ID UUID'
+      )
+      .optional(),
+    SEED_TENANT_CODE: z.string().min(1).optional(),
+    SEED_TENANT_NAME: z.string().min(1).optional(),
+    SEED_ADMIN_EMAIL: z.string().email().optional(),
+    SEED_ADMIN_PASSWORD: z.string().min(8).optional(),
+    SEED_ADMIN_NAME: z.string().min(1).optional(),
 
     // PostgreSQL Database
     PG_HOST: z.string().min(1).default('127.0.0.1'),

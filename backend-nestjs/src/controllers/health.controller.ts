@@ -3,7 +3,7 @@ import type { FastifyReply } from 'fastify';
 import { DatabaseService } from '../db/database.service.js';
 import { RedisService } from '../redis/redis.service.js';
 
-@Controller('health')
+@Controller(['health', 'api/v1/health'])
 export class HealthController {
   constructor(
     private readonly db: DatabaseService,

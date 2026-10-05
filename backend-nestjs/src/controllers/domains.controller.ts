@@ -6,6 +6,7 @@ import { RedisService } from '../redis/redis.service.js';
 import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor.js';
 import { ApiScopes, ErrorCodes, RedisKeyBuilder } from '../constants/index.js';
+import { env } from '../config/env.js';
 
 const createDomainSchema = z.object({
   hostname: z.string().min(3).max(255).regex(/^[a-z0-9.-]+$/, 'Invalid hostname format'),
@@ -169,7 +170,10 @@ export class DomainsController {
     if (!isCnameValid && process.env.NODE_ENV === 'production') {
       return reply.status(400).send({
         success: false,
-        error: { code: 'DNS_CNAME_NOT_FOUND', message: `CNAME record for ${current.hostname} does not point to cname.jup.link.` },
+        error: {
+          code: 'DNS_CNAME_NOT_FOUND',
+          message: `CNAME record for ${current.hostname} does not point to cname.${env.DEFAULT_DOMAIN_HOST}.`,
+        },
       });
     }
 

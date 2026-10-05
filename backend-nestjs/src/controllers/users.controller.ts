@@ -52,18 +52,27 @@ export class UsersController {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
 
-    const rawPassword = dto.password || 'Welcome@2026!';
+    const isGeneratedPassword = !dto.password;
+    const rawPassword = dto.password || crypto.randomBytes(12).toString('base64url');
     const passwordHash = await bcrypt.hash(rawPassword, 10);
+    const initialStatus = isGeneratedPassword ? UserStatus.INVITED : UserStatus.ACTIVE;
 
     const created = await this.db.withTenantContext(tenantId, async (client) => {
       const res = await client.query(
         `INSERT INTO users (tenant_id, name, email, password_hash, role, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, status, created_at`,
-        [tenantId, dto.name, dto.email.toLowerCase(), passwordHash, dto.role, UserStatus.ACTIVE]
+        [tenantId, dto.name, dto.email.toLowerCase(), passwordHash, dto.role, initialStatus]
       );
       return res.rows[0];
     });
 
-    return reply.status(201).send({ success: true, data: { ...created, initialPassword: rawPassword } });
+    return reply.status(201).send({
+      success: true,
+      data: {
+        ...created,
+        initialPassword: rawPassword,
+        mustResetPassword: isGeneratedPassword,
+      },
+    });
   }
 
   @Patch(':id')

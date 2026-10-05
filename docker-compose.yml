@@ -7,15 +7,15 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-      POSTGRES_DB: ${DB_NAME:-jlmp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:-jlmp_db}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend-nestjs/src/db/schema.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-jlmp}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-jlmp_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -51,13 +51,15 @@ services:
       - PG_HOST=postgres
       - PG_PORT=5432
       - PG_USER=${DB_USER:-postgres}
-      - PG_PASSWORD=${DB_PASSWORD:-postgres}
-      - PG_DATABASE=${DB_NAME:-jlmp}
+      - PG_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+      - PG_DATABASE=${DB_NAME:-jlmp_db}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5000}
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      - DEFAULT_DOMAIN_ID=00000000-0000-0000-0000-000000000000
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required (min 32 chars)}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5001}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5001}
+      - DEFAULT_DOMAIN_ID=${DEFAULT_DOMAIN_ID:-00000000-0000-0000-0000-000000000001}
+      - DEFAULT_DOMAIN_HOST=${DEFAULT_DOMAIN_HOST:-jup.link}
     ports:
       - "3001:3000"
 
@@ -70,8 +72,10 @@ services:
     depends_on:
       - backend
     environment:
-      - NEXT_PUBLIC_BACKEND_URL=http://backend:3000
-      - CMS_API_KEY=${CMS_API_KEY:-YOUR_SUPER_SECRET_CMS_KEY_HERE}
+      - BACKEND_URL=${BACKEND_URL:-http://backend:3000}
+      - CMS_API_KEY=${CMS_API_KEY:-}
+      - NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN=${NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN:-jup.link}
+      - NEXT_PUBLIC_CNAME_DOMAIN=${NEXT_PUBLIC_CNAME_DOMAIN:-cname.jup.link}
     ports:
       - "5001:5000"
 

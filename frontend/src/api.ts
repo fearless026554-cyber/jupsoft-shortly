@@ -183,8 +183,7 @@ export const api = {
   // Health
   async getHealth() {
     return dedupeGet('health', async () => {
-      // Direct call since proxy assumes /api/v1 prefix, and health is at root.
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000'}/health`);
+      const res = await fetch(`${API_BASE_URL}/health`);
       return res.json();
     }, 5000);
   },

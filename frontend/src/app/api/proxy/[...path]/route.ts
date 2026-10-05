@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
-const CMS_API_KEY = process.env.CMS_API_KEY || process.env.NEXT_PUBLIC_CMS_API_KEY || '';
+const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000';
+const CMS_API_KEY = process.env.CMS_API_KEY || '';
 
 async function handleRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const resolvedParams = await params;

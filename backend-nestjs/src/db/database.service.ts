@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Pool, PoolClient } from 'pg';
+import * as crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { DB_CONTEXT_KEYS } from '../constants/index.js';
 
@@ -25,37 +26,62 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   private async initSeed() {
     try {
-      // 1. Ensure default pilot tenant exists
+      const tenantCode = env.SEED_TENANT_CODE;
+      const tenantName = env.SEED_TENANT_NAME;
+      const adminEmail = env.SEED_ADMIN_EMAIL;
+
+      // Only run bootstrap seed when explicitly configured via env
+      if (!tenantCode || !tenantName) {
+        return;
+      }
+
+      // 1. Ensure configured initial tenant exists
       const tenantRes = await this.pool.query(
-        `SELECT id FROM tenants WHERE code = 'hw' LIMIT 1`
+        `SELECT id FROM tenants WHERE code = $1 LIMIT 1`,
+        [tenantCode]
       );
       let tenantId = tenantRes.rows[0]?.id;
       if (!tenantId) {
+        const seedTenantId = env.SEED_TENANT_ID || crypto.randomUUID();
         const insertTenant = await this.pool.query(
           `INSERT INTO tenants (id, code, name, status, plan_id)
-           VALUES ('11111111-1111-1111-1111-111111111111', 'hw', 'Hillwoods Academy (Pilot School)', 'active', 'internal_unlimited')
+           VALUES ($1, $2, $3, 'active', 'internal_unlimited')
            ON CONFLICT (code) DO UPDATE SET updated_at = NOW()
-           RETURNING id`
+           RETURNING id`,
+          [seedTenantId, tenantCode, tenantName]
         );
-        tenantId = insertTenant.rows[0]?.id || '11111111-1111-1111-1111-111111111111';
+        tenantId = insertTenant.rows[0]?.id || seedTenantId;
       }
 
-      // 2. Ensure default super admin user exists
-      const adminEmail = 'admin@jupsoft.com';
+      // 2. Ensure configured initial super admin user exists
+      if (!adminEmail) {
+        return;
+      }
+
       const userRes = await this.pool.query(
         `SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
         [adminEmail]
       );
 
       if (userRes.rowCount === 0) {
-        const defaultPassword = 'Admin@Jupsoft2026!';
-        const hash = bcrypt.hashSync(defaultPassword, 10);
+        const generatedRandom = !env.SEED_ADMIN_PASSWORD;
+        const seedPassword =
+          env.SEED_ADMIN_PASSWORD || crypto.randomBytes(16).toString('base64url');
+        const adminName = env.SEED_ADMIN_NAME || 'System Administrator';
+        const hash = bcrypt.hashSync(seedPassword, 10);
+
         await this.pool.query(
           `INSERT INTO users (tenant_id, name, email, password_hash, role, status)
            VALUES ($1, $2, $3, $4, 'super_admin', 'active')`,
-          [tenantId, 'Sachin Sharma', adminEmail, hash]
+          [tenantId, adminName, adminEmail, hash]
         );
-        console.log(`[Seed] Seeded default super admin user: ${adminEmail}`);
+        if (generatedRandom && env.NODE_ENV !== 'production') {
+          console.log(
+            `[Seed] Seeded initial super admin (${adminEmail}) with one-time generated password: ${seedPassword}`
+          );
+        } else {
+          console.log(`[Seed] Seeded initial super admin user: ${adminEmail}`);
+        }
       }
     } catch (err) {
       console.warn('[Seed] Warning during database init seed:', err);
