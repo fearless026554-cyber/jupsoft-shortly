@@ -13,6 +13,9 @@ import {
   Zap,
 } from 'lucide-react';
 import { AbuseReportItem, api, exportToCsv } from '../../api';
+import { usePagination } from '../../hooks/usePagination';
+import { Pagination } from '../ui/Pagination';
+import { TableSkeleton } from '../ui/Skeleton';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface AbuseViewProps {
@@ -21,6 +24,7 @@ interface AbuseViewProps {
 
 export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge }) => {
   const [reports, setReports] = useState<AbuseReportItem[]>([]);
+  const pagination = usePagination(reports, 10);
   const [loading, setLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -207,8 +211,14 @@ export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge }) => {
                     <p className="text-xs text-slate-500 mt-1">All link destinations are currently scanned and clean.</p>
                   </td>
                 </tr>
+              ) : pagination.isLazyLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-3.5 py-6">
+                    <TableSkeleton rows={pagination.pageSize} columns={5} />
+                  </td>
+                </tr>
               ) : (
-                reports.map((rep) => (
+                pagination.paginatedItems.map((rep) => (
                 <tr key={rep.id} className="hover:bg-slate-50/70 transition">
                   <td className="px-3.5 py-3 font-mono font-bold text-slate-900">
                     {rep.link_id}
@@ -263,6 +273,17 @@ export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge }) => {
               )))}
             </tbody>
           </table>
+
+          {reports.length > 0 && (
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalItems={reports.length}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.setCurrentPage}
+              onPageSizeChange={pagination.setPageSize}
+              itemLabel="reports"
+            />
+          )}
         </div>
       </div>
 

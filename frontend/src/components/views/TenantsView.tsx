@@ -15,6 +15,9 @@ import {
   Copy,
 } from 'lucide-react';
 import { TenantItem, api, exportToCsv } from '../../api';
+import { usePagination } from '../../hooks/usePagination';
+import { Pagination } from '../ui/Pagination';
+import { TableSkeleton } from '../ui/Skeleton';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface TenantsViewProps {
@@ -53,6 +56,8 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
       t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.code.toLowerCase().includes(search.toLowerCase())
   );
+
+  const pagination = usePagination(filtered, 10);
 
   const handleToggleStatus = async (tenant: TenantItem) => {
     const nextStatus = tenant.status === 'active' ? 'suspended' : 'active';
@@ -198,7 +203,14 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-sans">
-              {filtered.map((tenant) => {
+              {pagination.isLazyLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-3.5 py-6">
+                    <TableSkeleton rows={pagination.pageSize} columns={6} />
+                  </td>
+                </tr>
+              ) : (
+                pagination.paginatedItems.map((tenant) => {
                 const isSelected = activeTenantId === tenant.id;
                 const initials = tenant.name
                   .split(' ')
@@ -294,9 +306,20 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
+
+          {filtered.length > 0 && (
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalItems={filtered.length}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.setCurrentPage}
+              onPageSizeChange={pagination.setPageSize}
+              itemLabel="schools"
+            />
+          )}
         </div>
         )}
       </div>

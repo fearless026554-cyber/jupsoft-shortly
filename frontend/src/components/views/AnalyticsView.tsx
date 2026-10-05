@@ -18,6 +18,9 @@ import {
 } from 'lucide-react';
 import { api, LinkItem, exportToCsv } from '../../api';
 import { formatNumber } from '../../utils/formatters';
+import { usePagination } from '../../hooks/usePagination';
+import { Pagination } from '../ui/Pagination';
+import { TableSkeleton } from '../ui/Skeleton';
 
 interface AnalyticsViewProps {
   links: LinkItem[];
@@ -84,6 +87,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
     clicks: g.count,
     share: `${g.pct}%`
   }));
+  const geoPagination = usePagination(geoData, 10);
 
   // Fallback for Mobile Share stat
   const mobilePct = deviceData.find(d => d.label.toLowerCase().includes('mobile') || d.label.toLowerCase().includes('phone'))?.pct || 0;
@@ -342,7 +346,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
                     No geographic data available
                   </td>
                 </tr>
-              ) : geoData.map((g, idx) => (
+              ) : geoPagination.isLazyLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6">
+                    <TableSkeleton rows={geoPagination.pageSize} columns={4} />
+                  </td>
+                </tr>
+              ) : geoPagination.paginatedItems.map((g, idx) => (
                 <tr key={idx} className="hover:bg-slate-50/70 transition">
                   <td className="px-4 py-2.5 font-medium text-slate-800">{g.state}</td>
                   <td className="px-4 py-2.5 font-mono font-bold text-blue-600 text-right tabular-nums">{formatNumber(g.clicks)}</td>
@@ -356,6 +366,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
               ))}
             </tbody>
           </table>
+
+          {geoData.length > 0 && (
+            <Pagination
+              currentPage={geoPagination.currentPage}
+              totalItems={geoData.length}
+              pageSize={geoPagination.pageSize}
+              onPageChange={geoPagination.setCurrentPage}
+              onPageSizeChange={geoPagination.setPageSize}
+              itemLabel="regions"
+            />
+          )}
         </div>
       </div>
     </div>

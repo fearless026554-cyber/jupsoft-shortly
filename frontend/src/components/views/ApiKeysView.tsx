@@ -21,6 +21,9 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { api } from '../../api';
+import { usePagination } from '../../hooks/usePagination';
+import { Pagination } from '../ui/Pagination';
+import { TableSkeleton } from '../ui/Skeleton';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface ApiKeysViewProps {
@@ -29,6 +32,7 @@ interface ApiKeysViewProps {
 
 export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal }) => {
   const [keys, setKeys] = useState<any[]>([]);
+  const pagination = usePagination(keys, 10);
   const [loading, setLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState(false);
   const [showKey, setShowKey] = useState(false);
@@ -239,6 +243,12 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal }
                     </td>
                   </tr>
                 ))
+              ) : pagination.isLazyLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-3.5 py-6">
+                    <TableSkeleton rows={pagination.pageSize} columns={5} />
+                  </td>
+                </tr>
               ) : keys.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="p-8 text-center">
@@ -263,7 +273,7 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal }
                   </td>
                 </tr>
               ) : (
-                keys.map((k) => (
+                pagination.paginatedItems.map((k) => (
                   <tr key={k.id} className="hover:bg-slate-50/80 transition">
                     <td className="px-3.5 py-2.5">
                       <div className="font-semibold text-slate-800">{k.name}</div>
@@ -308,6 +318,17 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal }
               )}
             </tbody>
           </table>
+
+          {keys.length > 0 && (
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalItems={keys.length}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.setCurrentPage}
+              onPageSizeChange={pagination.setPageSize}
+              itemLabel="API keys"
+            />
+          )}
         </div>
       </div>
 

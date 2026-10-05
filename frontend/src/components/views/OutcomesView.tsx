@@ -18,6 +18,9 @@ import {
 } from 'lucide-react';
 import { api, LinkItem, exportToCsv } from '../../api';
 import { useTenantDomains } from '../../hooks/useTenantDomains';
+import { usePagination } from '../../hooks/usePagination';
+import { Pagination } from '../ui/Pagination';
+import { TableSkeleton } from '../ui/Skeleton';
 import { formatMoney, formatNumber } from '../../utils/formatters';
 
 interface OutcomesViewProps {
@@ -51,6 +54,8 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links }) => {
     matchedLink?: string;
     timestamp: string;
   }>>([]);
+
+  const pagination = usePagination(ledgerEvents, 10);
 
   const loadReport = async () => {
     setLoading(true);
@@ -456,7 +461,13 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-sans">
-              {ledgerEvents.length === 0 ? (
+              {pagination.isLazyLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-3.5 py-6">
+                    <TableSkeleton rows={pagination.pageSize} columns={6} />
+                  </td>
+                </tr>
+              ) : ledgerEvents.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
                     <Receipt className="w-8 h-8 text-slate-300 mx-auto mb-2 opacity-70" />
@@ -465,7 +476,7 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links }) => {
                   </td>
                 </tr>
               ) : (
-                ledgerEvents.map((evt) => (
+                pagination.paginatedItems.map((evt) => (
                 <tr key={evt.id} className="hover:bg-slate-50/80 transition">
                   <td className="px-3.5 py-2 font-mono text-[11px] text-slate-500">{evt.id}</td>
                   <td className="px-3.5 py-2 font-mono font-bold text-blue-600">{evt.externalRef}</td>
@@ -486,6 +497,17 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links }) => {
               )))}
             </tbody>
           </table>
+
+          {ledgerEvents.length > 0 && (
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalItems={ledgerEvents.length}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.setCurrentPage}
+              onPageSizeChange={pagination.setPageSize}
+              itemLabel="events"
+            />
+          )}
         </div>
       </div>
     </div>

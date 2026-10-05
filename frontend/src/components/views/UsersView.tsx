@@ -14,6 +14,9 @@ import {
   Key,
 } from 'lucide-react';
 import { UserItem, api, exportToCsv } from '../../api';
+import { usePagination } from '../../hooks/usePagination';
+import { Pagination } from '../ui/Pagination';
+import { TableSkeleton } from '../ui/Skeleton';
 
 interface UsersViewProps {
   onOpenInviteModal: () => void;
@@ -50,6 +53,8 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal }) => {
     const matchesRole = roleFilter === 'all' || u.role === roleFilter;
     return matchesSearch && matchesRole;
   });
+
+  const pagination = usePagination(filtered, 10);
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -239,7 +244,14 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-sans">
-                {filtered.map((user) => {
+                {pagination.isLazyLoading ? (
+                  <tr>
+                    <td colSpan={5} className="px-3.5 py-6">
+                      <TableSkeleton rows={pagination.pageSize} columns={5} />
+                    </td>
+                  </tr>
+                ) : (
+                  pagination.paginatedItems.map((user) => {
                   const initials = user.name
                     .split(' ')
                     .map((w) => w[0])
@@ -299,9 +311,20 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal }) => {
                       </td>
                     </tr>
                   );
-                })}
+                }))}
               </tbody>
             </table>
+
+            {filtered.length > 0 && (
+              <Pagination
+                currentPage={pagination.currentPage}
+                totalItems={filtered.length}
+                pageSize={pagination.pageSize}
+                onPageChange={pagination.setCurrentPage}
+                onPageSizeChange={pagination.setPageSize}
+                itemLabel="users"
+              />
+            )}
           </div>
         )}
       </div>

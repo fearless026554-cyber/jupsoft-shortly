@@ -23,8 +23,10 @@ import {
 } from 'lucide-react';
 import { LinkItem, exportToCsv } from '../../api';
 import { useTenantDomains } from '../../hooks/useTenantDomains';
+import { usePagination } from '../../hooks/usePagination';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { TableSkeleton } from '../ui/Skeleton';
+import { Pagination } from '../ui/Pagination';
 
 interface LinksViewProps {
   links: LinkItem[];
@@ -98,6 +100,8 @@ export const LinksView: React.FC<LinksViewProps> = ({
     const matchesStatus = statusFilter === 'all' || l.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const pagination = usePagination(filteredLinks, 10);
 
   const handleExport = () => {
     exportToCsv(
@@ -245,7 +249,14 @@ export const LinksView: React.FC<LinksViewProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-sans">
-                {filteredLinks.map((link) => (
+                {pagination.isLazyLoading ? (
+                  <tr>
+                    <td colSpan={7} className="px-3 py-6">
+                      <TableSkeleton rows={pagination.pageSize} columns={7} />
+                    </td>
+                  </tr>
+                ) : (
+                  pagination.paginatedItems.map((link) => (
                   <tr
                     key={link.id}
                     onClick={() => onSelectDrawerLink(link)}
@@ -390,9 +401,9 @@ export const LinksView: React.FC<LinksViewProps> = ({
                       </button>
                     </td>
                   </tr>
-                ))}
+                )))}
                 
-                {filteredLinks.length === 0 && (
+                {!pagination.isLazyLoading && filteredLinks.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-3 py-16 text-center">
                       <div className="flex flex-col items-center justify-center space-y-2">
@@ -420,6 +431,17 @@ export const LinksView: React.FC<LinksViewProps> = ({
                 )}
               </tbody>
             </table>
+          )}
+
+          {filteredLinks.length > 0 && !loading && (
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalItems={filteredLinks.length}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.setCurrentPage}
+              onPageSizeChange={pagination.setPageSize}
+              itemLabel="links"
+            />
           )}
         </div>
       </div>

@@ -14,6 +14,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { DomainItem, api } from '../../api';
+import { usePagination } from '../../hooks/usePagination';
+import { Pagination } from '../ui/Pagination';
+import { TableSkeleton } from '../ui/Skeleton';
 
 export const DomainsView: React.FC = () => {
   const [domains, setDomains] = useState<DomainItem[]>([]);
@@ -21,6 +24,8 @@ export const DomainsView: React.FC = () => {
   const [newHostname, setNewHostname] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const pagination = usePagination(domains, 10);
 
   const loadDomains = async () => {
     setLoading(true);
@@ -253,7 +258,14 @@ export const DomainsView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-sans">
-                {domains.map((dom) => (
+                {pagination.isLazyLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-3.5 py-6">
+                      <TableSkeleton rows={pagination.pageSize} columns={6} />
+                    </td>
+                  </tr>
+                ) : (
+                  pagination.paginatedItems.map((dom) => (
                   <tr key={dom.id} className="hover:bg-slate-50/80 transition">
                     <td className="px-3.5 py-2.5 font-mono font-bold text-blue-600 flex items-center gap-1.5">
                       <Globe className="w-3.5 h-3.5 text-slate-400" />
@@ -309,10 +321,22 @@ export const DomainsView: React.FC = () => {
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
+
+          {domains.length > 0 && (
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalItems={domains.length}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.setCurrentPage}
+              onPageSizeChange={pagination.setPageSize}
+              itemLabel="domains"
+            />
+          )}
+        </div>
         )}
       </div>
     </div>
