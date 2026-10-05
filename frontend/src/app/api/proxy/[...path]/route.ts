@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || '';
-const CMS_API_KEY = process.env.CMS_API_KEY || '';
 
 async function handleRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const resolvedParams = await params;
