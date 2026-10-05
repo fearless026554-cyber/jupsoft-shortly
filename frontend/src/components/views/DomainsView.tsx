@@ -164,7 +164,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto">
+    <div className="space-y-4 w-full">
       {/* Header Banner with Single H1 */}
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">

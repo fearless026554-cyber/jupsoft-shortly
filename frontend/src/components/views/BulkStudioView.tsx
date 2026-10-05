@@ -221,7 +221,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto">
+    <div className="space-y-4 w-full">
       {/* Top Action & Context Strip */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs shadow-2xs">
         <div className="flex items-center gap-2 min-w-0">

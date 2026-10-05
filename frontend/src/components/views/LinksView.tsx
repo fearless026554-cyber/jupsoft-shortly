@@ -124,7 +124,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
   };
 
   return (
-    <div className="space-y-3.5 max-w-7xl mx-auto">
+    <div className="space-y-3.5 w-full">
       {/* Top Compact Action & Context Strip (Height ~36px) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs shadow-2xs">
         {/* Left: View Dropdown & Segmented Status Filter */}
