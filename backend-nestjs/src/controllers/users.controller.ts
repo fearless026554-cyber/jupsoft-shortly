@@ -3,6 +3,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import * as crypto from 'node:crypto';
 import { DatabaseService } from '../db/database.service.js';
+import { RedisService } from '../redis/redis.service.js';
 import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor.js';
 import { ALL_USER_ROLES, AUTH_CONSTANTS, ApiScopes, ErrorCodes, UserRoles, UserStatus } from '../constants/index.js';
@@ -25,7 +26,10 @@ const patchUserRoleSchema = z.object({
 @Controller('api/v1/users')
 @UseGuards(AuthGuard)
 export class UsersController {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly redis: RedisService
+  ) {}
 
   @Get()
   @RequireScope(ApiScopes.USERS_READ)
@@ -141,6 +145,7 @@ export class UsersController {
       return res.rows[0];
     });
 
+    await this.redis.invalidateUserStatus(id);
     return reply.send({ success: true, data: updated });
   }
 }

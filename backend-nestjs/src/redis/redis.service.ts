@@ -118,6 +118,21 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.del(RedisKeyBuilder.tenantStatus(tenantId));
   }
 
+  async getUserStatus(userId: string): Promise<string> {
+    const key = `user:status:${userId}`;
+    const cached = await this.client.get(key);
+    if (cached) return cached;
+
+    const res = await this.db.pool.query('SELECT status FROM users WHERE id = $1', [userId]);
+    const status = res.rows[0]?.status || 'active';
+    await this.client.setex(key, env.CACHE_TENANT_TTL_SEC || 60, status);
+    return status;
+  }
+
+  async invalidateUserStatus(userId: string): Promise<void> {
+    await this.client.del(`user:status:${userId}`);
+  }
+
   async getDailySalt(dateStr: string): Promise<string> {
     const key = RedisKeyBuilder.visitorSalt(dateStr);
     const newSalt = crypto.randomBytes(AUTH_CONSTANTS.VISITOR_SALT_BYTES).toString('hex');

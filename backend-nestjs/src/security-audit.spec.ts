@@ -47,7 +47,8 @@ describe('Security Audit Fixes Verification (Controller-Level)', () => {
     const mockDb = {
       withTenantContext: vi.fn(),
     } as any;
-    const controller = new UsersController(mockDb);
+    const mockRedis = { invalidateUserStatus: vi.fn() } as any;
+    const controller = new UsersController(mockDb, mockRedis);
 
     const req: any = {
       body: {
@@ -74,7 +75,8 @@ describe('Security Audit Fixes Verification (Controller-Level)', () => {
     const mockDb = {
       withTenantContext: vi.fn(),
     } as any;
-    const controller = new UsersController(mockDb);
+    const mockRedis = { invalidateUserStatus: vi.fn() } as any;
+    const controller = new UsersController(mockDb, mockRedis);
 
     const req: any = {
       body: {
@@ -104,7 +106,8 @@ describe('Security Audit Fixes Verification (Controller-Level)', () => {
         });
       }),
     } as any;
-    const controller = new UsersController(mockDb);
+    const mockRedis = { invalidateUserStatus: vi.fn() } as any;
+    const controller = new UsersController(mockDb, mockRedis);
 
     const req: any = {
       body: {

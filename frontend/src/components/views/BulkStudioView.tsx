@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   FileSpreadsheet,
   Upload,
@@ -59,6 +59,16 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
   const [jobInfo, setJobInfo] = useState<{ jobId: string; totalCount: number; status: string } | null>(null);
   const [batchResults, setBatchResults] = useState<any[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   const validRowsCount = batchRows.filter((r) => isValidUrl(r.destinationUrl)).length;
   const hasInvalidRows = batchRows.some(
@@ -161,12 +171,16 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
 
       const res = await api.bulkCreate(items);
       if (res.success && res.data) {
-        setJobInfo(res.data);
+        const jobId = res.data.jobId;
+        const totalCount = res.data.totalCount || items.length;
+        const status = res.data.status || 'queued';
+        setJobInfo({ jobId, totalCount, status });
+
         if (res.data.results) {
           setBatchResults(res.data.results);
           setIsProcessing(false);
         } else {
-          pollStatus(res.data.jobId);
+          pollStatus(jobId, totalCount);
         }
       } else {
         setErrorMsg(res.error?.message || 'Failed to trigger bulk processing.');
@@ -178,28 +192,47 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
     }
   };
 
-  const pollStatus = async (jobId: string) => {
+  const pollStatus = (jobId: string, totalCount: number) => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
     let attempts = 0;
-    const interval = setInterval(async () => {
+    pollIntervalRef.current = setInterval(async () => {
       attempts++;
       try {
         const res = await api.getBulkStatus(jobId);
         if (res && res.success && res.data) {
-          setJobInfo((prev) => (prev ? { ...prev, status: res.data.status } : null));
-          if (res.data.status === 'completed' || res.data.result) {
-            clearInterval(interval);
+          const status = res.data.status;
+          const result = res.data.result;
+
+          setJobInfo({ jobId, totalCount, status: status || 'processing' });
+
+          if (status === 'completed' || status === 'failed' || result) {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
             setIsProcessing(false);
-            if (res.data.result?.created) {
-              setBatchResults(res.data.result.created);
+
+            const created = result?.results || result?.created || [];
+            if (Array.isArray(created) && created.length > 0) {
+              setBatchResults(created);
             }
           }
         }
       } catch {
         // keep polling
       }
-      if (attempts > 20) {
-        clearInterval(interval);
+
+      if (attempts >= 40) {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
         setIsProcessing(false);
+        setErrorMsg('Bulk processing is taking longer than expected. Please check back later.');
       }
     }, 1500);
   };
@@ -554,6 +587,66 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
           </table>
         </div>
       </div>
+
+      {/* Generated Batch Results Card */}
+      {batchResults.length > 0 && (
+        <div className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
+          <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-200 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
+                Batch Results ({batchResults.filter((r) => r.shortUrl).length} Created, {batchResults.filter((r) => r.error).length} Failed)
+              </span>
+            </div>
+            <button
+              onClick={handleExportResults}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-2xs transition"
+            >
+              <Download className="w-3.5 h-3.5" /> Export CSV
+            </button>
+          </div>
+          <div className="overflow-x-auto max-h-72">
+            <table className="w-full text-left text-xs text-slate-700">
+              <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase text-[10px] sticky top-0">
+                <tr>
+                  <th className="px-3.5 py-2 w-12 text-center">#</th>
+                  <th className="px-3.5 py-2">Destination URL</th>
+                  <th className="px-3.5 py-2">Generated Short URL</th>
+                  <th className="px-3.5 py-2 w-32 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-sans">
+                {batchResults.map((resItem, i) => (
+                  <tr key={i} className="hover:bg-slate-50/80">
+                    <td className="px-3.5 py-2 text-center font-mono text-slate-400 text-[11px]">{i + 1}</td>
+                    <td className="px-3.5 py-2 truncate max-w-xs text-slate-600 font-mono text-[11px]">{resItem.destinationUrl}</td>
+                    <td className="px-3.5 py-2 font-mono text-xs">
+                      {resItem.shortUrl ? (
+                        <a href={resItem.shortUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline font-semibold">
+                          {resItem.shortUrl}
+                        </a>
+                      ) : (
+                        <span className="text-red-600 italic">{resItem.error || 'Failed'}</span>
+                      )}
+                    </td>
+                    <td className="px-3.5 py-2 text-center">
+                      {resItem.shortUrl ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold text-[10px]">
+                          Created
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-semibold text-[10px]">
+                          Error
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

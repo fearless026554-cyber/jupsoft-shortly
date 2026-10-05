@@ -3,6 +3,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import * as crypto from 'node:crypto';
 import { DatabaseService } from '../db/database.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { AuthGuard, Public } from '../common/guards/auth.guard.js';
@@ -184,7 +185,13 @@ export class AuthController {
   @UseGuards(AuthGuard)
   @Post('logout')
   async logout(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
-    return reply.send({
+    const authHeader = req.headers['authorization'];
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7).trim();
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      await this.redis.client.setex(`auth:revoked:${tokenHash}`, 7 * 86400, '1');
+    }
+    return reply.status(200).send({
       success: true,
       message: 'Successfully logged out',
     });

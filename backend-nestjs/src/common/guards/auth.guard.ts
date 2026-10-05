@@ -50,6 +50,19 @@ export class AuthGuard implements CanActivate {
     // 1. Try JWT verification if bearer token resembles a JWT (three period-separated segments)
     if (bearerToken && bearerToken.split('.').length === 3) {
       try {
+        const tokenHash = crypto.createHash('sha256').update(bearerToken).digest('hex');
+        const isRevoked = await this.redis.client.get(`auth:revoked:${tokenHash}`);
+        if (isRevoked) {
+          reply.status(401).send({
+            success: false,
+            error: {
+              code: ErrorCodes.UNAUTHORIZED,
+              message: 'Session has been revoked or logged out',
+            },
+          });
+          return false;
+        }
+
         const decoded = jwt.verify(bearerToken, env.JWT_SECRET) as any;
         const scopes = decoded.scopes || (decoded.role ? (ROLE_SCOPES as any)[decoded.role] : []) || [];
         authData = {
@@ -149,6 +162,36 @@ export class AuthGuard implements CanActivate {
     }
 
     (request as any).auth = authData;
+
+    // Check User Account Status
+    if (authData.userId) {
+      const userStatus = await this.redis.getUserStatus(authData.userId);
+      if (userStatus === 'suspended') {
+        reply.status(403).send({
+          success: false,
+          error: {
+            code: ErrorCodes.FORBIDDEN,
+            message: 'Your account has been suspended. Please contact administrator.',
+          },
+        });
+        return false;
+      }
+    }
+
+    // Check Tenant Organization Status
+    if (authData.tenantId && authData.role !== 'super_admin') {
+      const tenantStatus = await this.redis.getTenantStatus(authData.tenantId);
+      if (tenantStatus === 'suspended') {
+        reply.status(403).send({
+          success: false,
+          error: {
+            code: ErrorCodes.FORBIDDEN,
+            message: 'Your organization account is currently suspended.',
+          },
+        });
+        return false;
+      }
+    }
 
     // Check Scopes
     const requiredScopes = this.reflector.getAllAndOverride<string[]>(SCOPES_KEY, [

@@ -33,6 +33,7 @@ import {
   ScreeningProvider,
   ScreeningVerdict,
   QueueNames,
+  UserRoles,
 } from '../constants/index.js';
 
 const createLinkSchema = z.object({
@@ -281,12 +282,30 @@ export class LinksController {
 
   @Get('bulk/:jobId')
   @RequireScope(ApiScopes.LINKS_READ)
-  async checkBulkStatus(@Param('jobId') jobId: string, @Res() reply: FastifyReply) {
+  async checkBulkStatus(
+    @Param('jobId') jobId: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
+    const auth = (req as any).auth;
+    const isSuperAdmin =
+      auth?.role === UserRoles.SUPER_ADMIN ||
+      auth?.scopes?.includes(ApiScopes.SUPER_ADMIN) ||
+      auth?.scopes?.includes(ApiScopes.WILDCARD);
+    const tenantId = auth?.tenantId;
+
     const job = await this.bulkQueue.getJob(jobId);
     if (!job) {
       return reply.status(404).send({
         success: false,
         error: { code: ErrorCodes.NOT_FOUND, message: 'Bulk job not found' },
+      });
+    }
+
+    if (!isSuperAdmin && job.data?.tenantId && job.data.tenantId !== tenantId) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: ErrorCodes.FORBIDDEN, message: 'Access denied: You cannot view bulk jobs from other organizations' },
       });
     }
 

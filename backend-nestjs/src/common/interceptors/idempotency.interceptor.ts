@@ -56,13 +56,24 @@ export class IdempotencyInterceptor implements NestInterceptor {
       return of();
     }
 
+    let sentBody: any = null;
+    const originalSend = reply.send.bind(reply);
+    reply.send = function (payload: any) {
+      sentBody = payload;
+      return originalSend(payload);
+    };
+
     return next.handle().pipe(
       tap(async (payload) => {
         if (reply.statusCode >= 200 && reply.statusCode < 300) {
           try {
+            const bodyCandidate = sentBody !== null ? sentBody : payload;
+            if (bodyCandidate && typeof bodyCandidate === 'object' && ('raw' in bodyCandidate || 'server' in bodyCandidate)) {
+              return;
+            }
             const dataToCache = {
               statusCode: reply.statusCode,
-              body: payload,
+              body: bodyCandidate,
               bodyHash,
             };
             await this.redis.client.setex(cacheKey, CACHE_TTL.IDEMPOTENCY_SEC, JSON.stringify(dataToCache));

@@ -168,4 +168,165 @@ describe('Real Live E2E & Database Verification (Zero Mocks)', () => {
       createdApiKeyIds.push(body.data.id);
     }
   });
+
+  it('Real Live Test (P1 #11): Bulk status endpoint prevents cross-tenant IDOR with 403', async () => {
+    // 1. Submit a bulk job as Tenant A
+    const tenantAToken = jwt.sign(
+      {
+        userId: '4a0e8559-e3f9-496f-bca2-6ef990744fe6',
+        tenantId: '11111111-1111-1111-1111-111111111111',
+        role: 'tenant_admin',
+        scopes: ['links:read', 'links:write'],
+      },
+      env.JWT_SECRET
+    );
+
+    const bulkRes = await fetch(`${BASE_API}/links/bulk`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${tenantAToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        links: [
+          { destinationUrl: 'https://example.com/item1' },
+        ],
+      }),
+    });
+
+    expect(bulkRes.status).toBe(202);
+    const bulkData = await bulkRes.json();
+    const jobId = bulkData.data?.jobId;
+    expect(jobId).toBeDefined();
+
+    // 2. Attempt to read Tenant A's bulk job as Tenant B
+    const tenantBToken = jwt.sign(
+      {
+        userId: '99999999-9999-9999-9999-999999999999',
+        tenantId: '22222222-2222-2222-2222-222222222222',
+        role: 'tenant_admin',
+        scopes: ['links:read'],
+      },
+      env.JWT_SECRET
+    );
+
+    const idorRes = await fetch(`${BASE_API}/links/bulk/${jobId}`, {
+      headers: {
+        'Authorization': `Bearer ${tenantBToken}`,
+      },
+    });
+
+    expect(idorRes.status).toBe(403);
+    const idorData = await idorRes.json();
+    expect(idorData.success).toBe(false);
+    expect(idorData.error?.code).toBe(ErrorCodes.FORBIDDEN);
+    expect(idorData.error?.message).toContain('other organizations');
+  });
+
+  it('Real Live Test (P1 #12): Token revocation on logout invalidates subsequent requests with 401', async () => {
+    const userToken = jwt.sign(
+      {
+        userId: '4a0e8559-e3f9-496f-bca2-6ef990744fe6',
+        tenantId: '11111111-1111-1111-1111-111111111111',
+        role: 'tenant_admin',
+        scopes: ['users:read'],
+      },
+      env.JWT_SECRET
+    );
+
+    // Initial check: token works
+    const meRes1 = await fetch(`${BASE_API}/auth/me`, {
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    });
+    expect(meRes1.status).toBe(200);
+
+    // Logout
+    const logoutRes = await fetch(`${BASE_API}/auth/logout`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    });
+    expect(logoutRes.status).toBe(200);
+
+    // Post-logout check: token is rejected
+    const meRes2 = await fetch(`${BASE_API}/auth/me`, {
+      headers: { 'Authorization': `Bearer ${userToken}` },
+    });
+    expect(meRes2.status).toBe(401);
+    const body2 = await meRes2.json();
+    expect(body2.error?.message).toContain('revoked or logged out');
+  });
+
+  it('Real Live Test (P1 #6): Idempotency interceptor returns cached response on replay and detects mismatch', async () => {
+    const superAdminToken = jwt.sign(
+      {
+        userId: 'cec62ad8-c2bf-4507-b89f-1f902796fcb1',
+        tenantId: '11111111-1111-1111-1111-111111111111',
+        role: 'super_admin',
+        scopes: ['*'],
+      },
+      env.JWT_SECRET
+    );
+
+    const idempotencyKey = `idem_test_${Date.now()}`;
+    const initialPayload = {
+      name: 'Idempotent Test User',
+      email: `idem_${Date.now()}@example.com`,
+      role: 'user',
+    };
+
+    // First call
+    const res1 = await fetch(`${BASE_API}/users`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${superAdminToken}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(initialPayload),
+    });
+
+    expect(res1.status).toBe(201);
+    const body1 = await res1.json();
+    const userId = body1.data?.id;
+    expect(userId).toBeDefined();
+
+    // Second call: same idempotency key, identical body -> should replay cached response
+    const res2 = await fetch(`${BASE_API}/users`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${superAdminToken}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(initialPayload),
+    });
+
+    expect(res2.status).toBe(201);
+    expect(res2.headers.get('x-idempotent-replay')).toBe('true');
+    const body2 = await res2.json();
+    expect(body2.data?.id).toBe(userId);
+
+    // Third call: same idempotency key, modified body -> should reject with 422
+    const res3 = await fetch(`${BASE_API}/users`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${superAdminToken}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        ...initialPayload,
+        name: 'Tampered Body Name',
+      }),
+    });
+
+    expect(res3.status).toBe(422);
+    const body3 = await res3.json();
+    expect(body3.error?.code).toBe('IDEMPOTENCY_MISMATCH');
+
+    // Clean up created user
+    if (userId && db?.pool) {
+      await db.pool.query('DELETE FROM users WHERE id = $1', [userId]);
+    }
+  });
 });
