@@ -15,7 +15,7 @@ import {
   Download,
 } from 'lucide-react';
 import { api, CreateLinkDto, API_BASE_URL } from '../../api';
-import { useTenantDomains } from '../../hooks/useTenantDomains';
+import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
 
 interface CreateLinkModalProps {
   isOpen: boolean;
@@ -83,7 +83,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
 
   const handleCopy = () => {
     if (!createdData) return;
-    const url = createdData.shortUrl || `https://${defaultDomain}/${createdData.shortCode}`;
+    const url = createdData.shortUrl || buildShortUrl(defaultDomain, createdData.shortCode);
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -129,7 +129,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                 </div>
                 <div className="flex items-center gap-2 bg-white p-2.5 rounded border border-emerald-300 font-mono text-sm font-bold text-blue-600">
                   <span className="truncate flex-1">
-                    {createdData.shortUrl || `https://${defaultDomain}/${createdData.shortCode}`}
+                    {createdData.shortUrl || buildShortUrl(defaultDomain, createdData.shortCode)}
                   </span>
                   <button
                     onClick={handleCopy}

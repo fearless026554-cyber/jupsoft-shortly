@@ -22,7 +22,7 @@ import {
   Link2,
 } from 'lucide-react';
 import { LinkItem, exportToCsv } from '../../api';
-import { useTenantDomains } from '../../hooks/useTenantDomains';
+import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
 import { usePagination } from '../../hooks/usePagination';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { TableSkeleton } from '../ui/Skeleton';
@@ -72,7 +72,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
   const { defaultDomain } = useTenantDomains();
 
   const handleCopy = (shortCode: string, id: string) => {
-    navigator.clipboard.writeText(`https://${defaultDomain}/${shortCode}`);
+    navigator.clipboard.writeText(buildShortUrl(defaultDomain, shortCode));
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -112,7 +112,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
       filteredLinks.map((l) => ({
         ShortCode: l.short_code,
         Alias: l.alias || '',
-        ShortUrl: `https://${defaultDomain}/${l.short_code}`,
+        ShortUrl: buildShortUrl(defaultDomain, l.short_code),
         TargetUrl: l.destination_url,
         Clicks: l.click_count,
         Status: l.status,
@@ -391,10 +391,10 @@ export const LinksView: React.FC<LinksViewProps> = ({
                         </button>
 
                         <a
-                          href={`https://${defaultDomain}/${link.short_code}`}
+                          href={buildShortUrl(defaultDomain, link.short_code)}
                           target="_blank"
                           rel="noreferrer"
-                          aria-label={`Test Live Redirect for https://${defaultDomain}/${link.short_code}`}
+                          aria-label={`Test Live Redirect for ${buildShortUrl(defaultDomain, link.short_code)}`}
                           title="Test Live Redirect"
                           className="min-w-[40px] min-h-[40px] p-2 hover:bg-slate-100 rounded-md text-slate-500 hover:text-slate-800 transition flex items-center justify-center"
                         >

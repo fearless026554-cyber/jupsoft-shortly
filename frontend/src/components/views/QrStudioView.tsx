@@ -16,7 +16,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { LinkItem, API_BASE_URL } from '../../api';
-import { useTenantDomains } from '../../hooks/useTenantDomains';
+import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
 
 interface QrStudioViewProps {
   links: LinkItem[];
@@ -37,7 +37,7 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
 
   // Fallback to first link if none selected
   const activeLink = selectedLink || (links.length > 0 ? links[0] : null);
-  const shortUrl = activeLink ? `https://${defaultDomain}/${activeLink.short_code}` : '';
+  const shortUrl = activeLink ? buildShortUrl(defaultDomain, activeLink.short_code) : '';
 
   const handleCopy = () => {
     if (!shortUrl) return;
@@ -248,7 +248,7 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-2.5">
                 <a
-                  href={`https://${defaultDomain}/${activeLink.short_code}`}
+                  href={shortUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-semibold shadow-2xs transition"

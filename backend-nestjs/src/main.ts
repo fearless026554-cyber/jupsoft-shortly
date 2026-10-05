@@ -8,7 +8,70 @@ import { env } from './config/env.js';
 import { ErrorHandlerFilter } from './common/filters/error-handler.filter.js';
 import { GeoUAMiddleware } from './common/middleware/geo-ua.middleware.js';
 
+import * as http from 'node:http';
 import helmet from '@fastify/helmet';
+
+function startLocalPort80Gateway(backendPort: number, frontendPort = 5000) {
+  const FRONTEND_PREFIXES = [
+    '/_next',
+    '/api/proxy',
+    '/links',
+    '/reports',
+    '/settings',
+    '/help',
+    '/login',
+    '/favicon.ico',
+    '/jupsoft-logo.png',
+  ];
+
+  const gateway = http.createServer((clientReq, clientRes) => {
+    const rawUrl = clientReq.url || '/';
+    const pathOnly = rawUrl.split('?')[0];
+
+    const isFrontendRoute =
+      pathOnly === '/' ||
+      FRONTEND_PREFIXES.some(
+        (prefix) => pathOnly === prefix || pathOnly.startsWith(`${prefix}/`) || pathOnly.startsWith(`${prefix}?`)
+      );
+
+    const targetPort = isFrontendRoute ? frontendPort : backendPort;
+
+    const proxyReq = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: targetPort,
+        path: rawUrl,
+        method: clientReq.method,
+        headers: {
+          ...clientReq.headers,
+          'x-forwarded-host': clientReq.headers.host || '',
+          'x-forwarded-for': clientReq.socket.remoteAddress || '127.0.0.1',
+        },
+      },
+      (proxyRes) => {
+        clientRes.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        proxyRes.pipe(clientRes, { end: true });
+      }
+    );
+
+    proxyReq.on('error', (err) => {
+      if (!clientRes.headersSent) {
+        clientRes.writeHead(502, { 'Content-Type': 'text/plain' });
+      }
+      clientRes.end(`Local Gateway Error: ${err.message}`);
+    });
+
+    clientReq.pipe(proxyReq, { end: true });
+  });
+
+  gateway.on('error', (err: any) => {
+    console.warn(`[Port 80 Gateway] Could not bind port 80 (${err.code || err.message})`);
+  });
+
+  gateway.listen(80, '0.0.0.0', () => {
+    console.log(`[Port 80 Gateway] Hosting custom domains locally on http://0.0.0.0:80 -> Backend(:${backendPort}) & Frontend(:${frontendPort})`);
+  });
+}
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
@@ -16,9 +79,10 @@ async function bootstrap() {
     new FastifyAdapter()
   );
 
-  // Security Headers
+  // Security Headers (disable HSTS on HTTP/local so browsers don't force-upgrade http:// custom domains to https://)
   await app.register(helmet, {
-    contentSecurityPolicy: false, // In a strict production environment, define proper CSP here.
+    contentSecurityPolicy: false,
+    hsts: false,
   });
 
   // Strict CORS
@@ -49,5 +113,9 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
   await app.listen(env.PORT, '0.0.0.0');
   console.log(`Application is running on: ${await app.getUrl()}`);
+
+  if (Number(env.PORT) !== 80) {
+    startLocalPort80Gateway(Number(env.PORT), 5000);
+  }
 }
 bootstrap();

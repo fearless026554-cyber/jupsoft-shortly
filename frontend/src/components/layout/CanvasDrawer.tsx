@@ -15,7 +15,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { LinkItem, API_BASE_URL } from '../../api';
-import { useTenantDomains } from '../../hooks/useTenantDomains';
+import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
 
 interface CanvasDrawerProps {
   link: LinkItem | null;
@@ -29,7 +29,7 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
 
   if (!link) return null;
 
-  const shortUrl = `https://${defaultDomain}/${link.short_code}`;
+  const shortUrl = buildShortUrl(defaultDomain, link.short_code);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(shortUrl);

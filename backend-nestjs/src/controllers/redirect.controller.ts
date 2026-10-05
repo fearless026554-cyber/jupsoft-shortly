@@ -58,9 +58,13 @@ export class RedirectController {
       return reply.status(404).send({ error: 'Not found' });
     }
 
-    const rawHost = (forwardedHost || req.hostname || '').split(':')[0].toLowerCase();
+    const rawHost = (forwardedHost || req.hostname || '').split(':')[0].toLowerCase().replace(/^www\./, '');
     const domain = await this.redis.getDomainByHostname(rawHost);
-    const domainId = domain?.id;
+    const domainId =
+      domain?.id ||
+      (rawHost === 'localhost' || rawHost === '127.0.0.1' || rawHost.startsWith('192.168.')
+        ? env.DEFAULT_DOMAIN_ID
+        : undefined);
     if (!domainId) {
       return reply.status(404).send({ error: 'Domain not registered' });
     }

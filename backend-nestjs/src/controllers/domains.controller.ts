@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import * as dns from 'node:dns/promises';
+import * as os from 'node:os';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service.js';
 import { RedisService } from '../redis/redis.service.js';
@@ -21,16 +22,37 @@ const patchDomainSchema = z.object({
   sslActive: z.boolean().optional(),
 });
 
-let cachedServerIp: string | null = process.env.SERVER_PUBLIC_IP || null;
-let cachedServerIpAt = 0;
+let cachedPublicIp: string | null = process.env.SERVER_PUBLIC_IP || null;
+let cachedPublicIpAt = 0;
 
-async function getLiveServerIp(): Promise<string> {
+function getLocalLanIps(): string[] {
+  const interfaces = os.networkInterfaces();
+  const preferred: string[] = [];
+  const others: string[] = [];
+
+  for (const [name, list] of Object.entries(interfaces)) {
+    if (!list) continue;
+    const isVirtual = /vethernet|wsl|docker|vmware|vbox|hyper-v/i.test(name);
+    for (const iface of list) {
+      if (iface.family === 'IPv4' && !iface.internal && !iface.address.startsWith('169.254.')) {
+        if (!isVirtual && (iface.address.startsWith('192.168.') || iface.address.startsWith('10.'))) {
+          preferred.push(iface.address);
+        } else {
+          others.push(iface.address);
+        }
+      }
+    }
+  }
+  return [...preferred, ...others];
+}
+
+async function getPublicWanIp(): Promise<string | null> {
   if (process.env.SERVER_PUBLIC_IP) {
     return process.env.SERVER_PUBLIC_IP;
   }
   const now = Date.now();
-  if (cachedServerIp && now - cachedServerIpAt < 5 * 60 * 1000) {
-    return cachedServerIp;
+  if (cachedPublicIp && now - cachedPublicIpAt < 5 * 60 * 1000) {
+    return cachedPublicIp;
   }
   try {
     const controller = new AbortController();
@@ -40,15 +62,32 @@ async function getLiveServerIp(): Promise<string> {
     if (res.ok) {
       const data = (await res.json()) as { ip?: string };
       if (data?.ip) {
-        cachedServerIp = data.ip.trim();
-        cachedServerIpAt = now;
-        return cachedServerIp;
+        cachedPublicIp = data.ip.trim();
+        cachedPublicIpAt = now;
+        return cachedPublicIp;
       }
     }
   } catch {
     // fallback if offline
   }
-  return cachedServerIp || '127.0.0.1';
+  return cachedPublicIp;
+}
+
+async function getLiveServerIp(): Promise<string> {
+  const lanIps = getLocalLanIps();
+  if (env.NODE_ENV !== 'production' && lanIps.length > 0) {
+    return lanIps[0];
+  }
+  const wanIp = await getPublicWanIp();
+  return wanIp || lanIps[0] || '127.0.0.1';
+}
+
+async function getValidServerIps(): Promise<string[]> {
+  const lanIps = getLocalLanIps();
+  const wanIp = await getPublicWanIp();
+  const set = new Set<string>([...lanIps, '127.0.0.1']);
+  if (wanIp) set.add(wanIp);
+  return Array.from(set);
 }
 
 async function getAuthoritativeResolver(hostname: string): Promise<dns.Resolver> {
@@ -307,13 +346,14 @@ export class DomainsController {
       });
     }
     const current = currentRes.rows[0];
-    const serverIp = await getLiveServerIp();
+    const [serverIp, validIps] = await Promise.all([getLiveServerIp(), getValidServerIps()]);
     const expectedTxt = `shortly-verify=${String(current.id).slice(0, 8)}`;
     const expectedCname = env.DEFAULT_DOMAIN_HOST.toLowerCase();
 
     const { aRecords, cnameRecords, txtRecords } = await inspectLiveDns(current.hostname);
 
-    const matchedA = aRecords.includes(serverIp);
+    const matchedIp = aRecords.find((ip) => validIps.includes(ip));
+    const matchedA = Boolean(matchedIp);
     const matchedTxt = txtRecords.some((t) => t.includes(expectedTxt));
     const matchedCname = cnameRecords.some(
       (c) => c === expectedCname || c === `cname.${expectedCname}`
@@ -362,7 +402,7 @@ export class DomainsController {
         server_ip: serverIp,
         live_dns: { aRecords, cnameRecords, txtRecords },
       },
-      matchedBy: matchedA ? `A (${serverIp})` : matchedTxt ? `TXT (${expectedTxt})` : `CNAME (${cnameRecords[0]})`,
+      matchedBy: matchedA ? `A (${matchedIp})` : matchedTxt ? `TXT (${expectedTxt})` : `CNAME (${cnameRecords[0]})`,
     });
   }
 }

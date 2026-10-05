@@ -14,7 +14,7 @@ import {
   Check,
 } from 'lucide-react';
 import { LinkItem, api } from '../../api';
-import { useTenantDomains } from '../../hooks/useTenantDomains';
+import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
 import { formatMoney, formatNumber } from '../../utils/formatters';
 import { CardSkeleton, TableSkeleton, Skeleton } from '../ui/Skeleton';
 import { Permissions } from '../../utils/rbac';
@@ -56,7 +56,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const totalConversions = Number(summary?.total_outcomes || 0);
 
   const handleCopy = (shortCode: string, id: string) => {
-    navigator.clipboard.writeText(`https://${defaultDomain}/${shortCode}`);
+    navigator.clipboard.writeText(buildShortUrl(defaultDomain, shortCode));
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
