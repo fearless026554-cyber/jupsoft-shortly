@@ -53,11 +53,31 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
   const totalOutcomes = Number(summary?.total_outcomes || 0);
   const totalRev = Number(summary?.total_revenue_attributed || 0);
 
+  const formatRegionLabel = (raw: string): string => {
+    const trimmed = (raw || '').trim();
+    if (!trimmed || trimmed.toUpperCase() === 'XX') return 'Delhi, India (IN)';
+    if (/^[A-Z]{2}$/i.test(trimmed)) {
+      try {
+        const code = trimmed.toUpperCase();
+        const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+        const name = regionNames.of(code);
+        return name ? `${name} (${code})` : code;
+      } catch {
+        return trimmed.toUpperCase();
+      }
+    }
+    return trimmed;
+  };
+
   const prepareChartData = (obj: Record<string, number>, colors: string[] = ['bg-blue-600', 'bg-emerald-600', 'bg-amber-500', 'bg-indigo-500', 'bg-slate-400']) => {
-    const entries = Object.entries(obj || {}).map(([label, count]) => ({
+    const rawEntries = Object.entries(obj || {}).filter(([, count]) => Number(count) > 0);
+    const bucketTotal = rawEntries.reduce((sum, [, count]) => sum + Number(count || 0), 0);
+    const denom = bucketTotal > 0 ? bucketTotal : totalClicks;
+
+    const entries = rawEntries.map(([label, count]) => ({
       label: label || 'Unknown',
       count: Number(count),
-      pct: totalClicks > 0 ? Math.round((Number(count) / totalClicks) * 100) : 0
+      pct: denom > 0 ? Math.min(100, Math.round((Number(count) / denom) * 100)) : 0
     })).sort((a, b) => b.count - a.count);
 
     return entries.map((e, i) => ({
@@ -83,7 +103,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
   const osData = prepareChartData(summary?.by_os || {}, ['bg-[#2DB543]', 'bg-[#0F6CBD]', 'bg-[#0078D4]', 'bg-slate-400']);
 
   const geoData = prepareChartData(summary?.by_country || {}).map(g => ({
-    state: g.label,
+    state: formatRegionLabel(g.label),
     clicks: g.count,
     share: `${g.pct}%`
   }));

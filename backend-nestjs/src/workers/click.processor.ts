@@ -45,6 +45,68 @@ export function parseUserAgent(uaString: string): DeviceInfo {
   return { device, browser, os, isBot: false };
 }
 
+const geoCache = new Map<string, { code: string; label: string; expiresAt: number }>();
+
+function isPrivateOrLocalIp(ip: string): boolean {
+  const clean = (ip || '').replace(/^::ffff:/, '').trim();
+  return (
+    !clean ||
+    clean === '127.0.0.1' ||
+    clean === '::1' ||
+    clean.startsWith('10.') ||
+    clean.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(clean)
+  );
+}
+
+async function resolveGeoLocation(ip: string, cfCountry?: string): Promise<{ code: string; label: string }> {
+  if (cfCountry && cfCountry !== 'XX' && cfCountry.length <= 8) {
+    try {
+      const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+      const name = regionNames.of(cfCountry.toUpperCase());
+      return { code: cfCountry.toUpperCase(), label: name ? `${name} (${cfCountry.toUpperCase()})` : cfCountry.toUpperCase() };
+    } catch {
+      return { code: cfCountry.toUpperCase(), label: cfCountry.toUpperCase() };
+    }
+  }
+
+  const cacheKey = isPrivateOrLocalIp(ip) ? '__LOCAL_WAN__' : ip;
+  const cached = geoCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { code: cached.code, label: cached.label };
+  }
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2000);
+    const target = cacheKey === '__LOCAL_WAN__' ? '' : encodeURIComponent(ip.replace(/^::ffff:/, ''));
+    const res = await fetch(`http://ip-api.com/json/${target}?fields=status,country,countryCode,regionName,city`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = (await res.json()) as {
+        status?: string;
+        country?: string;
+        countryCode?: string;
+        regionName?: string;
+        city?: string;
+      };
+      if (data?.status === 'success' && data.countryCode) {
+        const code = data.countryCode.slice(0, 8).toUpperCase();
+        const place = data.city || data.regionName;
+        const label = place && data.country ? `${place}, ${data.country} (${code})` : `${data.country || code} (${code})`;
+        geoCache.set(cacheKey, { code, label, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
+        return { code, label };
+      }
+    }
+  } catch {
+    // fallback if offline
+  }
+
+  return { code: 'IN', label: 'India (IN)' };
+}
+
 @Processor(QueueNames.CLICKS, { concurrency: env.CLICK_WORKER_CONCURRENCY })
 export class ClickProcessor extends WorkerHost {
   constructor(
@@ -67,12 +129,13 @@ export class ClickProcessor extends WorkerHost {
         .digest('hex');
 
       const uaInfo = parseUserAgent(data.userAgent);
+      const geo = await resolveGeoLocation(data.ip, data.countryCode);
 
       const client = await this.db.pool.connect();
       try {
         await client.query('BEGIN');
 
-        const countryCode = data.countryCode || FALLBACKS.COUNTRY_CODE;
+        const countryCode = geo.code;
 
         const existingVisit = await client.query(
           `SELECT 1 FROM clicks WHERE link_id = $1 AND clicked_at >= $2::timestamptz AND clicked_at < ($2::timestamptz + INTERVAL '1 day') AND visitor_hash = $3 LIMIT 1`,
@@ -98,7 +161,7 @@ export class ClickProcessor extends WorkerHost {
         const deviceKey = uaInfo.device;
         const osKey = uaInfo.os;
         const browserKey = uaInfo.browser;
-        const countryKey = countryCode;
+        const countryKey = geo.label;
         let refKey: string = FALLBACKS.REFERRER;
         if (data.referrer) {
           try {
@@ -108,27 +171,39 @@ export class ClickProcessor extends WorkerHost {
           }
         }
 
-        const clicksDelta = uaInfo.isBot ? 0 : 1;
-        const uniqueDelta = isUniqueToday ? 1 : 0;
-        const botClicksDelta = uaInfo.isBot ? 1 : 0;
-
-        await client.query(
-          `INSERT INTO click_daily (
-            tenant_id, link_id, date, clicks, unique_clicks, bot_clicks,
-            by_device, by_os, by_browser, by_country, by_referrer
-          ) VALUES (
-            $1, $2, $3, $9, $10, $11,
-            jsonb_build_object($4::text, 1), jsonb_build_object($5::text, 1), jsonb_build_object($6::text, 1), jsonb_build_object($7::text, 1), jsonb_build_object($8::text, 1)
-          )
-          ON CONFLICT (link_id, date) DO UPDATE SET
-            clicks = click_daily.clicks + $9, unique_clicks = click_daily.unique_clicks + $10, bot_clicks = click_daily.bot_clicks + $11,
-            by_device = jsonb_set(click_daily.by_device, ARRAY[$4::text], to_jsonb(COALESCE((click_daily.by_device->>$4::text)::int, 0) + 1)),
-            by_os = jsonb_set(click_daily.by_os, ARRAY[$5::text], to_jsonb(COALESCE((click_daily.by_os->>$5::text)::int, 0) + 1)),
-            by_browser = jsonb_set(click_daily.by_browser, ARRAY[$6::text], to_jsonb(COALESCE((click_daily.by_browser->>$6::text)::int, 0) + 1)),
-            by_country = jsonb_set(click_daily.by_country, ARRAY[$7::text], to_jsonb(COALESCE((click_daily.by_country->>$7::text)::int, 0) + 1)),
-            by_referrer = jsonb_set(click_daily.by_referrer, ARRAY[$8::text], to_jsonb(COALESCE((click_daily.by_referrer->>$8::text)::int, 0) + 1))`,
-          [data.tenantId, data.linkId, dateStr, deviceKey, osKey, browserKey, countryKey, refKey, clicksDelta, uniqueDelta, botClicksDelta]
-        );
+        if (uaInfo.isBot) {
+          await client.query(
+            `INSERT INTO click_daily (
+              tenant_id, link_id, date, clicks, unique_clicks, bot_clicks,
+              by_device, by_os, by_browser, by_country, by_referrer
+            ) VALUES (
+              $1, $2, $3, 0, 0, 1,
+              '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb
+            )
+            ON CONFLICT (link_id, date) DO UPDATE SET
+              bot_clicks = click_daily.bot_clicks + 1`,
+            [data.tenantId, data.linkId, dateStr]
+          );
+        } else {
+          const uniqueDelta = isUniqueToday ? 1 : 0;
+          await client.query(
+            `INSERT INTO click_daily (
+              tenant_id, link_id, date, clicks, unique_clicks, bot_clicks,
+              by_device, by_os, by_browser, by_country, by_referrer
+            ) VALUES (
+              $1, $2, $3, 1, $9, 0,
+              jsonb_build_object($4::text, 1), jsonb_build_object($5::text, 1), jsonb_build_object($6::text, 1), jsonb_build_object($7::text, 1), jsonb_build_object($8::text, 1)
+            )
+            ON CONFLICT (link_id, date) DO UPDATE SET
+              clicks = click_daily.clicks + 1, unique_clicks = click_daily.unique_clicks + $9,
+              by_device = jsonb_set(click_daily.by_device, ARRAY[$4::text], to_jsonb(COALESCE((click_daily.by_device->>$4::text)::int, 0) + 1)),
+              by_os = jsonb_set(click_daily.by_os, ARRAY[$5::text], to_jsonb(COALESCE((click_daily.by_os->>$5::text)::int, 0) + 1)),
+              by_browser = jsonb_set(click_daily.by_browser, ARRAY[$6::text], to_jsonb(COALESCE((click_daily.by_browser->>$6::text)::int, 0) + 1)),
+              by_country = jsonb_set(click_daily.by_country, ARRAY[$7::text], to_jsonb(COALESCE((click_daily.by_country->>$7::text)::int, 0) + 1)),
+              by_referrer = jsonb_set(click_daily.by_referrer, ARRAY[$8::text], to_jsonb(COALESCE((click_daily.by_referrer->>$8::text)::int, 0) + 1))`,
+            [data.tenantId, data.linkId, dateStr, deviceKey, osKey, browserKey, countryKey, refKey, uniqueDelta]
+          );
+        }
 
         await client.query('COMMIT');
       } catch (err) {
