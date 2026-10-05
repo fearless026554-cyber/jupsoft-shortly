@@ -27,9 +27,13 @@ async function bootstrap() {
   
   app.useGlobalFilters(new ErrorHandlerFilter());
   
-  // Register Fastify middleware directly since it's a Fastify plugin/middleware equivalent
+  // Register Fastify hook & middleware to populate req.geoUa on all incoming requests
   const geoMiddleware = new GeoUAMiddleware();
   app.use((req: any, res: any, next: any) => geoMiddleware.use(req, res, next));
+  const fastifyInstance = app.getHttpAdapter().getInstance();
+  fastifyInstance.addHook('onRequest', async (req: any, reply: any) => {
+    geoMiddleware.use(req, reply, () => {});
+  });
 
   // Removed ValidationPipe as Zod is used for validation within controllers
 

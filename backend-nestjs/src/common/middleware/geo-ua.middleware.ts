@@ -4,24 +4,46 @@ import { HeaderNames, FALLBACK_IP } from '../../constants/headers.js';
 
 @Injectable()
 export class GeoUAMiddleware implements NestMiddleware {
-  use(req: FastifyRequest['raw'], res: FastifyReply['raw'], next: () => void) {
-    const cfIp = req.headers[HeaderNames.CF_CONNECTING_IP] as string | undefined;
-    const xForwardedFor = req.headers[HeaderNames.X_FORWARDED_FOR] as string | undefined;
+  use(req: any, res: any, next: () => void) {
+    const headers = req.headers || req.raw?.headers || {};
+    const cfIp = headers[HeaderNames.CF_CONNECTING_IP] as string | undefined;
+    const xForwardedFor = headers[HeaderNames.X_FORWARDED_FOR] as string | undefined;
     
     // Remote address fallback
-    const remoteAddress = req.socket?.remoteAddress || FALLBACK_IP;
+    const remoteAddress = req.ip || req.socket?.remoteAddress || req.raw?.socket?.remoteAddress || FALLBACK_IP;
     const clientIp = cfIp || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : remoteAddress);
 
-    const userAgent = (req.headers[HeaderNames.USER_AGENT] as string) || 'Unknown';
-    const countryCode = (req.headers[HeaderNames.CF_IPCOUNTRY] as string) || undefined;
-    const referrer = (req.headers[HeaderNames.REFERER] as string) || undefined;
+    const userAgent = (headers[HeaderNames.USER_AGENT] as string) || 'Unknown';
+    const countryCode = (headers[HeaderNames.CF_IPCOUNTRY] as string) || undefined;
+    const referrer = (headers[HeaderNames.REFERER] as string) || undefined;
 
-    (req as any).geoUa = {
+    const geoUa = {
       clientIp,
       userAgent,
       countryCode,
       referrer,
     };
+    req.geoUa = geoUa;
+    if (req.raw) {
+      req.raw.geoUa = geoUa;
+    }
     next();
   }
+}
+
+export function getGeoUa(req: any) {
+  if (req?.geoUa?.clientIp) return req.geoUa;
+  if (req?.raw?.geoUa?.clientIp) return req.raw.geoUa;
+  const headers = req?.headers || req?.raw?.headers || {};
+  const cfIp = headers[HeaderNames.CF_CONNECTING_IP] as string | undefined;
+  const xForwardedFor = headers[HeaderNames.X_FORWARDED_FOR] as string | undefined;
+  const remoteAddress = req?.ip || req?.socket?.remoteAddress || req?.raw?.socket?.remoteAddress || FALLBACK_IP;
+  const clientIp = cfIp || (xForwardedFor ? xForwardedFor.split(',')[0].trim() : remoteAddress);
+  const userAgent = (headers[HeaderNames.USER_AGENT] as string) || 'Unknown';
+  const countryCode = (headers[HeaderNames.CF_IPCOUNTRY] as string) || undefined;
+  const referrer = (headers[HeaderNames.REFERER] as string) || undefined;
+
+  const geoUa = { clientIp, userAgent, countryCode, referrer };
+  if (req) req.geoUa = geoUa;
+  return geoUa;
 }

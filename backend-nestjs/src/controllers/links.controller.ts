@@ -11,7 +11,8 @@ import { QrService } from '../services/qr.service.js';
 import { AuditService } from '../services/audit.service.js';
 import { UrlService } from '../services/url.service.js';
 import { ScreeningService } from '../services/screening.service.js';
-import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
+import { getGeoUa } from '../common/middleware/geo-ua.middleware.js';
+import { AuthGuard, RequireScope, Public } from '../common/guards/auth.guard.js';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor.js';
 import { env } from '../config/env.js';
 import {
@@ -132,7 +133,7 @@ export class LinksController {
   async createLink(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const dto = createLinkSchema.parse(req.body);
     const auth = (req as any).auth;
-    const geoUa = (req as any).geoUa;
+    const geoUa = getGeoUa(req);
     const tenantId = auth.tenantId;
     const domainId = dto.domainId || env.DEFAULT_DOMAIN_ID;
 
@@ -297,7 +298,7 @@ export class LinksController {
   async cloneLink(@Param('id') id: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
-    const geoUa = (req as any).geoUa;
+    const geoUa = getGeoUa(req);
 
     const result = await this.db.withTenantContext(tenantId, async (client) => {
       const currentRes = await client.query('SELECT * FROM links WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
@@ -414,7 +415,7 @@ export class LinksController {
     const dto = patchLinkSchema.parse(req.body);
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
-    const geoUa = (req as any).geoUa;
+    const geoUa = getGeoUa(req);
 
     const updated = await this.db.withTenantContext(tenantId, async (client) => {
       const currentRes = await client.query('SELECT * FROM links WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
@@ -480,7 +481,7 @@ export class LinksController {
   async deleteLink(@Param('id') id: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
-    const geoUa = (req as any).geoUa;
+    const geoUa = getGeoUa(req);
 
     const archived = await this.db.withTenantContext(tenantId, async (client) => {
       const res = await client.query(
@@ -511,6 +512,7 @@ export class LinksController {
   }
 
   @Get(':id/qr')
+  @Public()
   async downloadQr(@Param('id') id: string, @Query('format') formatStr: string, @Query('size') sizeStr: string, @Query('theme') theme: string, @Res() reply: FastifyReply) {
     const format = formatStr || QR_FORMATS[0];
     if (sizeStr) {

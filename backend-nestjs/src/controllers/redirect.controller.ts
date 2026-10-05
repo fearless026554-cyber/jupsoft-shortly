@@ -127,7 +127,12 @@ export class RedirectController {
       }
     }
 
-    const geoUa = (req as any).geoUa;
+    const geoUa = (req as any).geoUa || (req.raw as any)?.geoUa || {
+      clientIp: req.ip || (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || '127.0.0.1',
+      userAgent: (req.headers['user-agent'] as string) || 'Unknown',
+      referrer: (req.headers['referer'] as string) || undefined,
+      countryCode: (req.headers['cf-ipcountry'] as string) || undefined,
+    };
     this.clicksQueue
       .add(JobNames.INGEST_CLICK, {
         linkId: link!.id,
@@ -244,7 +249,12 @@ export class RedirectController {
       }
     }
 
-    const geoUa = (req as any).geoUa;
+    const geoUa = (req as any).geoUa || (req.raw as any)?.geoUa || {
+      clientIp: req.ip || (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || '127.0.0.1',
+      userAgent: (req.headers['user-agent'] as string) || 'Unknown',
+      referrer: (req.headers['referer'] as string) || undefined,
+      countryCode: (req.headers['cf-ipcountry'] as string) || undefined,
+    };
     this.clicksQueue
       .add(JobNames.INGEST_CLICK, {
         linkId: link!.id,

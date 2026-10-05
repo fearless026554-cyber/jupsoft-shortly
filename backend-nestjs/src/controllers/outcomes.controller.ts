@@ -6,6 +6,7 @@ import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor.js';
 import { OutcomeService } from '../services/outcome.service.js';
 import { AuditService } from '../services/audit.service.js';
+import { getGeoUa } from '../common/middleware/geo-ua.middleware.js';
 import { ApiScopes } from '../constants/index.js';
 
 const outcomeEventSchema = z
@@ -33,7 +34,7 @@ export class OutcomesController {
   async postOutcome(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const dto = outcomeEventSchema.parse(req.body);
     const auth = (req as any).auth;
-    const geoUa = (req as any).geoUa;
+    const geoUa = getGeoUa(req);
     const tenantId = auth.tenantId;
 
     const result = await this.db.withTenantContext(tenantId, async (client) => {
