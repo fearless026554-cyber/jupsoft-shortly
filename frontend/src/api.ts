@@ -231,6 +231,16 @@ export const api = {
     return res.json();
   },
 
+  async updateLink(id: string, dto: { destinationUrl?: string; status?: string; expiresAt?: string | null; maxClicks?: number | null; tag?: string }) {
+    clearApiCache('links');
+    const res = await fetch(`${API_BASE_URL}/links/${id}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(dto),
+    });
+    return res.json();
+  },
+
   // Bulk
   async bulkCreate(items: Array<{ destinationUrl: string; alias?: string; tag?: string; externalRef?: string }>) {
     clearApiCache('links');

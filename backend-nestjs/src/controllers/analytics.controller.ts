@@ -92,6 +92,8 @@ export class AnalyticsController {
         `SELECT 
           (SELECT COUNT(id) FROM links WHERE tenant_id = $1 AND status = 'active' AND created_at >= CURRENT_DATE - INTERVAL '30 days') AS total_active_links,
           (SELECT COALESCE(SUM(click_count), 0) FROM links WHERE tenant_id = $1 AND status = 'active') AS total_clicks,
+          (SELECT COALESCE(SUM(unique_clicks), 0) FROM click_daily WHERE tenant_id = $1 AND date >= CURRENT_DATE - INTERVAL '30 days') AS total_unique_clicks,
+          (SELECT COALESCE(SUM(bot_clicks), 0) FROM click_daily WHERE tenant_id = $1 AND date >= CURRENT_DATE - INTERVAL '30 days') AS total_bot_clicks,
           (SELECT COUNT(id) FROM outcomes WHERE tenant_id = $1 AND occurred_at >= CURRENT_DATE - INTERVAL '30 days') AS total_outcomes,
           (SELECT COALESCE(SUM(value), 0) FROM outcomes WHERE tenant_id = $1 AND occurred_at >= CURRENT_DATE - INTERVAL '30 days') AS total_revenue_attributed`,
         [tenantId]

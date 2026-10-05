@@ -57,6 +57,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'expired'>('all');
+  const [timeFilter, setTimeFilter] = useState<'all' | 'today' | '7d' | '30d' | 'has_timer' | 'expiring_soon'>('all');
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -70,6 +71,27 @@ export const LinksView: React.FC<LinksViewProps> = ({
   });
   
   const { defaultDomain } = useTenantDomains();
+
+  const formatTimeRemaining = (expiresAt: string) => {
+    const diffMs = new Date(expiresAt).getTime() - Date.now();
+    if (diffMs <= 0) return 'Expired';
+    const diffMins = Math.round(diffMs / (60 * 1000));
+    if (diffMins < 60) return `in ${diffMins}m`;
+    const diffHours = Math.floor(diffMins / 60);
+    const remMins = diffMins % 60;
+    if (diffHours < 24) return `in ${diffHours}h ${remMins > 0 ? `${remMins}m` : ''}`.trim();
+    const diffDays = Math.floor(diffHours / 24);
+    const remHours = diffHours % 24;
+    if (diffDays < 30) return `in ${diffDays}d ${remHours > 0 ? `${remHours}h` : ''}`.trim();
+    const diffMonths = Math.floor(diffDays / 30);
+    return `in ${diffMonths}mo ${diffDays % 30 > 0 ? `${diffDays % 30}d` : ''}`.trim();
+  };
+
+  const isLinkExpired = (link: LinkItem) => {
+    if (link.status === 'expired') return true;
+    if (link.expires_at && new Date(link.expires_at).getTime() < Date.now()) return true;
+    return false;
+  };
 
   const handleCopy = (shortCode: string, id: string) => {
     navigator.clipboard.writeText(buildShortUrl(defaultDomain, shortCode));
@@ -100,8 +122,38 @@ export const LinksView: React.FC<LinksViewProps> = ({
       (l.tag && l.tag.toLowerCase().includes(q)) ||
       (l.external_ref && l.external_ref.toLowerCase().includes(q));
 
-    const matchesStatus = statusFilter === 'all' || l.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const expired = isLinkExpired(l);
+    let matchesStatus = true;
+    if (statusFilter === 'active') {
+      matchesStatus = l.status === 'active' && !expired;
+    } else if (statusFilter === 'expired') {
+      matchesStatus = expired;
+    } else if (statusFilter === 'disabled') {
+      matchesStatus = l.status === 'disabled';
+    }
+
+    let matchesTime = true;
+    const now = Date.now();
+    const createdAt = new Date(l.created_at).getTime();
+    if (timeFilter === 'today') {
+      const todayMidnight = new Date().setHours(0, 0, 0, 0);
+      matchesTime = createdAt >= todayMidnight;
+    } else if (timeFilter === '7d') {
+      matchesTime = createdAt >= now - 7 * 24 * 3600 * 1000;
+    } else if (timeFilter === '30d') {
+      matchesTime = createdAt >= now - 30 * 24 * 3600 * 1000;
+    } else if (timeFilter === 'has_timer') {
+      matchesTime = Boolean(l.expires_at);
+    } else if (timeFilter === 'expiring_soon') {
+      if (!l.expires_at) {
+        matchesTime = false;
+      } else {
+        const exp = new Date(l.expires_at).getTime();
+        matchesTime = exp > now && exp <= now + 48 * 3600 * 1000;
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesTime;
   });
 
   const pagination = usePagination(filteredLinks, 10);
@@ -115,7 +167,9 @@ export const LinksView: React.FC<LinksViewProps> = ({
         ShortUrl: buildShortUrl(defaultDomain, l.short_code),
         TargetUrl: l.destination_url,
         Clicks: l.click_count,
-        Status: l.status,
+        Status: isLinkExpired(l) ? 'expired' : l.status,
+        ExpiresAt: l.expires_at || 'Permanent',
+        MaxClicks: l.max_clicks || 'Unlimited',
         Tag: l.tag || '',
         ExternalRef: l.external_ref || '',
         CreatedAt: l.created_at,
@@ -127,8 +181,8 @@ export const LinksView: React.FC<LinksViewProps> = ({
     <div className="space-y-3.5 w-full">
       {/* Top Compact Action & Context Strip (Height ~36px) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs shadow-2xs">
-        {/* Left: View Dropdown & Segmented Status Filter */}
-        <div className="flex items-center gap-3">
+        {/* Left: View Dropdown, Segmented Status Filter & Date/Timer Selector */}
+        <div className="flex items-center gap-2.5 flex-wrap">
           <div className="flex items-center gap-1.5 font-bold text-slate-900">
             <h1 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
               Short Links
@@ -169,6 +223,23 @@ export const LinksView: React.FC<LinksViewProps> = ({
             >
               Expired
             </button>
+          </div>
+
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
+            <Clock className="w-3 h-3 text-slate-400" />
+            <select
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value as any)}
+              className="text-[10px] font-semibold bg-transparent text-slate-700 focus:outline-none cursor-pointer"
+              title="Filter by Creation Date or Timer status"
+            >
+              <option value="all">All Dates</option>
+              <option value="today">Created Today</option>
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days (Month)</option>
+              <option value="has_timer">Has Timer / Expiry</option>
+              <option value="expiring_soon">Expiring Soon (48h)</option>
+            </select>
           </div>
         </div>
 
@@ -352,12 +423,41 @@ export const LinksView: React.FC<LinksViewProps> = ({
                       {Number(link.click_count || 0)}
                     </td>
 
-                    {/* Status Badge */}
+                    {/* Status Badge with Live Timer / Countdown */}
                     <td className="py-2 px-3 text-center">
-                      {link.status === 'active' ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
-                        </span>
+                      {isLinkExpired(link) ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-700 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Expired
+                          </span>
+                          {link.expires_at && (
+                            <span
+                              className="text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded font-mono border border-amber-200"
+                              title={`Expired on ${new Date(link.expires_at).toLocaleString()}`}
+                            >
+                              {new Date(link.expires_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
+                        </div>
+                      ) : link.status === 'active' ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active
+                          </span>
+                          {link.expires_at ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded font-mono font-medium border border-blue-200"
+                              title={`Expires on ${new Date(link.expires_at).toLocaleString()}`}
+                            >
+                              <Clock className="w-2.5 h-2.5 text-blue-500" />
+                              {formatTimeRemaining(link.expires_at)}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-sans">
+                              Permanent
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 font-medium capitalize">
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span> {link.status}

@@ -9,6 +9,9 @@ import {
   Tablet,
   Globe,
   ShieldCheck,
+  ShieldAlert,
+  Bot,
+  Users,
   Download,
   RefreshCw,
   Zap,
@@ -29,7 +32,7 @@ interface AnalyticsViewProps {
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('30d');
+  const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d' | '90d' | 'all'>('30d');
 
   const loadData = async () => {
     setLoading(true);
@@ -50,6 +53,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
   const totalClicks = Number(
     summary?.total_clicks || links.reduce((s, l) => s + Number(l.click_count || 0), 0)
   );
+  const totalUniqueClicks = Number(
+    summary?.total_unique_clicks || Math.min(totalClicks, Number(summary?.unique_clicks || totalClicks))
+  );
+  const totalBotClicks = Number(summary?.total_bot_clicks || 0);
+  const totalAllRequests = totalClicks + totalBotClicks;
+  const uniqueRate = totalClicks > 0 ? Math.min(100, Math.round((totalUniqueClicks / totalClicks) * 100)) : (totalUniqueClicks > 0 ? 100 : 0);
+  const botFilterPct = totalAllRequests > 0 ? Math.round((totalBotClicks / totalAllRequests) * 100) : 0;
   const totalOutcomes = Number(summary?.total_outcomes || 0);
   const totalRev = Number(summary?.total_revenue_attributed || 0);
 
@@ -112,12 +122,24 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
   // Fallback for Mobile Share stat
   const mobilePct = deviceData.find(d => d.label.toLowerCase().includes('mobile') || d.label.toLowerCase().includes('phone'))?.pct || 0;
 
-  const rangeText = timeRange === '7d' ? 'Last 7 Days' : timeRange === '30d' ? 'Last 30 Days' : 'All Time';
+  const rangeText =
+    timeRange === '24h'
+      ? 'Last 24 Hours'
+      : timeRange === '7d'
+      ? 'Last 7 Days'
+      : timeRange === '30d'
+      ? 'Last 30 Days (Month)'
+      : timeRange === '90d'
+      ? 'Last 90 Days'
+      : 'All Time';
 
   const handleExport = () => {
     exportToCsv(`traffic_analytics_${timeRange}_${new Date().toISOString().slice(0, 10)}`, [
       { Metric: 'Report Range', Value: rangeText },
-      { Metric: 'Total Click Ingestion', Value: totalClicks },
+      { Metric: 'Total Human Clicks', Value: totalClicks },
+      { Metric: 'Unique Human Visitors', Value: totalUniqueClicks },
+      { Metric: 'Bot / Automated Clicks Filtered', Value: totalBotClicks },
+      { Metric: 'Unique Visitor Rate %', Value: `${uniqueRate}%` },
       { Metric: 'Attributed Conversions', Value: totalOutcomes },
       { Metric: 'Attributed Revenue INR', Value: totalRev },
       { Metric: 'Mobile Traffic %', Value: `${mobilePct}%` },
@@ -139,7 +161,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
               Traffic Analytics
             </h1>
             <p className="text-xs text-slate-500">
-              Monitor link traffic, device statistics, and geographical distribution.
+              Monitor human clicks, unique visitors, automated bot filtering, and geographical distribution.
             </p>
           </div>
         </div>
@@ -149,9 +171,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
           <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-md shrink-0" role="group" aria-label="Select report time range">
             {(
               [
+                { id: '24h', label: '24H', full: 'Last 24 Hours (Today)' },
                 { id: '7d', label: '7D', full: 'Last 7 Days' },
-                { id: '30d', label: '30D', full: 'Last 30 Days' },
-                { id: 'all', label: 'All Time', full: 'All Time' },
+                { id: '30d', label: '30D', full: 'Last 30 Days (Month)' },
+                { id: '90d', label: '90D', full: 'Last 90 Days' },
+                { id: 'all', label: 'All', full: 'All Time' },
               ] as const
             ).map((t) => {
               const isActive = timeRange === t.id;
@@ -161,7 +185,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
                   onClick={() => setTimeRange(t.id)}
                   aria-pressed={isActive}
                   aria-label={`Filter by ${t.full}`}
-                  className={`px-3 py-1.5 rounded text-xs font-medium transition min-h-[36px] flex items-center justify-center ${
+                  className={`px-2.5 py-1.5 rounded text-xs font-medium transition min-h-[36px] flex items-center justify-center ${
                     isActive
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -193,20 +217,55 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
         </div>
       </div>
 
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Metrics Grid: 6 Key KPIs including Unique Clicks & Bot Protection */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* Total Clicks */}
         <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
           <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span>Total Clicks</span>
-            <TrendingUp className="w-4 h-4 text-slate-400" />
+            <TrendingUp className="w-4 h-4 text-blue-500" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-xl font-bold text-slate-900 tracking-tight">
               {formatNumber(totalClicks)}
             </span>
+            <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">Human</span>
           </div>
         </div>
 
+        {/* Unique Visitors */}
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>Unique Clicks</span>
+            <Users className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {formatNumber(totalUniqueClicks)}
+            </span>
+            <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">
+              {uniqueRate}% reach
+            </span>
+          </div>
+        </div>
+
+        {/* Bot Clicks Filtered */}
+        <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-500">
+            <span>Bot Clicks</span>
+            <Bot className="w-4 h-4 text-amber-500" />
+          </div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-xl font-bold text-slate-900 tracking-tight">
+              {formatNumber(totalBotClicks)}
+            </span>
+            <span className="text-[10px] text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded">
+              Filtered
+            </span>
+          </div>
+        </div>
+
+        {/* Active Links */}
         <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
           <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span>Active Links</span>
@@ -220,6 +279,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
           </div>
         </div>
 
+        {/* Mobile Share */}
         <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
           <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span>Mobile Share</span>
@@ -230,22 +290,86 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
               {totalClicks > 0 ? `${mobilePct}%` : '—'}
             </span>
             <span className="text-xs text-slate-400">
-              {totalClicks > 0 ? `${100 - mobilePct}% desktop` : 'No clicks yet'}
+              {totalClicks > 0 ? `${100 - mobilePct}% desk` : 'No clicks'}
             </span>
           </div>
         </div>
 
+        {/* Conversions */}
         <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
           <div className="flex items-center justify-between text-xs font-medium text-slate-500">
             <span>Conversions</span>
-            <ShieldCheck className="w-4 h-4 text-slate-400" />
+            <ShieldCheck className="w-4 h-4 text-indigo-500" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-xl font-bold text-slate-900 tracking-tight">
               {totalOutcomes > 0 ? formatNumber(totalOutcomes) : '—'}
             </span>
             <span className="text-xs text-slate-400">
-              {totalOutcomes > 0 ? 'Events logged' : 'No events yet'}
+              {totalOutcomes > 0 ? 'Logged' : '0 events'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Traffic Quality & Bot Defense Banner */}
+      <div className="bg-white p-4 rounded-lg border border-slate-200/90 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+              <ShieldCheck className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                Traffic Quality & Bot Protection
+              </span>
+              <p className="text-[11px] text-slate-500">
+                Automated crawlers, security bots, and scrapers are segregated in real-time to preserve conversion integrity.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-xs font-mono font-medium">
+            <span className="inline-flex items-center gap-1.5 text-blue-700">
+              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+              Human: <strong>{formatNumber(totalClicks)}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-emerald-700">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Unique: <strong>{formatNumber(totalUniqueClicks)}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-amber-700">
+              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+              Bots: <strong>{formatNumber(totalBotClicks)}</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Visual Segmented Traffic Bar */}
+        <div className="space-y-1.5">
+          <div className="w-full bg-slate-100 rounded-full h-2.5 flex overflow-hidden">
+            {totalAllRequests > 0 ? (
+              <>
+                <div
+                  className="bg-blue-600 h-full transition-all duration-300"
+                  style={{ width: `${Math.round((totalClicks / totalAllRequests) * 100)}%` }}
+                  title={`Human Traffic: ${totalClicks} (${Math.round((totalClicks / totalAllRequests) * 100)}%)`}
+                ></div>
+                <div
+                  className="bg-amber-500 h-full transition-all duration-300"
+                  style={{ width: `${Math.round((totalBotClicks / totalAllRequests) * 100)}%` }}
+                  title={`Bot Traffic Filtered: ${totalBotClicks} (${Math.round((totalBotClicks / totalAllRequests) * 100)}%)`}
+                ></div>
+              </>
+            ) : (
+              <div className="bg-slate-200 h-full w-full"></div>
+            )}
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-slate-500">
+            <span>
+              Real Human Traffic: <strong>{totalAllRequests > 0 ? `${Math.round((totalClicks / totalAllRequests) * 100)}%` : '100%'}</strong>
+            </span>
+            <span>
+              Automated Bot Traffic Filtered: <strong>{totalAllRequests > 0 ? `${botFilterPct}%` : '0%'}</strong>
             </span>
           </div>
         </div>

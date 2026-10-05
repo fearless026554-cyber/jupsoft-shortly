@@ -566,6 +566,10 @@ export default function ShortlyCRMApp() {
         link={drawerLink}
         onClose={() => setDrawerLink(null)}
         onArchive={handleArchiveLink}
+        onLinkUpdated={(updated) => {
+          setDrawerLink(updated);
+          loadData();
+        }}
       />
 
       {/* 4. Global Modals */}

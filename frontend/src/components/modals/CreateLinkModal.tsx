@@ -13,6 +13,8 @@ import {
   Calendar,
   Lock,
   Download,
+  Clock,
+  Timer,
 } from 'lucide-react';
 import { api, CreateLinkDto, API_BASE_URL } from '../../api';
 import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
@@ -34,12 +36,78 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
   const [externalRef, setExternalRef] = useState('');
   const [maxClicks, setMaxClicks] = useState<number | undefined>(undefined);
   const [expiresAt, setExpiresAt] = useState<string>('');
+  const [expirationMode, setExpirationMode] = useState<'never' | '1h' | '24h' | '7d' | '30d' | '90d' | 'custom'>('never');
   const { defaultDomain } = useTenantDomains();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdData, setCreatedData] = useState<any>(null);
   const [copied, setCopied] = useState(false);
+
+  const formatRelativeTime = (targetIso: string) => {
+    const diffMs = new Date(targetIso).getTime() - Date.now();
+    if (diffMs <= 0) return 'Expired';
+    const diffMins = Math.round(diffMs / (60 * 1000));
+    if (diffMins < 60) return `in ${diffMins}m`;
+    const diffHours = Math.floor(diffMins / 60);
+    const remMins = diffMins % 60;
+    if (diffHours < 24) return `in ${diffHours}h ${remMins > 0 ? `${remMins}m` : ''}`.trim();
+    const diffDays = Math.floor(diffHours / 24);
+    const remHours = diffHours % 24;
+    if (diffDays < 30) return `in ${diffDays}d ${remHours > 0 ? `${remHours}h` : ''}`.trim();
+    const diffMonths = Math.floor(diffDays / 30);
+    return `in ${diffMonths}mo ${diffDays % 30 > 0 ? `${diffDays % 30}d` : ''}`.trim();
+  };
+
+  const toDatetimeLocalValue = (isoString: string) => {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const year = d.getFullYear();
+    const month = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hours = pad(d.getHours());
+    const minutes = pad(d.getMinutes());
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const handleSelectPreset = (mode: 'never' | '1h' | '24h' | '7d' | '30d' | '90d' | 'custom') => {
+    setExpirationMode(mode);
+    const now = new Date();
+    if (mode === 'never') {
+      setExpiresAt('');
+    } else if (mode === '1h') {
+      const target = new Date(now.getTime() + 60 * 60 * 1000);
+      setExpiresAt(target.toISOString());
+    } else if (mode === '24h') {
+      const target = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      setExpiresAt(target.toISOString());
+    } else if (mode === '7d') {
+      const target = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      setExpiresAt(target.toISOString());
+    } else if (mode === '30d') {
+      const target = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      setExpiresAt(target.toISOString());
+    } else if (mode === '90d') {
+      const target = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+      setExpiresAt(target.toISOString());
+    } else if (mode === 'custom') {
+      if (!expiresAt) {
+        const defaultCustom = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        setExpiresAt(defaultCustom.toISOString());
+      }
+    }
+  };
+
+  const handleDatetimeLocalChange = (val: string) => {
+    if (!val) {
+      setExpiresAt('');
+      setExpirationMode('never');
+    } else {
+      setExpiresAt(new Date(val).toISOString());
+      setExpirationMode('custom');
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -76,6 +144,9 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
     setDestinationUrl('');
     setAlias('');
     setExternalRef('');
+    setMaxClicks(undefined);
+    setExpiresAt('');
+    setExpirationMode('never');
     setCreatedData(null);
     setError(null);
     onClose();
@@ -91,9 +162,9 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150 select-none">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-150">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
         {/* Modal Header */}
-        <div className="h-14 px-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div className="h-14 px-5 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
               <Link2 className="w-4 h-4" />
@@ -103,7 +174,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                 {createdData ? 'Link Created!' : 'Create Short Link'}
               </h3>
               <p className="text-[11px] text-slate-500">
-                {createdData ? 'Your short link is ready.' : 'Create a new short link.'}
+                {createdData ? 'Your short link is ready.' : 'Create a new short link with custom timer & limits.'}
               </p>
             </div>
           </div>
@@ -119,7 +190,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 text-xs">
+        <div className="p-5 text-xs overflow-y-auto flex-1">
           {createdData ? (
             /* Success State */
             <div className="space-y-4">
@@ -143,6 +214,9 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
 
                 <div className="flex items-center justify-between text-[11px] text-emerald-800">
                   <span>Short Code: <strong>{createdData.shortCode}</strong></span>
+                  {createdData.expiresAt && (
+                    <span className="font-mono text-[10px]">Expires: {new Date(createdData.expiresAt).toLocaleDateString()}</span>
+                  )}
                 </div>
               </div>
 
@@ -238,10 +312,137 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                 </div>
               </div>
 
+              {/* Link Expiration & Timer (Auto-Expire) */}
+              <div className="p-3.5 bg-slate-50/90 rounded-lg border border-slate-200/90 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-slate-800 text-xs">
+                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Timer & Expiration (Auto-Expire)</span>
+                  </div>
+                  {expiresAt && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectPreset('never')}
+                      className="text-[11px] text-rose-600 hover:text-rose-700 font-medium underline cursor-pointer"
+                    >
+                      Clear Timer (Never)
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Choose duration timer or custom date/month. After expiration, clicks redirect to the Expired notification page.
+                </p>
+
+                {/* Preset Buttons Grid */}
+                <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
+                  {[
+                    { id: 'never', label: 'Never' },
+                    { id: '1h', label: '1 Hour' },
+                    { id: '24h', label: '24 Hours' },
+                    { id: '7d', label: '7 Days' },
+                    { id: '30d', label: '1 Month' },
+                    { id: '90d', label: '3 Months' },
+                    { id: 'custom', label: 'Custom' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handleSelectPreset(preset.id as any)}
+                      className={`px-1.5 py-1.5 rounded text-[11px] font-semibold border transition text-center cursor-pointer ${
+                        expirationMode === preset.id
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Date & Month Picker */}
+                {expirationMode === 'custom' && (
+                  <div className="pt-2 border-t border-slate-200/80 space-y-2 animate-in fade-in duration-150">
+                    <div>
+                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                        Select Custom Date & Time:
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={toDatetimeLocalValue(expiresAt)}
+                        min={new Date().toISOString().slice(0, 16)}
+                        onChange={(e) => handleDatetimeLocalChange(e.target.value)}
+                        className="w-full text-xs px-3 py-1.5 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono bg-white"
+                      />
+                    </div>
+
+                    {/* Quick Month & Time Shortcuts */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] text-slate-400 font-medium">Quick Shortcuts:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setHours(23, 59, 59, 999);
+                          setExpiresAt(d.toISOString());
+                        }}
+                        className="text-[10px] bg-white border border-slate-200 hover:border-blue-400 text-slate-600 px-2 py-0.5 rounded cursor-pointer transition"
+                      >
+                        Tonight (23:59)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setMonth(d.getMonth() + 1, 0);
+                          d.setHours(23, 59, 59, 999);
+                          setExpiresAt(d.toISOString());
+                        }}
+                        className="text-[10px] bg-white border border-slate-200 hover:border-blue-400 text-slate-600 px-2 py-0.5 rounded cursor-pointer transition"
+                      >
+                        End of This Month
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setMonth(d.getMonth() + 2, 0);
+                          d.setHours(23, 59, 59, 999);
+                          setExpiresAt(d.toISOString());
+                        }}
+                        className="text-[10px] bg-white border border-slate-200 hover:border-blue-400 text-slate-600 px-2 py-0.5 rounded cursor-pointer transition"
+                      >
+                        End of Next Month
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Expiry Feedback / Countdown Badge */}
+                {expiresAt ? (
+                  <div className="flex items-center justify-between p-2 rounded bg-blue-50 border border-blue-200 text-blue-800 text-[11px]">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      <span>
+                        Expires: <strong>{new Date(expiresAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
+                      </span>
+                    </div>
+                    <span className="font-mono font-semibold bg-white px-2 py-0.5 rounded border border-blue-200 text-blue-700 shadow-2xs">
+                      {formatRelativeTime(expiresAt)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    Permanent link (Never expires).
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    External Ref
+                    External Ref (Optional)
                   </label>
                   <input
                     type="text"
