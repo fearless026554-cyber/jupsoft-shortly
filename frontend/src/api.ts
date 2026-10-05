@@ -77,7 +77,7 @@ export interface AbuseReportItem {
   link_id: string;
   reporter_email?: string | null;
   reason: string;
-  status: 'pending' | 'reviewed' | 'dismissed';
+  status: 'pending' | 'investigating' | 'resolved' | 'reviewed' | 'dismissed';
   created_at: string;
 }
 
@@ -451,12 +451,13 @@ export const api = {
     });
   },
 
-  async updateAbuseReport(id: string, status: string) {
+  async updateAbuseReport(id: string, payload: { status: string; disableLink?: boolean; suspendTenant?: boolean } | string) {
     clearApiCache('abuse-reports');
+    const body = typeof payload === 'string' ? { status: payload } : payload;
     const res = await fetch(`${API_BASE_URL}/abuse-reports/${id}`, {
       method: 'PATCH',
       headers,
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(body),
     });
     return res.json();
   },

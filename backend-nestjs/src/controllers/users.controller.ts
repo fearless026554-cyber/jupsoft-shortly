@@ -5,7 +5,7 @@ import * as crypto from 'node:crypto';
 import { DatabaseService } from '../db/database.service.js';
 import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor.js';
-import { ALL_USER_ROLES, AUTH_CONSTANTS, ApiScopes, ErrorCodes, UserStatus } from '../constants/index.js';
+import { ALL_USER_ROLES, AUTH_CONSTANTS, ApiScopes, ErrorCodes, UserRoles, UserStatus } from '../constants/index.js';
 
 import bcrypt from 'bcryptjs';
 
@@ -52,6 +52,14 @@ export class UsersController {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
 
+    // Security Gate: Prevent privilege escalation to super_admin
+    if (dto.role === UserRoles.SUPER_ADMIN && auth.role !== UserRoles.SUPER_ADMIN) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: ErrorCodes.FORBIDDEN, message: 'Only super administrators can assign the super_admin role' },
+      });
+    }
+
     const isGeneratedPassword = !dto.password;
     const rawPassword = dto.password || crypto.randomBytes(12).toString('base64url');
     const passwordHash = await bcrypt.hash(rawPassword, 10);
@@ -83,10 +91,43 @@ export class UsersController {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
 
-    if (dto.password && auth.role !== 'super_admin' && auth.role !== 'tenant_admin') {
+    // Security Gate: Only admins can alter user roles or passwords
+    if (dto.role && auth.role !== UserRoles.SUPER_ADMIN && auth.role !== UserRoles.TENANT_ADMIN) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: ErrorCodes.FORBIDDEN, message: 'Only administrators can update user roles' },
+      });
+    }
+
+    // Security Gate: Prevent privilege escalation to super_admin
+    if (dto.role === UserRoles.SUPER_ADMIN && auth.role !== UserRoles.SUPER_ADMIN) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: ErrorCodes.FORBIDDEN, message: 'Only super administrators can assign the super_admin role' },
+      });
+    }
+
+    if (dto.password && auth.role !== UserRoles.SUPER_ADMIN && auth.role !== UserRoles.TENANT_ADMIN) {
       return reply.status(403).send({
         success: false,
         error: { code: ErrorCodes.FORBIDDEN, message: 'Only administrators can reset user passwords' },
+      });
+    }
+
+    // Security Gate: Cannot modify a super_admin unless caller is super_admin
+    const targetCheck = await this.db.withTenantContext(tenantId, async (client) => {
+      const res = await client.query('SELECT role FROM users WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+      return res.rows[0];
+    });
+
+    if (!targetCheck) {
+      return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'User not found' } });
+    }
+
+    if (targetCheck.role === UserRoles.SUPER_ADMIN && auth.role !== UserRoles.SUPER_ADMIN) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: ErrorCodes.FORBIDDEN, message: 'Only super administrators can modify a super administrator account' },
       });
     }
 
@@ -99,10 +140,6 @@ export class UsersController {
       );
       return res.rows[0];
     });
-
-    if (!updated) {
-      return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'User not found' } });
-    }
 
     return reply.send({ success: true, data: updated });
   }

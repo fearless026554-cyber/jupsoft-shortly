@@ -65,33 +65,45 @@ export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge, currentUse
       message: 'Deactivate this short link immediately? The link will be suspended across all routing gateways and redirected to a security notice.',
       onConfirm: async () => {
         try {
-          await api.updateAbuseReport(repId, 'reviewed');
-          setReports((prev) =>
-            prev.map((r) => (r.id === repId ? { ...r, status: 'reviewed' } : r))
-          );
-          setActionMessage('URL successfully terminated and blocked across all routing gateways.');
+          const res = await api.updateAbuseReport(repId, { status: 'resolved', disableLink: true });
+          if (res.success) {
+            setReports((prev) =>
+              prev.map((r) => (r.id === repId ? { ...r, status: 'resolved' } : r))
+            );
+            setActionMessage('URL successfully terminated and blocked across all routing gateways.');
+            setTimeout(() => setActionMessage(null), 4000);
+            if (onRefreshBadge) onRefreshBadge();
+          } else {
+            setActionMessage(`Takedown failed: ${res.error?.message || 'Failed to moderate report'}`);
+            setTimeout(() => setActionMessage(null), 4000);
+          }
+        } catch (err: any) {
+          setActionMessage(`Network error during takedown: ${err.message || 'Server unreachable'}`);
           setTimeout(() => setActionMessage(null), 4000);
-          if (onRefreshBadge) onRefreshBadge();
-        } catch {
-          setActionMessage('Takedown executed.');
         } finally {
-          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
         }
-      }
+      },
     });
   };
 
   const handleDismiss = async (repId: string) => {
     try {
-      await api.updateAbuseReport(repId, 'dismissed');
-      setReports((prev) =>
-        prev.map((r) => (r.id === repId ? { ...r, status: 'dismissed' } : r))
-      );
-      setActionMessage('Report marked as false positive.');
+      const res = await api.updateAbuseReport(repId, { status: 'dismissed' });
+      if (res.success) {
+        setReports((prev) =>
+          prev.map((r) => (r.id === repId ? { ...r, status: 'dismissed' } : r))
+        );
+        setActionMessage('Report marked as false positive.');
+        setTimeout(() => setActionMessage(null), 3000);
+        if (onRefreshBadge) onRefreshBadge();
+      } else {
+        setActionMessage(`Dismiss failed: ${res.error?.message || 'Failed to dismiss report'}`);
+        setTimeout(() => setActionMessage(null), 3000);
+      }
+    } catch (err: any) {
+      setActionMessage(`Network error: ${err.message || 'Server unreachable'}`);
       setTimeout(() => setActionMessage(null), 3000);
-      if (onRefreshBadge) onRefreshBadge();
-    } catch {
-      // ignore
     }
   };
 
@@ -244,7 +256,7 @@ export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge, currentUse
                       <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-semibold text-[10px] flex items-center gap-1 w-fit">
                         <AlertTriangle className="w-3 h-3" /> Under Review
                       </span>
-                    ) : rep.status === 'reviewed' ? (
+                    ) : (rep.status === 'resolved' || rep.status === 'reviewed') ? (
                       <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-100 font-semibold text-[10px] flex items-center gap-1 w-fit">
                         <Ban className="w-3 h-3 text-red-400" /> Takedown Active
                       </span>

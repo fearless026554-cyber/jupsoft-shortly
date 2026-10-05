@@ -1,5 +1,6 @@
 import { ExceptionFilter, Catch, ArgumentsHost, HttpException } from '@nestjs/common';
 import { FastifyReply } from 'fastify';
+import { ZodError } from 'zod';
 import { ErrorCodes } from '../../constants/index.js';
 
 @Catch()
@@ -13,7 +14,12 @@ export class ErrorHandlerFilter implements ExceptionFilter {
     let message = 'An unexpected internal error occurred';
     let details: any = undefined;
 
-    if (exception instanceof HttpException) {
+    if (exception instanceof ZodError || exception?.name === 'ZodError') {
+      statusCode = 400;
+      code = ErrorCodes.VALIDATION_ERROR;
+      message = exception.errors?.[0]?.message || 'Invalid request input';
+      details = exception.errors;
+    } else if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
       const response = exception.getResponse() as any;
       

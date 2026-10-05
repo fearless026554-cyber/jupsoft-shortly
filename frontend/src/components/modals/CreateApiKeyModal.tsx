@@ -62,10 +62,15 @@ export const CreateApiKeyModal: React.FC<CreateApiKeyModalProps> = ({
     try {
       const res = await api.createApiKey(name.trim(), scopes);
       if (res.success && res.data) {
-        setGeneratedKey(res.data.key || res.data.token || `jlp_live_${crypto.randomUUID().replace(/-/g, '')}`);
-        setIsSecretHidden(false);
-        setCountdown(30);
-        onKeyCreated();
+        const secret = res.data.secretKey || res.data.key || res.data.token;
+        if (secret) {
+          setGeneratedKey(secret);
+          setIsSecretHidden(false);
+          setCountdown(30);
+          onKeyCreated();
+        } else {
+          setError('Backend response missing generated secret key');
+        }
       } else {
         setError(res.error?.message || 'Failed to generate API key');
       }

@@ -14,17 +14,20 @@ async function handleRequest(req: NextRequest, { params }: { params: Promise<{ p
   
   const headers = new Headers();
 
-  // Forward authorization header if client provided one
+  // Forward client identity & authorization headers
   const authHeader = req.headers.get('authorization');
   const clientApiKey = req.headers.get('x-api-key');
   const idempotencyKey = req.headers.get('idempotency-key');
+  const clientIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip');
 
   if (authHeader) {
     headers.set('authorization', authHeader);
   } else if (clientApiKey) {
     headers.set('x-api-key', clientApiKey);
-  } else if (CMS_API_KEY) {
-    headers.set('x-api-key', CMS_API_KEY);
+  }
+
+  if (clientIp) {
+    headers.set('x-forwarded-for', clientIp);
   }
 
   if (idempotencyKey) {
