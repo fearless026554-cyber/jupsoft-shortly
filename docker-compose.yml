@@ -6,16 +6,16 @@ services:
     container_name: jupsoft_postgres
     restart: always
     environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_USER: ${DB_USER:?DB_USER is required}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      POSTGRES_DB: ${DB_NAME:-jlmp_db}
+      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend-nestjs/src/db/schema.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-jlmp_db}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -48,18 +48,20 @@ services:
         condition: service_healthy
     environment:
       - PORT=3000
+      - HOST=0.0.0.0
+      - BASE_URL=${BASE_URL:?BASE_URL is required}
       - PG_HOST=postgres
       - PG_PORT=5432
-      - PG_USER=${DB_USER:-postgres}
+      - PG_USER=${DB_USER:?DB_USER is required}
       - PG_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
-      - PG_DATABASE=${DB_NAME:-jlmp_db}
+      - PG_DATABASE=${DB_NAME:?DB_NAME is required}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required (min 32 chars)}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5001}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5001}
-      - DEFAULT_DOMAIN_ID=${DEFAULT_DOMAIN_ID:-00000000-0000-0000-0000-000000000001}
-      - DEFAULT_DOMAIN_HOST=${DEFAULT_DOMAIN_HOST:-jup.link}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - FRONTEND_URL=${FRONTEND_URL:?FRONTEND_URL is required}
+      - CORS_ORIGINS=${CORS_ORIGINS:?CORS_ORIGINS is required}
+      - DEFAULT_DOMAIN_ID=${DEFAULT_DOMAIN_ID:?DEFAULT_DOMAIN_ID is required}
+      - DEFAULT_DOMAIN_HOST=${DEFAULT_DOMAIN_HOST:?DEFAULT_DOMAIN_HOST is required}
     ports:
       - "3001:3000"
 
@@ -72,10 +74,10 @@ services:
     depends_on:
       - backend
     environment:
-      - BACKEND_URL=${BACKEND_URL:-http://backend:3000}
+      - BACKEND_URL=${BACKEND_URL:?BACKEND_URL is required}
       - CMS_API_KEY=${CMS_API_KEY:-}
-      - NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN=${NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN:-jup.link}
-      - NEXT_PUBLIC_CNAME_DOMAIN=${NEXT_PUBLIC_CNAME_DOMAIN:-cname.jup.link}
+      - NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN=${NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN:?NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN is required}
+      - NEXT_PUBLIC_CNAME_DOMAIN=${NEXT_PUBLIC_CNAME_DOMAIN:?NEXT_PUBLIC_CNAME_DOMAIN is required}
     ports:
       - "5001:5000"
 

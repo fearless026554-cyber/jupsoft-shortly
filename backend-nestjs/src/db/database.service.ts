@@ -1,10 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Pool, PoolClient } from 'pg';
-import * as crypto from 'node:crypto';
 import { env } from '../config/env.js';
 import { DB_CONTEXT_KEYS } from '../constants/index.js';
-
-import bcrypt from 'bcryptjs';
 
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
@@ -21,71 +18,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       idleTimeoutMillis: env.PG_IDLE_TIMEOUT_MS,
       connectionTimeoutMillis: env.PG_CONN_TIMEOUT_MS,
     });
-    await this.initSeed();
-  }
-
-  private async initSeed() {
-    try {
-      const tenantCode = env.SEED_TENANT_CODE;
-      const tenantName = env.SEED_TENANT_NAME;
-      const adminEmail = env.SEED_ADMIN_EMAIL;
-
-      // Only run bootstrap seed when explicitly configured via env
-      if (!tenantCode || !tenantName) {
-        return;
-      }
-
-      // 1. Ensure configured initial tenant exists
-      const tenantRes = await this.pool.query(
-        `SELECT id FROM tenants WHERE code = $1 LIMIT 1`,
-        [tenantCode]
-      );
-      let tenantId = tenantRes.rows[0]?.id;
-      if (!tenantId) {
-        const seedTenantId = env.SEED_TENANT_ID || crypto.randomUUID();
-        const insertTenant = await this.pool.query(
-          `INSERT INTO tenants (id, code, name, status, plan_id)
-           VALUES ($1, $2, $3, 'active', 'internal_unlimited')
-           ON CONFLICT (code) DO UPDATE SET updated_at = NOW()
-           RETURNING id`,
-          [seedTenantId, tenantCode, tenantName]
-        );
-        tenantId = insertTenant.rows[0]?.id || seedTenantId;
-      }
-
-      // 2. Ensure configured initial super admin user exists
-      if (!adminEmail) {
-        return;
-      }
-
-      const userRes = await this.pool.query(
-        `SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
-        [adminEmail]
-      );
-
-      if (userRes.rowCount === 0) {
-        const generatedRandom = !env.SEED_ADMIN_PASSWORD;
-        const seedPassword =
-          env.SEED_ADMIN_PASSWORD || crypto.randomBytes(16).toString('base64url');
-        const adminName = env.SEED_ADMIN_NAME || 'System Administrator';
-        const hash = bcrypt.hashSync(seedPassword, 10);
-
-        await this.pool.query(
-          `INSERT INTO users (tenant_id, name, email, password_hash, role, status)
-           VALUES ($1, $2, $3, $4, 'super_admin', 'active')`,
-          [tenantId, adminName, adminEmail, hash]
-        );
-        if (generatedRandom && env.NODE_ENV !== 'production') {
-          console.log(
-            `[Seed] Seeded initial super admin (${adminEmail}) with one-time generated password: ${seedPassword}`
-          );
-        } else {
-          console.log(`[Seed] Seeded initial super admin user: ${adminEmail}`);
-        }
-      }
-    } catch (err) {
-      console.warn('[Seed] Warning during database init seed:', err);
-    }
   }
 
   async onModuleDestroy() {

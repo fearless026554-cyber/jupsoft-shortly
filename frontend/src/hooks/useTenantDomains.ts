@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { api } from '../api';
 
 export const DEFAULT_SHORT_DOMAIN =
-  process.env.NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN || 'jup.link';
+  process.env.NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN || '';
 export const DEFAULT_CNAME_DOMAIN =
-  process.env.NEXT_PUBLIC_CNAME_DOMAIN || `cname.${DEFAULT_SHORT_DOMAIN}`;
+  process.env.NEXT_PUBLIC_CNAME_DOMAIN || '';
 
 export function useTenantDomains() {
   const [defaultDomain, setDefaultDomain] = useState(DEFAULT_SHORT_DOMAIN);

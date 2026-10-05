@@ -2,64 +2,48 @@ import { z } from 'zod';
 import * as dotenv from 'dotenv';
 import { CACHE_TTL, RATE_LIMITS } from './constants.js';
 
+if (process.env.BASE_URL === '/') {
+  delete process.env.BASE_URL;
+}
 dotenv.config();
 
 const envSchema = z
   .object({
-    PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-    HOST: z.string().min(1).default(process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1'),
+    PORT: z.coerce.number().int().min(1).max(65535),
+    HOST: z.string().min(1),
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
-    // Base URLs & Domains
-    BASE_URL: z
-      .string()
-      .refine((val) => val === '/' || /^https?:\/\/.+/.test(val), 'Invalid URL')
-      .transform((val) => (val === '/' || !val ? 'http://localhost:3000' : val))
-      .default('http://localhost:3000'),
+    // Base URLs & Domains (Required from env — no hardcoded defaults)
+    BASE_URL: z.string().url('BASE_URL must be a valid URL'),
     DEFAULT_DOMAIN_ID: z
       .string()
       .regex(
         /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
-        'Invalid UUID'
-      )
-      .default('00000000-0000-0000-0000-000000000001'),
-    DEFAULT_DOMAIN_HOST: z.string().min(1).default('jup.link'),
+        'DEFAULT_DOMAIN_ID must be a valid UUID'
+      ),
+    DEFAULT_DOMAIN_HOST: z.string().min(1, 'DEFAULT_DOMAIN_HOST is required'),
 
-    // Security & Networking
-    CORS_ORIGINS: z.string().default('*'),
+    // Security & Networking (Required from env — no hardcoded defaults)
+    CORS_ORIGINS: z.string().min(1, 'CORS_ORIGINS is required'),
     TRUST_PROXY: z.coerce.boolean().default(false),
     JWT_SECRET: z
       .string()
       .min(32, 'JWT_SECRET is required and must be at least 32 characters long'),
     JWT_EXPIRY: z.string().default('7d'),
 
-    // Initial Seed Configuration (Optional - no hardcoded credentials in source)
-    SEED_TENANT_ID: z
-      .string()
-      .regex(
-        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
-        'Invalid SEED_TENANT_ID UUID'
-      )
-      .optional(),
-    SEED_TENANT_CODE: z.string().min(1).optional(),
-    SEED_TENANT_NAME: z.string().min(1).optional(),
-    SEED_ADMIN_EMAIL: z.string().email().optional(),
-    SEED_ADMIN_PASSWORD: z.string().min(8).optional(),
-    SEED_ADMIN_NAME: z.string().min(1).optional(),
-
-    // PostgreSQL Database
-    PG_HOST: z.string().min(1).default('127.0.0.1'),
+    // PostgreSQL Database (Required from env — no hardcoded defaults)
+    PG_HOST: z.string().min(1, 'PG_HOST is required'),
     PG_PORT: z.coerce.number().int().default(5432),
-    PG_DATABASE: z.string().min(1).default('jlmp_db'),
-    PG_USER: z.string().min(1).default('postgres'),
-    PG_PASSWORD: z.string().min(1).default('postgres'),
+    PG_DATABASE: z.string().min(1, 'PG_DATABASE is required'),
+    PG_USER: z.string().min(1, 'PG_USER is required'),
+    PG_PASSWORD: z.string().min(1, 'PG_PASSWORD is required'),
     PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(20),
     PG_IDLE_TIMEOUT_MS: z.coerce.number().int().default(30000),
     PG_CONN_TIMEOUT_MS: z.coerce.number().int().default(5000),
 
     // Redis Cache & Queues
-    REDIS_HOST: z.string().min(1).default('127.0.0.1'),
+    REDIS_HOST: z.string().min(1, 'REDIS_HOST is required'),
     REDIS_PORT: z.coerce.number().int().default(6379),
     REDIS_PASSWORD: z.string().optional(),
 
@@ -84,29 +68,12 @@ const envSchema = z
       .default('https://safebrowsing.googleapis.com/v4/threatMatches:find'),
   })
   .superRefine((data, ctx) => {
-    // Strict production validation rules (No silent defaults in production!)
     if (data.NODE_ENV === 'production') {
-      if (!process.env.PORT) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['PORT'],
-          message: 'In production, PORT must be explicitly defined via environment variables.',
-        });
-      }
-
-      if (!process.env.DEFAULT_DOMAIN_ID) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['DEFAULT_DOMAIN_ID'],
-          message: 'In production, DEFAULT_DOMAIN_ID must be explicitly configured.',
-        });
-      }
-
       if (data.PG_PASSWORD === 'postgres' || data.PG_PASSWORD.length < 16) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['PG_PASSWORD'],
-          message: 'In production, PG_PASSWORD must be a strong secret from Vault/AWS Secrets Manager (min 16 chars).',
+          message: 'In production, PG_PASSWORD must be a strong secret (min 16 chars).',
         });
       }
 
