@@ -363,22 +363,22 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
               <div className="flex items-center justify-between mb-1.5">
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800">
                   <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-mono">2</span>
-                  Configure DNS at your provider
+                  Set DNS Record (Same for all domains)
                 </span>
               </div>
               <p className="text-xs text-slate-600 mb-2">
-                In <strong>Edit DNS</strong> (or click <strong>Dynamic IP Update</strong> in freedomain.one), set either record:
+                In your DNS provider&apos;s <strong>Edit DNS</strong> panel, point your domain or subdomain to this server:
               </p>
 
               <div className="bg-white p-2.5 rounded border border-slate-200 space-y-2 text-xs">
-                {/* Option 1: A Record */}
+                {/* Root Domain / Any Domain: A Record */}
                 <div className="space-y-1 pb-2 border-b border-slate-100">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-500 font-medium">Option A (IPv4):</span>
-                    <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">A Record</span>
+                    <span className="text-[11px] text-slate-600 font-semibold">For Root / Any Domain:</span>
+                    <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">Type: A</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500 font-medium">Points To IP:</span>
+                    <span className="text-[11px] text-slate-500 font-medium">Points To (Server IP):</span>
                     <div className="flex items-center gap-1">
                       <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[11px]">
                         {serverIp}
@@ -395,25 +395,25 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
                   </div>
                 </div>
 
-                {/* Option 2: TXT Verification */}
+                {/* Subdomain: CNAME Record */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-500 font-medium">Option B (TXT):</span>
-                    <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">TXT Record</span>
+                    <span className="text-[11px] text-slate-600 font-semibold">For Subdomain (Optional):</span>
+                    <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">Type: CNAME</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-slate-500 font-medium">Value:</span>
+                    <span className="text-[11px] text-slate-500 font-medium">Points To:</span>
                     <div className="flex items-center gap-1">
                       <span className="font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
-                        {txtToken}
+                        {activeDomain?.hostname || 'helloworld.2bd.net'}
                       </span>
                       <button
                         type="button"
-                        onClick={() => copyValue('txt', txtToken)}
-                        title="Copy TXT Value"
+                        onClick={() => copyValue('cname', activeDomain?.hostname || 'helloworld.2bd.net')}
+                        title="Copy CNAME Target"
                         className="p-1 rounded hover:bg-slate-100 text-slate-500 cursor-pointer"
                       >
-                        {copiedField === 'txt' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        {copiedField === 'cname' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
                       </button>
                     </div>
                   </div>
@@ -449,7 +449,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
                 )}
               </div>
               <p className="text-xs text-slate-600 mb-2.5">
-                Queries your domain&apos;s authoritative nameserver live to verify the A or TXT record.
+                Queries your domain&apos;s authoritative nameserver live to verify the A or CNAME record.
               </p>
 
               <button
@@ -480,7 +480,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
               </p>
             ) : (
               <p className="text-[11px] text-amber-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-200">
-                Update DNS to {serverIp} in Step 2, then click Verify DNS Now.
+                Point A record to {serverIp} in Step 2, then click Verify DNS Now.
               </p>
             )}
           </div>
@@ -526,8 +526,8 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 uppercase text-[10px]">
                 <tr>
                   <th className="px-3.5 py-2.5">Hostname</th>
-                  <th className="px-3.5 py-2.5">Live DNS Record</th>
-                  <th className="px-3.5 py-2.5">Expected Target</th>
+                  <th className="px-3.5 py-2.5">What to Set in DNS</th>
+                  <th className="px-3.5 py-2.5">Current Live DNS</th>
                   <th className="px-3.5 py-2.5">DNS Status</th>
                   <th className="px-3.5 py-2.5">SSL Status</th>
                   <th className="px-3.5 py-2.5 text-right">Actions</th>
@@ -545,12 +545,31 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
                     const status = (dom.verification_status || 'pending').toLowerCase();
                     const currentA = dom.live_dns?.aRecords?.[0];
                     const currentCname = dom.live_dns?.cnameRecords?.[0];
-                    const isIpMatch = currentA === (dom.server_ip || serverIp);
+                    const targetIp = dom.server_ip || serverIp;
+                    const isIpMatch = currentA === targetIp;
                     return (
                       <tr key={dom.id} className="hover:bg-slate-50/80 transition">
                         <td className="px-3.5 py-2.5 font-mono font-bold text-blue-600 flex items-center gap-1.5">
                           <Globe className="w-3.5 h-3.5 text-slate-400" />
                           {dom.hostname}
+                        </td>
+
+                        <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-700">
+                          <div className="inline-flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                            <span>A Record → <strong>{targetIp}</strong></span>
+                            <button
+                              type="button"
+                              onClick={() => copyValue(`row-${dom.id}`, targetIp)}
+                              title="Copy IP"
+                              className="text-slate-500 hover:text-blue-600 cursor-pointer"
+                            >
+                              {copiedField === `row-${dom.id}` ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
                         </td>
 
                         <td className="px-3.5 py-2.5 font-mono text-[11px]">
@@ -571,10 +590,6 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
                           ) : (
                             <span className="text-slate-400">Not resolved</span>
                           )}
-                        </td>
-
-                        <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-600">
-                          A → <strong className="text-slate-800">{dom.server_ip || serverIp}</strong>
                         </td>
 
                         <td className="px-3.5 py-2.5">
