@@ -39,6 +39,16 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
     setCustomExpiryInput('');
   }, [link?.id]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   if (!link) return null;
 
   const shortUrl = buildShortUrl(defaultDomain, link.short_code);
@@ -103,9 +113,17 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-white border-l border-slate-200 shadow-2xl z-40 flex flex-col animate-in slide-in-from-right duration-200 select-none">
-      {/* Drawer Header */}
-      <div className="h-14 px-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+    <>
+      {/* Backdrop overlay (dismisses drawer on outside click) */}
+      <div
+        onClick={onClose}
+        className="fixed inset-0 bg-slate-900/20 backdrop-blur-[1px] z-40 animate-in fade-in duration-150 cursor-pointer"
+        aria-label="Close Link Details"
+      />
+
+      <div className="fixed inset-y-0 right-0 w-96 bg-white border-l border-slate-200 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-200 select-none">
+        {/* Drawer Header */}
+        <div className="h-14 px-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
         <div className="font-bold text-slate-800 text-xs uppercase tracking-wide flex items-center gap-1.5">
           <Eye className="w-3.5 h-3.5 text-blue-600" />
           Link Details
@@ -359,5 +377,6 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
         </div>
       </div>
     </div>
-  );
+  </>
+);
 };

@@ -103,6 +103,7 @@ export default function ShortlyCRMApp() {
   const handleNavigate = (tab: ActiveModule) => {
     const targetTab = isTabAllowed(tab, currentUser?.role) ? tab : 'overview';
     setActiveTab(targetTab);
+    setDrawerLink(null);
     if (typeof window !== 'undefined') {
       const targetPath = MODULE_ROUTES[targetTab] || '/';
       if (window.location.pathname !== targetPath) {
@@ -114,6 +115,7 @@ export default function ShortlyCRMApp() {
   useEffect(() => {
     const syncRouteFromPath = () => {
       if (typeof window === 'undefined') return;
+      setDrawerLink(null);
       const path = window.location.pathname.replace(/\/$/, '') || '/';
       const matched = ROUTE_TO_MODULE[path];
       if (matched) {
@@ -130,6 +132,11 @@ export default function ShortlyCRMApp() {
     window.addEventListener('popstate', syncRouteFromPath);
     return () => window.removeEventListener('popstate', syncRouteFromPath);
   }, [currentUser]);
+
+  // Close slide-over drawer when activeTab changes
+  useEffect(() => {
+    setDrawerLink(null);
+  }, [activeTab]);
 
   // Clamp current tab if role restrictions change
   useEffect(() => {
