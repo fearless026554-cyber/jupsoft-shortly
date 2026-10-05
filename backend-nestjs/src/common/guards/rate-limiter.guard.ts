@@ -22,7 +22,7 @@ export class RateLimiterGuard implements CanActivate {
       const { keyId, scopes } = auth;
       const isInternal = scopes.includes(ApiScopes.WILDCARD) || scopes.includes(ApiScopes.ADMIN);
       limit = isInternal ? env.RATE_LIMIT_INTERNAL_RPM : env.RATE_LIMIT_STANDARD_RPM;
-      keyIdentifier = keyId;
+      keyIdentifier = keyId || (auth.userId ? `user:${auth.userId}` : `ip:${request.ip || '127.0.0.1'}`);
     } else {
       const clientIp = geoUa?.clientIp || request.ip || '127.0.0.1';
       limit = env.RATE_LIMIT_STANDARD_RPM;

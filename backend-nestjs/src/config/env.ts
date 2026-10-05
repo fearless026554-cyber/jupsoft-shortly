@@ -29,6 +29,8 @@ const envSchema = z
     // Security & Networking
     CORS_ORIGINS: z.string().default('*'),
     TRUST_PROXY: z.coerce.boolean().default(false),
+    JWT_SECRET: z.string().min(16).default('jlmp-super-secret-jwt-key-2026-production!'),
+    JWT_EXPIRY: z.string().default('7d'),
 
     // PostgreSQL Database
     PG_HOST: z.string().min(1).default('127.0.0.1'),

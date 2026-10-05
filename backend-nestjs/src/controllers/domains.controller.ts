@@ -134,4 +134,55 @@ export class DomainsController {
 
     return reply.send({ success: true, data: res.rows[0] });
   }
+
+  @Post(':id/verify')
+  @RequireScope(ApiScopes.ADMIN)
+  async verifyDomain(@Param('id') id: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+    const auth = (req as any).auth;
+    const tenantId = auth?.tenantId;
+
+    const currentRes = await this.db.pool.query(
+      'SELECT * FROM domains WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)',
+      [id, tenantId]
+    );
+    if (currentRes.rowCount === 0) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: ErrorCodes.NOT_FOUND, message: 'Domain not found' },
+      });
+    }
+    const current = currentRes.rows[0];
+
+    // In production, real CNAME DNS check can be performed:
+    let isCnameValid = true;
+    try {
+      const dns = await import('node:dns/promises');
+      const records = await dns.resolveCname(current.hostname);
+      isCnameValid = records && records.length > 0;
+    } catch {
+      // In non-production, allow verification for testing/custom hostnames
+      if (process.env.NODE_ENV === 'production') {
+        isCnameValid = false;
+      }
+    }
+
+    if (!isCnameValid && process.env.NODE_ENV === 'production') {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'DNS_CNAME_NOT_FOUND', message: `CNAME record for ${current.hostname} does not point to cname.jup.link.` },
+      });
+    }
+
+    const res = await this.db.pool.query(
+      `UPDATE domains
+       SET verification_status = 'verified', ssl_active = true, updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    await this.redis.client.del(RedisKeyBuilder.domain(current.hostname));
+
+    return reply.send({ success: true, data: res.rows[0] });
+  }
 }

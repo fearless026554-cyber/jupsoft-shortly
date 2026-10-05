@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { api, LinkItem, TenantItem } from '../api';
+import { api, LinkItem, TenantItem, getAuthToken, setAuthToken, getStoredUser, setStoredUser } from '../api';
 
 // Layout Components
 import { Rail, ActiveModule } from '../components/layout/Rail';
@@ -63,6 +63,10 @@ const ROUTE_TO_MODULE: Record<string, ActiveModule> = {
 };
 
 export default function ShortlyCRMApp() {
+  // Authentication & Session State
+  const [currentUser, setCurrentUser] = useState<any>(() => getStoredUser());
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
   // Navigation Module State
   const [activeTab, setActiveTab] = useState<ActiveModule>('overview');
 
@@ -101,6 +105,34 @@ export default function ShortlyCRMApp() {
     syncRouteFromPath();
     window.addEventListener('popstate', syncRouteFromPath);
     return () => window.removeEventListener('popstate', syncRouteFromPath);
+  }, []);
+
+  // Verify authentication on mount
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      window.location.href = '/login';
+      return;
+    }
+
+    api.getMe().then((res) => {
+      if (res && res.success && res.data?.user) {
+        setCurrentUser(res.data.user);
+        setIsAuthChecking(false);
+      } else {
+        setAuthToken(null);
+        setStoredUser(null);
+        window.location.href = '/login';
+      }
+    }).catch(() => {
+      const stored = getStoredUser();
+      if (stored) {
+        setCurrentUser(stored);
+        setIsAuthChecking(false);
+      } else {
+        window.location.href = '/login';
+      }
+    });
   }, []);
 
   // Slide-over Canvas Drawer State
@@ -205,6 +237,15 @@ export default function ShortlyCRMApp() {
     });
   };
 
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-[#071320] flex flex-col items-center justify-center text-white">
+        <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-3"></div>
+        <p className="text-xs font-mono text-slate-400">Verifying session credentials...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#F4F6F9] font-sans antialiased text-slate-800">
       {/* 1. Exact 64px Icon-First Rail */}
@@ -229,6 +270,12 @@ export default function ShortlyCRMApp() {
           onRefresh={loadData}
           onCreateLinkClick={() => setIsCreateLinkModalOpen(true)}
           onOpenCreateTenantModal={() => setIsCreateTenantModalOpen(true)}
+          currentUser={currentUser}
+          onLogout={() => {
+            api.logout().then(() => {
+              window.location.href = '/login';
+            });
+          }}
         />
 
         {/* Dynamic Content Workspace Area */}

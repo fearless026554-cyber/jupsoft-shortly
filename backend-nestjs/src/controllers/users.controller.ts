@@ -7,10 +7,13 @@ import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor.js';
 import { ALL_USER_ROLES, AUTH_CONSTANTS, ApiScopes, ErrorCodes, UserStatus } from '../constants/index.js';
 
+import bcrypt from 'bcryptjs';
+
 const inviteUserSchema = z.object({
   name: z.string().min(2).max(255),
   email: z.string().email(),
   role: z.enum(ALL_USER_ROLES as any),
+  password: z.string().min(6).optional(),
 });
 
 const patchUserRoleSchema = z.object({
@@ -48,20 +51,18 @@ export class UsersController {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
 
-    const tempPasswordHash = crypto
-      .createHash(AUTH_CONSTANTS.HASH_ALGO)
-      .update(crypto.randomBytes(AUTH_CONSTANTS.PASSWORD_RESET_BYTES))
-      .digest('hex');
+    const rawPassword = dto.password || 'Welcome@2026!';
+    const passwordHash = await bcrypt.hash(rawPassword, 10);
 
     const created = await this.db.withTenantContext(tenantId, async (client) => {
       const res = await client.query(
         `INSERT INTO users (tenant_id, name, email, password_hash, role, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, status, created_at`,
-        [tenantId, dto.name, dto.email.toLowerCase(), tempPasswordHash, dto.role, UserStatus.INVITED]
+        [tenantId, dto.name, dto.email.toLowerCase(), passwordHash, dto.role, UserStatus.INVITED]
       );
       return res.rows[0];
     });
 
-    return reply.status(201).send({ success: true, data: created });
+    return reply.status(201).send({ success: true, data: { ...created, initialPassword: rawPassword } });
   }
 
   @Patch(':id')

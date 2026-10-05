@@ -14,8 +14,22 @@ async function handleRequest(req: NextRequest, { params }: { params: Promise<{ p
   
   const headers = new Headers();
   headers.set('Content-Type', 'application/json');
-  if (CMS_API_KEY) {
+
+  // Forward authorization header if client provided one
+  const authHeader = req.headers.get('authorization');
+  const clientApiKey = req.headers.get('x-api-key');
+  const idempotencyKey = req.headers.get('idempotency-key');
+
+  if (authHeader) {
+    headers.set('authorization', authHeader);
+  } else if (clientApiKey) {
+    headers.set('x-api-key', clientApiKey);
+  } else if (CMS_API_KEY) {
     headers.set('x-api-key', CMS_API_KEY);
+  }
+
+  if (idempotencyKey) {
+    headers.set('idempotency-key', idempotencyKey);
   }
   
   const options: RequestInit = {

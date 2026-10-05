@@ -10,8 +10,11 @@ import {
   Bell,
   Check,
   Sparkles,
+  LogOut,
+  User,
+  Shield,
 } from 'lucide-react';
-import { TenantItem } from '../../api';
+import { TenantItem, api } from '../../api';
 import { useTenantDomains } from '../../hooks/useTenantDomains';
 
 export interface HeaderProps {
@@ -25,6 +28,8 @@ export interface HeaderProps {
   onRefresh: () => void;
   onCreateLinkClick: () => void;
   onOpenCreateTenantModal: () => void;
+  currentUser?: any;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,8 +43,11 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   onCreateLinkClick,
   onOpenCreateTenantModal,
+  currentUser,
+  onLogout,
 }) => {
   const [tenantDropdownOpen, setTenantDropdownOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const { defaultDomain } = useTenantDomains();
 
   const currentTenant = tenants.find((t) => t.id === activeTenantId);
@@ -200,14 +208,69 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
         </button>
 
-        {/* Super Admin Avatar */}
-        <button
-          aria-label="User Account: Sachin Sharma (Super Admin)"
-          className="w-7 h-7 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs shadow-inner cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
-          title="Sachin Sharma (Super Admin)"
-        >
-          SA
-        </button>
+        {/* User Account & Logout Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+            aria-label={`User Account: ${currentUser?.name || 'Administrator'}`}
+            className="w-7 h-7 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center justify-center text-xs shadow-inner cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none transition"
+            title={`${currentUser?.name || 'Administrator'} (${currentUser?.role || 'User'})`}
+          >
+            {currentUser?.name
+              ? currentUser.name
+                  .split(' ')
+                  .map((n: string) => n[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+              : 'SA'}
+          </button>
+
+          {userDropdownOpen && (
+            <div
+              className="absolute right-0 top-full mt-2 w-64 bg-white text-slate-800 rounded-lg border border-slate-200 shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100"
+              onMouseLeave={() => setUserDropdownOpen(false)}
+            >
+              <div className="px-3 py-2 border-b border-slate-100">
+                <div className="font-semibold text-xs text-slate-900 truncate">
+                  {currentUser?.name || 'Sachin Sharma'}
+                </div>
+                <div className="text-[11px] text-slate-500 font-mono truncate">
+                  {currentUser?.email || 'admin@jupsoft.com'}
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 border border-blue-200">
+                    {currentUser?.role || 'super_admin'}
+                  </span>
+                  {currentUser?.tenant_code && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono text-slate-600 bg-slate-100">
+                      School: {currentUser.tenant_code}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="py-1">
+                <button
+                  onClick={() => {
+                    setUserDropdownOpen(false);
+                    if (onLogout) {
+                      onLogout();
+                    } else {
+                      api.logout().then(() => {
+                        window.location.href = '/login';
+                      });
+                    }
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition cursor-pointer font-medium"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out of Console</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

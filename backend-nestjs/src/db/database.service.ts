@@ -3,11 +3,13 @@ import { Pool, PoolClient } from 'pg';
 import { env } from '../config/env.js';
 import { DB_CONTEXT_KEYS } from '../constants/index.js';
 
+import bcrypt from 'bcryptjs';
+
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   public pool: Pool;
 
-  onModuleInit() {
+  async onModuleInit() {
     this.pool = new Pool({
       host: env.PG_HOST,
       port: env.PG_PORT,
@@ -18,6 +20,46 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       idleTimeoutMillis: env.PG_IDLE_TIMEOUT_MS,
       connectionTimeoutMillis: env.PG_CONN_TIMEOUT_MS,
     });
+    await this.initSeed();
+  }
+
+  private async initSeed() {
+    try {
+      // 1. Ensure default pilot tenant exists
+      const tenantRes = await this.pool.query(
+        `SELECT id FROM tenants WHERE code = 'hw' LIMIT 1`
+      );
+      let tenantId = tenantRes.rows[0]?.id;
+      if (!tenantId) {
+        const insertTenant = await this.pool.query(
+          `INSERT INTO tenants (id, code, name, status, plan_id)
+           VALUES ('11111111-1111-1111-1111-111111111111', 'hw', 'Hillwoods Academy (Pilot School)', 'active', 'internal_unlimited')
+           ON CONFLICT (code) DO UPDATE SET updated_at = NOW()
+           RETURNING id`
+        );
+        tenantId = insertTenant.rows[0]?.id || '11111111-1111-1111-1111-111111111111';
+      }
+
+      // 2. Ensure default super admin user exists
+      const adminEmail = 'admin@jupsoft.com';
+      const userRes = await this.pool.query(
+        `SELECT id FROM users WHERE LOWER(email) = LOWER($1)`,
+        [adminEmail]
+      );
+
+      if (userRes.rowCount === 0) {
+        const defaultPassword = 'Admin@Jupsoft2026!';
+        const hash = bcrypt.hashSync(defaultPassword, 10);
+        await this.pool.query(
+          `INSERT INTO users (tenant_id, name, email, password_hash, role, status)
+           VALUES ($1, $2, $3, $4, 'super_admin', 'active')`,
+          [tenantId, 'Sachin Sharma (Super Admin)', adminEmail, hash]
+        );
+        console.log(`[Seed] Seeded default super admin user: ${adminEmail}`);
+      }
+    } catch (err) {
+      console.warn('[Seed] Warning during database init seed:', err);
+    }
   }
 
   async onModuleDestroy() {

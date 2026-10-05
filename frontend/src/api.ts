@@ -74,9 +74,67 @@ export interface AbuseReportItem {
   created_at: string;
 }
 
-const headers = {
-  'Content-Type': 'application/json',
-};
+export const TOKEN_STORAGE_KEY = 'jlmp_auth_token';
+export const USER_STORAGE_KEY = 'jlmp_auth_user';
+
+export function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+export function setAuthToken(token: string | null) {
+  if (typeof window === 'undefined') return;
+  if (token) {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    document.cookie = `${TOKEN_STORAGE_KEY}=${token}; path=/; max-age=604800; SameSite=Lax`;
+  } else {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    document.cookie = `${TOKEN_STORAGE_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+  }
+}
+
+export function getStoredUser(): any | null {
+  if (typeof window === 'undefined') return null;
+  const user = localStorage.getItem(USER_STORAGE_KEY);
+  if (!user) return null;
+  try {
+    return JSON.parse(user);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredUser(user: any | null) {
+  if (typeof window === 'undefined') return;
+  if (user) {
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+  } else {
+    localStorage.removeItem(USER_STORAGE_KEY);
+  }
+}
+
+export function getHeaders(): Record<string, string> {
+  const h: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  const token = getAuthToken();
+  if (token) {
+    h['Authorization'] = `Bearer ${token}`;
+  }
+  return h;
+}
+
+const headers = new Proxy({} as Record<string, string>, {
+  get(_target, prop: string) {
+    return getHeaders()[prop];
+  },
+  ownKeys() {
+    return Reflect.ownKeys(getHeaders());
+  },
+  getOwnPropertyDescriptor(_target, prop) {
+    return Reflect.getOwnPropertyDescriptor(getHeaders(), prop);
+  },
+});
 
 // In-flight deduplication map & response caching (Solves P0 API over-fetch audit)
 const inFlightRequests = new Map<string, Promise<any>>();
@@ -397,6 +455,46 @@ export const api = {
       headers,
     });
     return res.json();
+  },
+
+  // Auth Operations
+  async login(email: string, password: string) {
+    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const json = await res.json();
+    if (json.success && json.data?.token) {
+      setAuthToken(json.data.token);
+      setStoredUser(json.data.user);
+    }
+    return json;
+  },
+
+  async logout() {
+    try {
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: getHeaders(),
+      });
+    } catch {}
+    setAuthToken(null);
+    setStoredUser(null);
+    clearApiCache();
+  },
+
+  async getMe() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/me`, { headers: getHeaders() });
+      const json = await res.json();
+      if (json.success && json.data?.user) {
+        setStoredUser(json.data.user);
+      }
+      return json;
+    } catch {
+      return null;
+    }
   },
 };
 

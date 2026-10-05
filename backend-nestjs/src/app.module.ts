@@ -15,6 +15,7 @@ import { OutcomesController } from './controllers/outcomes.controller.js';
 import { AbuseController } from './controllers/abuse.controller.js';
 import { ApiKeysController } from './controllers/api-keys.controller.js';
 import { UsersController } from './controllers/users.controller.js';
+import { AuthController } from './controllers/auth.controller.js';
 import { HealthController } from './controllers/health.controller.js';
 import { ClickProcessor } from './workers/click.processor.js';
 import { BulkProcessor } from './workers/bulk.processor.js';
@@ -49,6 +50,7 @@ import { ScreeningProcessor } from './workers/screening.processor.js';
     AbuseController,
     ApiKeysController,
     UsersController,
+    AuthController,
     HealthController,
   ],
   providers: [
