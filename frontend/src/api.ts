@@ -63,6 +63,13 @@ export interface DomainItem {
   dlt_status: 'pending' | 'submitted' | 'whitelisted' | 'rejected';
   ssl_active: boolean;
   created_at: string;
+  txt_token?: string;
+  server_ip?: string;
+  live_dns?: {
+    aRecords: string[];
+    cnameRecords: string[];
+    txtRecords: string[];
+  };
 }
 
 export interface AbuseReportItem {
@@ -406,6 +413,15 @@ export const api = {
     clearApiCache('domains');
     const res = await fetch(`${API_BASE_URL}/domains/${id}/verify`, {
       method: 'POST',
+      headers,
+    });
+    return res.json();
+  },
+
+  async deleteDomain(id: string) {
+    clearApiCache('domains');
+    const res = await fetch(`${API_BASE_URL}/domains/${id}`, {
+      method: 'DELETE',
       headers,
     });
     return res.json();

@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Patch, Param, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import * as dns from 'node:dns/promises';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service.js';
 import { RedisService } from '../redis/redis.service.js';
@@ -20,6 +21,95 @@ const patchDomainSchema = z.object({
   sslActive: z.boolean().optional(),
 });
 
+let cachedServerIp: string | null = process.env.SERVER_PUBLIC_IP || null;
+let cachedServerIpAt = 0;
+
+async function getLiveServerIp(): Promise<string> {
+  if (process.env.SERVER_PUBLIC_IP) {
+    return process.env.SERVER_PUBLIC_IP;
+  }
+  const now = Date.now();
+  if (cachedServerIp && now - cachedServerIpAt < 5 * 60 * 1000) {
+    return cachedServerIp;
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = (await res.json()) as { ip?: string };
+      if (data?.ip) {
+        cachedServerIp = data.ip.trim();
+        cachedServerIpAt = now;
+        return cachedServerIp;
+      }
+    }
+  } catch {
+    // fallback if offline
+  }
+  return cachedServerIp || '127.0.0.1';
+}
+
+async function getAuthoritativeResolver(hostname: string): Promise<dns.Resolver> {
+  const resolver = new dns.Resolver({ timeout: 2500, tries: 1 });
+  const parts = hostname.toLowerCase().split('.');
+  const candidateZones: string[] = [];
+  for (let i = 0; i <= parts.length - 2; i++) {
+    candidateZones.push(parts.slice(i).join('.'));
+  }
+
+  const pubResolver = new dns.Resolver({ timeout: 2000, tries: 1 });
+  pubResolver.setServers(['1.1.1.1', '8.8.8.8']);
+
+  for (const zone of candidateZones) {
+    try {
+      const nsHosts = await pubResolver.resolveNs(zone);
+      if (nsHosts && nsHosts.length > 0) {
+        const nsIps = await pubResolver.resolve4(nsHosts[0]);
+        if (nsIps && nsIps.length > 0) {
+          resolver.setServers([...nsIps, '1.1.1.1', '8.8.8.8']);
+          return resolver;
+        }
+      }
+    } catch {
+      // try parent zone
+    }
+  }
+
+  resolver.setServers(['1.1.1.1', '8.8.8.8']);
+  return resolver;
+}
+
+async function inspectLiveDns(hostname: string): Promise<{
+  aRecords: string[];
+  cnameRecords: string[];
+  txtRecords: string[];
+}> {
+  const resolver = await getAuthoritativeResolver(hostname);
+  let aRecords: string[] = [];
+  let cnameRecords: string[] = [];
+  let txtRecords: string[] = [];
+
+  const [aRes, cnameRes, txtRes] = await Promise.allSettled([
+    resolver.resolve4(hostname),
+    resolver.resolveCname(hostname),
+    resolver.resolveTxt(hostname),
+  ]);
+
+  if (aRes.status === 'fulfilled' && Array.isArray(aRes.value)) {
+    aRecords = aRes.value;
+  }
+  if (cnameRes.status === 'fulfilled' && Array.isArray(cnameRes.value)) {
+    cnameRecords = cnameRes.value.map((r) => r.toLowerCase().replace(/\.$/, ''));
+  }
+  if (txtRes.status === 'fulfilled' && Array.isArray(txtRes.value)) {
+    txtRecords = txtRes.value.map((chunks) => chunks.join(''));
+  }
+
+  return { aRecords, cnameRecords, txtRecords };
+}
+
 @Controller('api/v1/domains')
 @UseGuards(AuthGuard)
 export class DomainsController {
@@ -34,15 +124,45 @@ export class DomainsController {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
 
-    const domains = await this.db.pool.query(
-      `SELECT id, tenant_id, hostname, type, verification_status, dlt_status, ssl_active, created_at
-       FROM domains
-       WHERE tenant_id = $1 OR tenant_id IS NULL
-       ORDER BY (tenant_id IS NULL) DESC, created_at ASC`,
-      [tenantId]
+    const [domains, serverIp] = await Promise.all([
+      this.db.pool.query(
+        `SELECT id, tenant_id, hostname, type, verification_status, dlt_status, ssl_active, created_at
+         FROM domains
+         WHERE tenant_id = $1 OR tenant_id IS NULL
+         ORDER BY (tenant_id IS NOT NULL) DESC, (verification_status = 'verified') DESC, created_at ASC`,
+        [tenantId]
+      ),
+      getLiveServerIp(),
+    ]);
+
+    const enrichedRows = await Promise.all(
+      domains.rows.map(async (row) => {
+        const txtToken = `shortly-verify=${String(row.id).slice(0, 8)}`;
+        let liveDns = { aRecords: [] as string[], cnameRecords: [] as string[], txtRecords: [] as string[] };
+        if (row.type === 'custom' || row.tenant_id !== null) {
+          try {
+            liveDns = await inspectLiveDns(row.hostname);
+          } catch {
+            // ignore lookup error
+          }
+        }
+        return {
+          ...row,
+          txt_token: txtToken,
+          server_ip: serverIp,
+          live_dns: liveDns,
+        };
+      })
     );
 
-    return reply.send({ success: true, data: domains.rows });
+    return reply.send({
+      success: true,
+      data: enrichedRows,
+      dnsConfig: {
+        serverIp,
+        cnameTarget: env.DEFAULT_DOMAIN_HOST,
+      },
+    });
   }
 
   @Post()
@@ -52,16 +172,26 @@ export class DomainsController {
     const dto = createDomainSchema.parse(req.body);
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
+    const cleanHost = dto.hostname.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 
     try {
       const res = await this.db.pool.query(
         `INSERT INTO domains (tenant_id, hostname, type, verification_status, dlt_status)
          VALUES ($1, $2, $3, 'pending', 'pending')
          RETURNING *`,
-        [tenantId, dto.hostname.toLowerCase(), dto.type]
+        [tenantId, cleanHost, dto.type]
       );
 
-      return reply.status(201).send({ success: true, data: res.rows[0] });
+      const row = res.rows[0];
+      const serverIp = await getLiveServerIp();
+      return reply.status(201).send({
+        success: true,
+        data: {
+          ...row,
+          txt_token: `shortly-verify=${String(row.id).slice(0, 8)}`,
+          server_ip: serverIp,
+        },
+      });
     } catch (err: any) {
       if (err.code === '23505') {
         return reply.status(409).send({
@@ -136,6 +266,30 @@ export class DomainsController {
     return reply.send({ success: true, data: res.rows[0] });
   }
 
+  @Delete(':id')
+  @RequireScope(ApiScopes.ADMIN)
+  async deleteDomain(@Param('id') id: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+    const auth = (req as any).auth;
+    const tenantId = auth.tenantId;
+
+    const currentRes = await this.db.pool.query(
+      'SELECT * FROM domains WHERE id = $1 AND tenant_id = $2',
+      [id, tenantId]
+    );
+    if (currentRes.rowCount === 0) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: ErrorCodes.NOT_FOUND, message: 'Custom domain not found' },
+      });
+    }
+    const current = currentRes.rows[0];
+
+    await this.db.pool.query('DELETE FROM domains WHERE id = $1', [id]);
+    await this.redis.client.del(RedisKeyBuilder.domain(current.hostname));
+
+    return reply.send({ success: true });
+  }
+
   @Post(':id/verify')
   @RequireScope(ApiScopes.ADMIN)
   async verifyDomain(@Param('id') id: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
@@ -153,33 +307,46 @@ export class DomainsController {
       });
     }
     const current = currentRes.rows[0];
+    const serverIp = await getLiveServerIp();
+    const expectedTxt = `shortly-verify=${String(current.id).slice(0, 8)}`;
+    const expectedCname = env.DEFAULT_DOMAIN_HOST.toLowerCase();
 
-    // In production, real CNAME DNS check can be performed:
-    let isCnameValid = true;
-    try {
-      const dns = await import('node:dns/promises');
-      const records = await dns.resolveCname(current.hostname);
-      isCnameValid = records && records.length > 0;
-    } catch {
-      // In non-production, allow verification for testing/custom hostnames
-      if (process.env.NODE_ENV === 'production') {
-        isCnameValid = false;
+    const { aRecords, cnameRecords, txtRecords } = await inspectLiveDns(current.hostname);
+
+    const matchedA = aRecords.includes(serverIp);
+    const matchedTxt = txtRecords.some((t) => t.includes(expectedTxt));
+    const matchedCname = cnameRecords.some(
+      (c) => c === expectedCname || c === `cname.${expectedCname}`
+    );
+
+    if (!matchedA && !matchedTxt && !matchedCname) {
+      await this.db.pool.query(
+        `UPDATE domains
+         SET verification_status = 'failed', ssl_active = false, updated_at = NOW()
+         WHERE id = $1`,
+        [id]
+      );
+
+      let foundDetail = 'No A, CNAME, or TXT records found in live DNS.';
+      if (aRecords.length > 0) {
+        foundDetail = `Live DNS A record currently points to [${aRecords.join(', ')}].`;
+      } else if (cnameRecords.length > 0) {
+        foundDetail = `Live DNS CNAME currently points to [${cnameRecords.join(', ')}].`;
       }
-    }
 
-    if (!isCnameValid && process.env.NODE_ENV === 'production') {
       return reply.status(400).send({
         success: false,
         error: {
-          code: 'DNS_CNAME_NOT_FOUND',
-          message: `CNAME record for ${current.hostname} does not point to cname.${env.DEFAULT_DOMAIN_HOST}.`,
+          code: 'DNS_VERIFICATION_FAILED',
+          message: `DNS verification failed for ${current.hostname}: ${foundDetail} Point your A record to ${serverIp} (or add TXT record "${expectedTxt}") at your DNS provider and try again.`,
         },
+        liveDns: { aRecords, cnameRecords, txtRecords, expectedIp: serverIp, expectedTxt },
       });
     }
 
     const res = await this.db.pool.query(
       `UPDATE domains
-       SET verification_status = 'verified', ssl_active = true, updated_at = NOW()
+       SET verification_status = 'verified', dlt_status = 'whitelisted', ssl_active = true, updated_at = NOW()
        WHERE id = $1
        RETURNING *`,
       [id]
@@ -187,6 +354,15 @@ export class DomainsController {
 
     await this.redis.client.del(RedisKeyBuilder.domain(current.hostname));
 
-    return reply.send({ success: true, data: res.rows[0] });
+    return reply.send({
+      success: true,
+      data: {
+        ...res.rows[0],
+        txt_token: expectedTxt,
+        server_ip: serverIp,
+        live_dns: { aRecords, cnameRecords, txtRecords },
+      },
+      matchedBy: matchedA ? `A (${serverIp})` : matchedTxt ? `TXT (${expectedTxt})` : `CNAME (${cnameRecords[0]})`,
+    });
   }
 }

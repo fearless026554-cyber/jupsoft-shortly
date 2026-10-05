@@ -10,6 +10,9 @@ import {
   Clock,
   RefreshCw,
   Lock,
+  Copy,
+  Check,
+  Trash2,
 } from 'lucide-react';
 import { DomainItem, api } from '../../api';
 import { usePagination } from '../../hooks/usePagination';
@@ -27,10 +30,22 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
   const [newHostname, setNewHostname] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isVerifyingAll, setIsVerifyingAll] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const pagination = usePagination(domains, 10);
+
+  const activeDomain = domains[0] || null;
+  const serverIp = activeDomain?.server_ip || '122.176.33.17';
+  const txtToken = activeDomain?.txt_token || 'shortly-verify=0bb05033';
+
+  const copyValue = (key: string, val: string) => {
+    navigator.clipboard.writeText(val);
+    setCopiedField(key);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   const loadDomains = async () => {
     setLoading(true);
@@ -64,7 +79,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
       if (res.success) {
         setMessage({
           type: 'success',
-          text: `Domain "${newHostname}" added. Next: add the CNAME at your DNS provider, then verify DNS.`,
+          text: `Domain "${newHostname.trim().toLowerCase()}" added. Next: configure your DNS record in Step 2, then click Verify DNS in Step 3.`,
         });
         setNewHostname('');
         await loadDomains();
@@ -91,19 +106,38 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
       const res = await api.verifyDomain(id);
       if (res.success) {
         setDomains((prev) =>
-          prev.map((d) => (d.id === id ? { ...d, verification_status: 'verified', ssl_active: true } : d))
+          prev.map((d) =>
+            d.id === id
+              ? {
+                  ...d,
+                  ...(res.data || {}),
+                  verification_status: 'verified',
+                  dlt_status: 'whitelisted',
+                  ssl_active: true,
+                }
+              : d
+          )
         );
         setMessage({
           type: 'success',
-          text: `DNS verification successful for ${hostname}. Status: verified.`,
+          text: `Live DNS verified for ${hostname} (${res.matchedBy || 'matched'}). Domain is now active!`,
         });
       } else {
         setDomains((prev) =>
-          prev.map((d) => (d.id === id ? { ...d, verification_status: 'failed' } : d))
+          prev.map((d) =>
+            d.id === id
+              ? {
+                  ...d,
+                  verification_status: 'failed',
+                  ssl_active: false,
+                  live_dns: res.liveDns || d.live_dns,
+                }
+              : d
+          )
         );
         setMessage({
           type: 'error',
-          text: res.error?.message || `Failed to verify CNAME for ${hostname}. Status: failed.`,
+          text: res.error?.message || `DNS verification failed for ${hostname}.`,
         });
       }
     } catch (err: any) {
@@ -112,10 +146,37 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
       );
       setMessage({
         type: 'error',
-        text: err.message || `Network error while verifying ${hostname}. Status: failed.`,
+        text: err.message || `Network error while verifying ${hostname}.`,
       });
     } finally {
       setVerifyingId(null);
+    }
+  };
+
+  const handleDeleteDomain = async (id: string, hostname: string) => {
+    setDeletingId(id);
+    setMessage(null);
+    try {
+      const res = await api.deleteDomain(id);
+      if (res.success) {
+        setDomains((prev) => prev.filter((d) => d.id !== id));
+        setMessage({
+          type: 'success',
+          text: `Removed domain ${hostname}.`,
+        });
+      } else {
+        setMessage({
+          type: 'error',
+          text: res.error?.message || `Failed to remove ${hostname}.`,
+        });
+      }
+    } catch (err: any) {
+      setMessage({
+        type: 'error',
+        text: err.message || `Error removing ${hostname}.`,
+      });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -125,18 +186,39 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
     setMessage(null);
 
     try {
+      let lastError = '';
       let anyFailed = false;
       for (const dom of domains) {
         try {
           const res = await api.verifyDomain(dom.id);
           if (res.success) {
             setDomains((prev) =>
-              prev.map((d) => (d.id === dom.id ? { ...d, verification_status: 'verified', ssl_active: true } : d))
+              prev.map((d) =>
+                d.id === dom.id
+                  ? {
+                      ...d,
+                      ...(res.data || {}),
+                      verification_status: 'verified',
+                      dlt_status: 'whitelisted',
+                      ssl_active: true,
+                    }
+                  : d
+              )
             );
           } else {
             anyFailed = true;
+            lastError = res.error?.message || lastError;
             setDomains((prev) =>
-              prev.map((d) => (d.id === dom.id ? { ...d, verification_status: 'failed' } : d))
+              prev.map((d) =>
+                d.id === dom.id
+                  ? {
+                      ...d,
+                      verification_status: 'failed',
+                      ssl_active: false,
+                      live_dns: res.liveDns || d.live_dns,
+                    }
+                  : d
+              )
             );
           }
         } catch {
@@ -150,12 +232,12 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
       if (anyFailed) {
         setMessage({
           type: 'error',
-          text: 'DNS verification completed. Check per-domain status below for records requiring attention.',
+          text: lastError || 'Live DNS verification failed. Update your DNS records in Step 2 and try again.',
         });
       } else {
         setMessage({
           type: 'success',
-          text: 'All custom domains successfully verified. SSL provisioning is active.',
+          text: 'All custom domains verified against live DNS!',
         });
       }
     } finally {
@@ -165,7 +247,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
 
   return (
     <div className="space-y-4 w-full">
-      {/* Header Banner with Single H1 */}
+      {/* Header Banner */}
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
@@ -176,7 +258,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
               Custom Domains
             </h1>
             <p className="text-xs text-slate-500">
-              Manage branded short link domains and DNS verification.
+              Connect and verify your custom domain via live authoritative DNS lookup.
             </p>
           </div>
         </div>
@@ -185,10 +267,10 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
           onClick={loadDomains}
           aria-label="Refresh custom domains"
           title="Refresh custom domains"
-          className="min-h-[40px] px-3 py-1.5 rounded border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition inline-flex items-center gap-1.5"
+          className="min-h-[36px] px-3 py-1.5 rounded border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition inline-flex items-center gap-1.5 cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          Refresh Live DNS
         </button>
       </div>
 
@@ -209,16 +291,16 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
         </div>
       )}
 
-      {/* Numbered DNS Setup Steps (1 Add domain, 2 Add the CNAME at your DNS provider, 3 Verify DNS) */}
+      {/* 3-Step Live DNS Setup */}
       <div className="bg-white p-4 sm:p-5 rounded-lg border border-slate-200 shadow-2xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div>
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              DNS Setup Checklist
+              Live DNS Setup Checklist
             </span>
             <p className="text-xs text-slate-500 mt-0.5">
-              Complete these 3 numbered steps to connect and activate your branded domain.
+              Complete these 3 steps to point and verify your domain against live DNS.
             </p>
           </div>
           <span className="text-[11px] font-mono text-slate-500">
@@ -275,33 +357,81 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
             </div>
           </div>
 
-          {/* Step 2: Add the CNAME at your DNS provider */}
+          {/* Step 2: Configure Real DNS at Provider */}
           <div className="p-4 rounded-lg bg-slate-50/80 border border-slate-200 flex flex-col justify-between space-y-3">
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800">
                   <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-mono">2</span>
-                  Add the CNAME at your DNS provider
+                  Configure DNS at your provider
                 </span>
               </div>
-              <p className="text-xs text-slate-600 mb-2.5">
-                Add this DNS record in Cloudflare, GoDaddy, or your DNS provider:
+              <p className="text-xs text-slate-600 mb-2">
+                In <strong>Edit DNS</strong> (or click <strong>Dynamic IP Update</strong> in freedomain.one), set either record:
               </p>
 
-              <div className="bg-white p-2.5 rounded border border-slate-200 space-y-1.5 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-500 font-medium">Record Type:</span>
-                  <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">CNAME</span>
+              <div className="bg-white p-2.5 rounded border border-slate-200 space-y-2 text-xs">
+                {/* Option 1: A Record */}
+                <div className="space-y-1 pb-2 border-b border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500 font-medium">Option A (IPv4):</span>
+                    <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">A Record</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-slate-500 font-medium">Points To IP:</span>
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[11px]">
+                        {serverIp}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => copyValue('ip', serverIp)}
+                        title="Copy Server IP"
+                        className="p-1 rounded hover:bg-slate-100 text-slate-500 cursor-pointer"
+                      >
+                        {copiedField === 'ip' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-500 font-medium">Points To:</span>
-                  <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded text-[11px]">cname.jup.link</span>
+
+                {/* Option 2: TXT Verification */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500 font-medium">Option B (TXT):</span>
+                    <span className="font-mono font-bold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">TXT Record</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] text-slate-500 font-medium">Value:</span>
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                        {txtToken}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => copyValue('txt', txtToken)}
+                        title="Copy TXT Value"
+                        className="p-1 rounded hover:bg-slate-100 text-slate-500 cursor-pointer"
+                      >
+                        {copiedField === 'txt' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-            <p className="text-[11px] text-slate-500">
-              TTL: Automatic or 300s. Propagation takes ~2–10 minutes.
-            </p>
+            {activeDomain?.live_dns && (
+              <div className="text-[11px] font-mono px-2 py-1 rounded bg-slate-100 text-slate-600 flex items-center justify-between">
+                <span>Live DNS ({activeDomain.hostname}):</span>
+                <span className="font-bold text-slate-800">
+                  {activeDomain.live_dns.aRecords?.length
+                    ? `A → ${activeDomain.live_dns.aRecords[0]}`
+                    : activeDomain.live_dns.cnameRecords?.length
+                    ? `CNAME → ${activeDomain.live_dns.cnameRecords[0]}`
+                    : 'No record'}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Step 3: Verify DNS */}
@@ -310,16 +440,16 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
               <div className="flex items-center justify-between mb-1.5">
                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800">
                   <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-mono">3</span>
-                  Verify DNS
+                  Verify Live DNS
                 </span>
                 {domains.some((d) => d.verification_status === 'verified') && (
                   <span className="text-[10px] text-emerald-700 bg-emerald-100 font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Active
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Verified
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-600 mb-2.5">
-                Check DNS propagation and trigger automatic SSL certificate provisioning.
+                Queries your domain&apos;s authoritative nameserver live to verify the A or TXT record.
               </p>
 
               <button
@@ -330,11 +460,11 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
               >
                 {isVerifyingAll ? (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Verifying Records...
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Checking Live DNS...
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-3.5 h-3.5" /> 3. Verify DNS
+                    <CheckCircle2 className="w-3.5 h-3.5" /> 3. Verify DNS Now
                   </>
                 )}
               </button>
@@ -342,18 +472,22 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
 
             {domains.length === 0 ? (
               <p className="text-[11px] text-amber-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-200">
-                Verify disabled until Step 1 (Add domain) is completed.
+                Complete Step 1 (Add domain) first.
+              </p>
+            ) : domains.every((d) => d.verification_status === 'verified') ? (
+              <p className="text-[11px] text-emerald-700 font-medium bg-emerald-50 px-2 py-1 rounded border border-emerald-200">
+                Live DNS verified! Short links now use {activeDomain?.hostname}.
               </p>
             ) : (
-              <p className="text-[11px] text-emerald-700 font-medium">
-                Step 1 completed. Click above to verify DNS records across domains.
+              <p className="text-[11px] text-amber-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                Update DNS to {serverIp} in Step 2, then click Verify DNS Now.
               </p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Domains Table with Live Status Text */}
+      {/* Domains Table */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
         {loading ? (
           <div className="p-4 space-y-3">
@@ -373,7 +507,6 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
             ))}
           </div>
         ) : domains.length === 0 ? (
-          /* Empty state: Single CTA policy (no duplicate Add Domain button) */
           <div className="p-12 text-center flex flex-col items-center justify-center space-y-3">
             <div className="w-14 h-14 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shadow-2xs">
               <Globe className="w-7 h-7 text-blue-600" />
@@ -393,11 +526,11 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 uppercase text-[10px]">
                 <tr>
                   <th className="px-3.5 py-2.5">Hostname</th>
-                  <th className="px-3.5 py-2.5">Domain Type</th>
+                  <th className="px-3.5 py-2.5">Live DNS Record</th>
+                  <th className="px-3.5 py-2.5">Expected Target</th>
                   <th className="px-3.5 py-2.5">DNS Status</th>
-                  <th className="px-3.5 py-2.5">DLT Whitelist</th>
                   <th className="px-3.5 py-2.5">SSL Status</th>
-                  <th className="px-3.5 py-2.5 text-right">Step 3 Action</th>
+                  <th className="px-3.5 py-2.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-sans">
@@ -410,6 +543,9 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
                 ) : (
                   pagination.paginatedItems.map((dom) => {
                     const status = (dom.verification_status || 'pending').toLowerCase();
+                    const currentA = dom.live_dns?.aRecords?.[0];
+                    const currentCname = dom.live_dns?.cnameRecords?.[0];
+                    const isIpMatch = currentA === (dom.server_ip || serverIp);
                     return (
                       <tr key={dom.id} className="hover:bg-slate-50/80 transition">
                         <td className="px-3.5 py-2.5 font-mono font-bold text-blue-600 flex items-center gap-1.5">
@@ -417,13 +553,30 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
                           {dom.hostname}
                         </td>
 
-                        <td className="px-3.5 py-2.5">
-                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px] uppercase font-semibold">
-                            {dom.type}
-                          </span>
+                        <td className="px-3.5 py-2.5 font-mono text-[11px]">
+                          {currentA ? (
+                            <span
+                              className={`px-2 py-0.5 rounded font-semibold ${
+                                isIpMatch
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-amber-50 text-amber-800 border border-amber-200'
+                              }`}
+                            >
+                              A → {currentA}
+                            </span>
+                          ) : currentCname ? (
+                            <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold">
+                              CNAME → {currentCname}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">Not resolved</span>
+                          )}
                         </td>
 
-                        {/* Live per-domain status text: pending / verified / failed */}
+                        <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-600">
+                          A → <strong className="text-slate-800">{dom.server_ip || serverIp}</strong>
+                        </td>
+
                         <td className="px-3.5 py-2.5">
                           {status === 'verified' ? (
                             <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold text-[10px] flex items-center gap-1 w-fit font-mono">
@@ -441,44 +594,40 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
                         </td>
 
                         <td className="px-3.5 py-2.5">
-                          {dom.dlt_status === 'whitelisted' ? (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold text-[10px] flex items-center gap-1 w-fit">
-                              <ShieldCheck className="w-3 h-3" /> Whitelisted
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold text-[10px] flex items-center gap-1 w-fit">
-                              <Clock className="w-3 h-3" /> {dom.dlt_status}
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="px-3.5 py-2.5">
                           {dom.ssl_active ? (
                             <span className="text-emerald-700 flex items-center gap-1 font-medium text-[11px]">
                               <Lock className="w-3 h-3 text-emerald-600" /> Active
                             </span>
                           ) : (
-                            <span className="text-slate-400 text-[11px]">Provisioning...</span>
+                            <span className="text-slate-400 text-[11px]">Pending Verify</span>
                           )}
                         </td>
 
                         <td className="px-3.5 py-2.5 text-right">
                           {Permissions.canManageDomains(currentUser?.role) ? (
-                            <button
-                              onClick={() => handleVerifyDomain(dom.id, dom.hostname)}
-                              disabled={verifyingId === dom.id}
-                              aria-label={`Verify DNS for ${dom.hostname}`}
-                              title={`Verify DNS for ${dom.hostname}`}
-                              className="min-h-[40px] px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition disabled:opacity-50 cursor-pointer inline-flex items-center gap-1"
-                            >
-                              {verifyingId === dom.id ? (
-                                <>
-                                  <RefreshCw className="w-3 h-3 animate-spin" /> Verifying...
-                                </>
-                              ) : (
-                                'Verify DNS'
-                              )}
-                            </button>
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                onClick={() => handleVerifyDomain(dom.id, dom.hostname)}
+                                disabled={verifyingId === dom.id}
+                                className="h-8 px-3 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition disabled:opacity-50 cursor-pointer inline-flex items-center gap-1"
+                              >
+                                {verifyingId === dom.id ? (
+                                  <>
+                                    <RefreshCw className="w-3 h-3 animate-spin" /> Checking...
+                                  </>
+                                ) : (
+                                  'Verify DNS'
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteDomain(dom.id, dom.hostname)}
+                                disabled={deletingId === dom.id}
+                                title={`Remove ${dom.hostname}`}
+                                className="h-8 px-2 rounded border border-slate-200 hover:bg-red-50 hover:border-red-200 text-slate-400 hover:text-red-600 transition cursor-pointer inline-flex items-center"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           ) : (
                             <span className="text-slate-500 text-xs font-mono">{status}</span>
                           )}

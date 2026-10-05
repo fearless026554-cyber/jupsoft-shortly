@@ -58,7 +58,7 @@ export class RedirectController {
       return reply.status(404).send({ error: 'Not found' });
     }
 
-    const rawHost = forwardedHost || req.hostname;
+    const rawHost = (forwardedHost || req.hostname || '').split(':')[0].toLowerCase();
     const domain = await this.redis.getDomainByHostname(rawHost);
     const domainId = domain?.id;
     if (!domainId) {
@@ -72,7 +72,7 @@ export class RedirectController {
       const res = await this.db.pool.query(
         `SELECT id, tenant_id, destination_url, redirect_type, status, expires_at, max_clicks, click_count
          FROM links
-         WHERE domain_id = $1 AND short_code = $2`,
+         WHERE domain_id = $1 AND (short_code = $2 OR LOWER(alias) = LOWER($2))`,
         [domainId, code]
       );
 

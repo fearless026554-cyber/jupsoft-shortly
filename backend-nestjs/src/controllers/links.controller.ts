@@ -135,9 +135,17 @@ export class LinksController {
     const auth = (req as any).auth;
     const geoUa = getGeoUa(req);
     const tenantId = auth.tenantId;
-    const domainId = dto.domainId || env.DEFAULT_DOMAIN_ID;
-
-    if (dto.domainId && dto.domainId !== env.DEFAULT_DOMAIN_ID) {
+    let domainId: string = dto.domainId || env.DEFAULT_DOMAIN_ID;
+    if (!dto.domainId) {
+      const tenantDomRes = await this.db.pool.query(
+        `SELECT id FROM domains
+         WHERE tenant_id = $1 OR tenant_id IS NULL
+         ORDER BY (verification_status = 'verified') DESC, (tenant_id IS NOT NULL) DESC, created_at ASC
+         LIMIT 1`,
+        [tenantId]
+      );
+      domainId = tenantDomRes.rows[0]?.id || env.DEFAULT_DOMAIN_ID;
+    } else if (dto.domainId !== env.DEFAULT_DOMAIN_ID) {
       const domRes = await this.db.pool.query(
         'SELECT id FROM domains WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)',
         [dto.domainId, tenantId]
