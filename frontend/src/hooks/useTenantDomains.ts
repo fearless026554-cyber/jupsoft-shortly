@@ -7,8 +7,7 @@ export const DEFAULT_CNAME_DOMAIN =
   process.env.NEXT_PUBLIC_CNAME_DOMAIN || '';
 
 export function buildShortUrl(domain: string, shortCode: string): string {
-  const protocol = typeof window !== 'undefined' ? window.location.protocol : 'http:';
-  return `${protocol}//${domain}/${shortCode}`;
+  return `https://${domain}/${shortCode}`;
 }
 
 export function useTenantDomains() {

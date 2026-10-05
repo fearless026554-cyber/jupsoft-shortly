@@ -12,3 +12,5 @@ coverage/
 Thumbs.db
 dump.rdb
 *.tsbuildinfo
+
+backend-nestjs/certs/

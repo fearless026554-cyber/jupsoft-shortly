@@ -9,9 +9,12 @@ import { ErrorHandlerFilter } from './common/filters/error-handler.filter.js';
 import { GeoUAMiddleware } from './common/middleware/geo-ua.middleware.js';
 
 import * as http from 'node:http';
+import * as https from 'node:https';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import helmet from '@fastify/helmet';
 
-function startLocalPort80Gateway(backendPort: number, frontendPort = 5000) {
+function startLocalDomainGateways(backendPort: number, frontendPort = 5000) {
   const FRONTEND_PREFIXES = [
     '/_next',
     '/api/proxy',
@@ -24,7 +27,7 @@ function startLocalPort80Gateway(backendPort: number, frontendPort = 5000) {
     '/jupsoft-logo.png',
   ];
 
-  const gateway = http.createServer((clientReq, clientRes) => {
+  const handleGatewayRequest = (proto: 'http' | 'https') => (clientReq: http.IncomingMessage, clientRes: http.ServerResponse) => {
     const rawUrl = clientReq.url || '/';
     const pathOnly = rawUrl.split('?')[0];
 
@@ -44,6 +47,7 @@ function startLocalPort80Gateway(backendPort: number, frontendPort = 5000) {
         method: clientReq.method,
         headers: {
           ...clientReq.headers,
+          'x-forwarded-proto': proto,
           'x-forwarded-host': clientReq.headers.host || '',
           'x-forwarded-for': clientReq.socket.remoteAddress || '127.0.0.1',
         },
@@ -62,15 +66,37 @@ function startLocalPort80Gateway(backendPort: number, frontendPort = 5000) {
     });
 
     clientReq.pipe(proxyReq, { end: true });
-  });
+  };
 
-  gateway.on('error', (err: any) => {
+  const httpGateway = http.createServer(handleGatewayRequest('http'));
+  httpGateway.on('error', (err: any) => {
     console.warn(`[Port 80 Gateway] Could not bind port 80 (${err.code || err.message})`);
   });
-
-  gateway.listen(80, '0.0.0.0', () => {
-    console.log(`[Port 80 Gateway] Hosting custom domains locally on http://0.0.0.0:80 -> Backend(:${backendPort}) & Frontend(:${frontendPort})`);
+  httpGateway.listen(80, '0.0.0.0', () => {
+    console.log(`[Port 80 HTTP Gateway] Hosting custom domains on http://0.0.0.0:80 -> Backend(:${backendPort}) & Frontend(:${frontendPort})`);
   });
+
+  const certPath = path.resolve(process.cwd(), 'certs', 'server.crt');
+  const keyPath = path.resolve(process.cwd(), 'certs', 'server.key');
+  const caPath = path.resolve(process.cwd(), 'certs', 'rootCA.crt');
+
+  if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
+    const certPem = fs.readFileSync(certPath, 'utf8');
+    const caPem = fs.existsSync(caPath) ? fs.readFileSync(caPath, 'utf8') : '';
+    const httpsGateway = https.createServer(
+      {
+        key: fs.readFileSync(keyPath),
+        cert: caPem ? `${certPem}\n${caPem}` : certPem,
+      },
+      handleGatewayRequest('https')
+    );
+    httpsGateway.on('error', (err: any) => {
+      console.warn(`[Port 443 HTTPS Gateway] Could not bind port 443 (${err.code || err.message})`);
+    });
+    httpsGateway.listen(443, '0.0.0.0', () => {
+      console.log(`[Port 443 HTTPS Gateway] Hosting custom domains on https://0.0.0.0:443 -> Backend(:${backendPort}) & Frontend(:${frontendPort})`);
+    });
+  }
 }
 
 async function bootstrap() {
@@ -115,7 +141,7 @@ async function bootstrap() {
   console.log(`Application is running on: ${await app.getUrl()}`);
 
   if (Number(env.PORT) !== 80) {
-    startLocalPort80Gateway(Number(env.PORT), 5000);
+    startLocalDomainGateways(Number(env.PORT), 5000);
   }
 }
 bootstrap();
