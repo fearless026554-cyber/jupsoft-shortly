@@ -105,12 +105,12 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
             <Building2 className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              Institutions
+            <h1 className="text-base font-bold text-slate-800 flex items-center gap-2">
+              Institutions Directory
               <span className="text-[10px] bg-purple-100 text-purple-800 font-mono px-2 py-0.5 rounded-full font-semibold">
                 Super Admin
               </span>
-            </h2>
+            </h1>
             <p className="text-xs text-slate-500">
               Manage your school branches and subscriptions.
             </p>
@@ -120,14 +120,18 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-semibold shadow-2xs transition"
+            aria-label="Export institutions CSV"
+            title="Export institutions CSV"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-semibold shadow-2xs transition min-h-[40px]"
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />
             Export
           </button>
           <button
             onClick={onOpenCreateTenantModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold shadow-xs transition"
+            aria-label="Add Institution"
+            title="Add Institution"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold shadow-xs transition min-h-[40px] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Add Institution
@@ -144,7 +148,8 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search school name or tenant code..."
-            className="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+            aria-label="Search school name or tenant code"
+            className="w-full text-xs pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white min-h-[36px]"
           />
         </div>
 
@@ -176,18 +181,9 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
               <p className="text-xs text-slate-500 leading-relaxed">
                 {search
                   ? `No school tenants match "${search}". Try searching by code or partial name.`
-                  : 'Add an institution to start managing their short links.'}
+                  : 'Add an institution from the header button to start managing their short links.'}
               </p>
             </div>
-            {!search && (
-              <button
-                onClick={onOpenCreateTenantModal}
-                className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold shadow-xs transition"
-              >
-                <Plus className="w-4 h-4" />
-                Add Institution
-              </button>
-            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

@@ -67,9 +67,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs shadow-2xs">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-          <span className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
-            Dashboard Workspace
-          </span>
+          <h1 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
+            Dashboard Overview
+          </h1>
           <span className="text-slate-300">|</span>
           <span className="text-[11px] text-slate-500 font-mono truncate">
             System Operational

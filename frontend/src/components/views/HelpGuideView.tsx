@@ -4,33 +4,72 @@ import React, { useState } from 'react';
 import {
   HelpCircle,
   BookOpen,
-  ShieldCheck,
-  Smartphone,
   DollarSign,
-  QrCode,
-  Building2,
   ChevronDown,
   ChevronRight,
   Search,
-  ExternalLink,
-  LifeBuoy,
   FileSpreadsheet,
   Link2,
   Zap,
   Download,
-  Copy,
-  Check,
-  CheckCircle2,
+  ArrowLeft,
+  ArrowRight,
+  Sparkles,
+  ShieldCheck,
+  LayoutList,
 } from 'lucide-react';
-
 import { useTenantDomains } from '../../hooks/useTenantDomains';
+
+type HelpSection = 'list' | 'quickstart' | 'createlink' | 'bulkcsv' | 'webhooks' | 'faq';
 
 export const HelpGuideView: React.FC = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [search, setSearch] = useState('');
-  const [activeSection, setActiveSection] = useState<'quickstart' | 'createlink' | 'bulkcsv' | 'webhooks' | 'faq'>('quickstart');
-  const [copiedKey, setCopiedKey] = useState(false);
+  const [activeSection, setActiveSection] = useState<HelpSection>('list');
   const { defaultDomain } = useTenantDomains();
+
+  const guides = [
+    {
+      id: 'quickstart' as const,
+      title: '1. Quick Start Guide',
+      category: 'Basics',
+      icon: Zap,
+      description: 'Create your first branded short link, test sub-2ms edge redirection, and embed into DLT SMS templates.',
+      tags: ['quickstart', 'short links', 'redirection', 'sms'],
+    },
+    {
+      id: 'createlink' as const,
+      title: '2. Creating & Customizing Links',
+      category: 'Configuration',
+      icon: Link2,
+      description: 'Configure custom slug aliases, ERP external reference tracking, click caps, and TRAI 160-char SMS limits.',
+      tags: ['alias', 'external_ref', 'invoice', 'expiration', 'trai'],
+    },
+    {
+      id: 'bulkcsv' as const,
+      title: '3. Bulk CSV Format Guide',
+      category: 'Spreadsheets',
+      icon: FileSpreadsheet,
+      description: 'Required columns, batch formatting specs, and downloadable CSV templates for generating hundreds of links.',
+      tags: ['bulk', 'csv', 'batch', 'template', 'spreadsheet'],
+    },
+    {
+      id: 'webhooks' as const,
+      title: '4. Webhooks & Closed-Loop Attribution',
+      category: 'Integrations',
+      icon: DollarSign,
+      description: 'Set up payment gateway callbacks, API authorization headers, and automatic ledger fee reconciliation.',
+      tags: ['webhook', 'outcomes', 'api key', 'erp', 'fees'],
+    },
+    {
+      id: 'faq' as const,
+      title: '5. FAQs & Regulatory Compliance',
+      category: 'Compliance',
+      icon: HelpCircle,
+      description: 'TRAI DLT portal whitelisting, DPDP Act 2023 privacy safeguards, dynamic vector QR codes, and telecom rules.',
+      tags: ['faq', 'dlt', 'trai', 'dpdp', 'qr codes', 'privacy'],
+    },
+  ];
 
   const faqs = [
     {
@@ -55,6 +94,13 @@ export const HelpGuideView: React.FC = () => {
     },
   ];
 
+  const filteredGuides = guides.filter(
+    (g) =>
+      g.title.toLowerCase().includes(search.toLowerCase()) ||
+      g.description.toLowerCase().includes(search.toLowerCase()) ||
+      g.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()))
+  );
+
   const filteredFaqs = faqs.filter(
     (f) =>
       f.q.toLowerCase().includes(search.toLowerCase()) ||
@@ -72,9 +118,27 @@ export const HelpGuideView: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const renderBackToListButton = () => (
+    <div className="pb-3 border-b border-slate-100 flex items-center justify-between">
+      <button
+        onClick={() => setActiveSection('list')}
+        aria-label="Back to all guides list"
+        className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition min-h-[40px] px-2.5 py-1 rounded-md hover:bg-blue-50 cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span>Back to all guides</span>
+      </button>
+      {search && (
+        <span className="text-[11px] text-slate-500 font-mono">
+          Search preserved: &ldquo;{search}&rdquo;
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* Header Banner */}
+      {/* Header Banner with Single H1 Heading */}
       <div className="bg-white p-5 rounded-lg border border-slate-200/80 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -85,47 +149,59 @@ export const HelpGuideView: React.FC = () => {
           />
           <div>
             <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              Help Guide
+              Help & Knowledge Base
               <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200/60 font-semibold px-2 py-0.5 rounded-full">
-                Guide
+                Documentation
               </span>
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Learn how to use the platform.
+              Comprehensive guides, CSV specifications, and compliance references.
             </p>
           </div>
         </div>
 
-        {/* Search Input with accessible label */}
+        {/* Persistent Docs Search Input */}
         <div className="relative">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search documentation..."
             aria-label="Search documentation"
-            className="w-56 text-xs pl-7 pr-3 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+            className="w-64 text-xs pl-8 pr-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white min-h-[40px]"
           />
         </div>
       </div>
 
-      {/* Navigation Tabs (4 Core Sections + FAQ) */}
+      {/* Navigation Ribbon */}
       <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-lg border border-slate-200/80 shadow-2xs text-xs font-semibold text-slate-600">
+        <button
+          onClick={() => setActiveSection('list')}
+          className={`flex items-center gap-1.5 px-3 py-2 rounded-md transition min-h-[40px] cursor-pointer ${
+            activeSection === 'list'
+              ? 'bg-blue-600 text-white font-bold shadow-xs'
+              : 'hover:bg-slate-100 text-slate-700'
+          }`}
+        >
+          <LayoutList className="w-3.5 h-3.5" />
+          <span>All Guides</span>
+        </button>
+
         {[
-          { id: 'quickstart', label: '1. Quick Start', icon: Zap },
-          { id: 'createlink', label: '2. Creating Links', icon: Link2 },
-          { id: 'bulkcsv', label: '3. Bulk CSV Format', icon: FileSpreadsheet },
-          { id: 'webhooks', label: '4. Webhooks', icon: DollarSign },
-          { id: 'faq', label: '5. FAQs', icon: HelpCircle },
+          { id: 'quickstart' as const, label: '1. Quick Start', icon: Zap },
+          { id: 'createlink' as const, label: '2. Creating Links', icon: Link2 },
+          { id: 'bulkcsv' as const, label: '3. Bulk CSV Format', icon: FileSpreadsheet },
+          { id: 'webhooks' as const, label: '4. Webhooks', icon: DollarSign },
+          { id: 'faq' as const, label: '5. FAQs', icon: HelpCircle },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeSection === tab.id;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveSection(tab.id as any)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition ${
+              onClick={() => setActiveSection(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-md transition min-h-[40px] cursor-pointer ${
                 isActive
                   ? 'bg-blue-600 text-white font-bold shadow-xs'
                   : 'hover:bg-slate-100 text-slate-700'
@@ -138,10 +214,62 @@ export const HelpGuideView: React.FC = () => {
         })}
       </div>
 
+      {/* SECTION: DIRECTORY LIST OF ALL GUIDES */}
+      {activeSection === 'list' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredGuides.map((guide) => {
+              const Icon = guide.icon;
+              return (
+                <div
+                  key={guide.id}
+                  onClick={() => setActiveSection(guide.id)}
+                  className="bg-white p-5 rounded-lg border border-slate-200 shadow-2xs hover:border-blue-400 hover:shadow-xs transition cursor-pointer flex flex-col justify-between space-y-3 group"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition">
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-500 uppercase font-semibold bg-slate-100 px-2 py-0.5 rounded">
+                        {guide.category}
+                      </span>
+                    </div>
+                    <h3 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition">
+                      {guide.title}
+                    </h3>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      {guide.description}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-blue-600">
+                    <span>Open Guide</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filteredGuides.length === 0 && (
+            <div className="bg-white p-12 text-center rounded-lg border border-slate-200">
+              <Search className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <h3 className="text-sm font-bold text-slate-800">No documentation matched</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                No guides match &ldquo;{search}&rdquo;. Try clearing your query to browse all topics.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* SECTION 1: QUICK START */}
       {activeSection === 'quickstart' && (
         <div className="bg-white p-5 rounded-lg border border-slate-200/80 shadow-2xs space-y-4">
-          <div className="border-b border-slate-100 pb-2">
+          {renderBackToListButton()}
+
+          <div>
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Zap className="w-4 h-4 text-amber-500" />
               Getting Started
@@ -188,7 +316,9 @@ export const HelpGuideView: React.FC = () => {
       {/* SECTION 2: CREATING & CUSTOMIZING LINKS */}
       {activeSection === 'createlink' && (
         <div className="bg-white p-5 rounded-lg border border-slate-200/80 shadow-2xs space-y-4">
-          <div className="border-b border-slate-100 pb-2">
+          {renderBackToListButton()}
+
+          <div>
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Link2 className="w-4 h-4 text-blue-600" />
               Link Configuration
@@ -237,6 +367,8 @@ export const HelpGuideView: React.FC = () => {
       {/* SECTION 3: BULK CSV FORMAT */}
       {activeSection === 'bulkcsv' && (
         <div className="bg-white p-5 rounded-lg border border-slate-200/80 shadow-2xs space-y-4">
+          {renderBackToListButton()}
+
           <div className="flex flex-wrap items-center justify-between pb-2 border-b border-slate-100 gap-3">
             <div>
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
@@ -250,7 +382,8 @@ export const HelpGuideView: React.FC = () => {
 
             <button
               onClick={downloadSampleTemplate}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition"
+              aria-label="Download Sample CSV Template"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition min-h-[40px] cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               Download Sample CSV
@@ -301,7 +434,9 @@ export const HelpGuideView: React.FC = () => {
       {/* SECTION 4: WEBHOOKS & ERP SETUP */}
       {activeSection === 'webhooks' && (
         <div className="bg-white p-5 rounded-lg border border-slate-200/80 shadow-2xs space-y-4">
-          <div className="border-b border-slate-100 pb-2">
+          {renderBackToListButton()}
+
+          <div>
             <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-emerald-600" />
               Webhook Setup
@@ -336,6 +471,10 @@ export const HelpGuideView: React.FC = () => {
       {/* SECTION 5: FAQs & COMPLIANCE */}
       {activeSection === 'faq' && (
         <div className="bg-white rounded-lg border border-slate-200/80 shadow-2xs overflow-hidden">
+          <div className="p-4 border-b border-slate-200">
+            {renderBackToListButton()}
+          </div>
+
           <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
             <span className="text-xs font-bold text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
               <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
@@ -352,7 +491,7 @@ export const HelpGuideView: React.FC = () => {
                   <button
                     onClick={() => setOpenFaq(isOpen ? null : idx)}
                     aria-label={`Toggle question: ${faq.q}`}
-                    className="w-full text-left px-5 py-3 text-xs font-semibold text-slate-800 hover:bg-slate-50 flex items-center justify-between gap-3"
+                    className="w-full text-left px-5 py-3 text-xs font-semibold text-slate-800 hover:bg-slate-50 flex items-center justify-between gap-3 min-h-[40px] cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       <span className="text-blue-600 font-mono font-bold">0{idx + 1}.</span>

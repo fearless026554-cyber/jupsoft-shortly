@@ -255,10 +255,13 @@ export default function ShortlyCRMApp() {
   }, []);
 
   const handleArchiveLink = async (id: string) => {
+    const targetLink = links.find((l) => l.id === id);
+    const domainHost = (targetLink as any)?.domain?.hostname || 'jup.link';
+    const fullUrl = targetLink ? `https://${domainHost}/${targetLink.short_code}` : 'this short link';
     setConfirmConfig({
       isOpen: true,
       title: 'Archive Link',
-      message: 'Archive this short link? It will be deactivated and removed from active SMS routing.',
+      message: `Are you sure you want to archive the link ${fullUrl}? It will be deactivated and removed from active SMS routing.`,
       onConfirm: async () => {
         await api.archiveLink(id);
         if (drawerLink?.id === id) setDrawerLink(null);

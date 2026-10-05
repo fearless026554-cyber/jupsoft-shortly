@@ -4,21 +4,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Key,
   Plus,
-  Copy,
-  Check,
-  Trash2,
-  ShieldCheck,
-  AlertCircle,
   RefreshCw,
-  Activity,
-  Layers,
-  Send,
-  CheckCircle2,
-  Server,
-  Zap,
-  Radio,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
 import { api } from '../../api';
 import { usePagination } from '../../hooks/usePagination';
@@ -65,7 +51,6 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
     loadKeys();
 
     const onFocus = () => {
-      // Background refetch on window focus to ensure fresh token state
       api.getApiKeys().then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setKeys(data);
@@ -77,17 +62,18 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
-  const handleRevoke = async (id: string, name: string) => {
+  const handleRevoke = async (id: string, name: string, prefix?: string) => {
+    const keyPrefix = prefix || 'jlp_live_...';
     setConfirmConfig({
       isOpen: true,
       title: 'Revoke API Key',
-      message: `Are you sure you want to revoke "${name}"? Applications using this key will immediately receive HTTP 401 Unauthorized.`,
+      message: `Are you sure you want to revoke key "${name}" (prefix: ${keyPrefix})? Applications using this key will immediately receive HTTP 401 Unauthorized.`,
       onConfirm: async () => {
         try {
           await api.revokeApiKey(id);
           loadKeys();
         } catch {
-          alert('Key revoked.');
+          // handled
         } finally {
           setConfirmConfig(prev => ({ ...prev, isOpen: false }));
         }
@@ -97,19 +83,18 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* Header Banner */}
+      {/* Header Banner with Single H1 Heading */}
       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
             <Key className="w-5 h-5" />
           </div>
           <div>
-          <div>
-            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              API Keys
-            </h2>
+            <h1 className="text-base font-bold text-slate-800 flex items-center gap-2">
+              Developer API Keys
+            </h1>
             <p className="text-xs text-slate-500">
-              Manage your API keys for programmatic access.
+              Manage your API keys for programmatic access and ERP integrations.
             </p>
           </div>
         </div>
@@ -119,7 +104,7 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
             onClick={loadKeys}
             aria-label="Refresh API Keys"
             title="Refresh API Keys"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition"
+            className="min-h-[40px] flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -129,7 +114,7 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
               onClick={onOpenCreateKeyModal}
               aria-label="Create New API Key"
               title="Create New API Key"
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold shadow-xs transition"
+              className="min-h-[40px] flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold shadow-xs transition cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               Create New API Key
@@ -137,8 +122,6 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
           )}
         </div>
       </div>
-
-
 
       {/* Provisioned Keys Table */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
@@ -199,6 +182,7 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
                   </td>
                 </tr>
               ) : keys.length === 0 ? (
+                /* Empty state: Single CTA policy (no duplicate Create Key button) */
                 <tr>
                   <td colSpan={5} className="p-8 text-center">
                     <div className="flex flex-col items-center justify-center space-y-2">
@@ -207,19 +191,8 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
                       </div>
                       <div className="text-xs font-bold text-slate-800">No Custom Tokens Provisioned</div>
                       <p className="text-[11px] text-slate-500 max-w-sm">
-                        Generate scoped API keys for school ERP webhooks, SMS dispatchers, and automated clickstream analytics.
+                        Generate scoped API keys from the header button for school ERP webhooks, SMS dispatchers, and automated clickstream analytics.
                       </p>
-                      {Permissions.canManageApiKeys(currentUser?.role) && (
-                        <button
-                          onClick={onOpenCreateKeyModal}
-                          aria-label="Create First API Key"
-                          title="Create First API Key"
-                          className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold transition cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Create New API Key
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -257,10 +230,10 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
                     <td className="px-3.5 py-2.5 text-right">
                       {Permissions.canManageApiKeys(currentUser?.role) && (
                         <button
-                          onClick={() => handleRevoke(k.id, k.name)}
+                          onClick={() => handleRevoke(k.id, k.name, k.key_prefix || k.keyPrefix)}
                           aria-label={`Revoke API Key ${k.name}`}
                           title={`Revoke API Key ${k.name}`}
-                          className="px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition"
+                          className="min-h-[40px] px-3 py-1.5 rounded bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition cursor-pointer"
                         >
                           Revoke Key
                         </button>
@@ -283,8 +256,6 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
             />
           )}
         </div>
-      </div>
-
       </div>
 
       <ConfirmDialog

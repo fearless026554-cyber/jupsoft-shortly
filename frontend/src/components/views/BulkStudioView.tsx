@@ -226,9 +226,9 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs shadow-2xs">
         <div className="flex items-center gap-2 min-w-0">
           <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-          <span className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
+          <h1 className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
             Bulk Create Workspace
-          </span>
+          </h1>
           <span className="text-slate-300">|</span>
           <span className="text-[11px] text-slate-500 font-mono truncate">
             Batch Processing
@@ -411,11 +411,56 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* 1. Apply to all rows category dropdown above the grid */}
+            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-md border border-slate-300 shadow-2xs">
+              <label htmlFor="bulk-apply-all-category" className="text-[11px] font-semibold text-slate-700 whitespace-nowrap">
+                Apply to all rows:
+              </label>
+              <select
+                id="bulk-apply-all-category"
+                aria-label="Apply to all rows category"
+                className="text-xs px-2 py-1 rounded border border-slate-200 bg-slate-50 text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer min-h-[36px] sm:min-h-0"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val) {
+                    setBatchRows((prev) => {
+                      const hasNonEmpty = prev.some(
+                        (r) =>
+                          r.destinationUrl.trim().length > 0 ||
+                          r.alias.trim().length > 0 ||
+                          r.externalRef.trim().length > 0
+                      );
+                      if (!hasNonEmpty) {
+                        return prev.map((r) => ({ ...r, tag: val }));
+                      }
+                      return prev.map((r) => {
+                        const isNonEmpty =
+                          r.destinationUrl.trim().length > 0 ||
+                          r.alias.trim().length > 0 ||
+                          r.externalRef.trim().length > 0;
+                        return isNonEmpty ? { ...r, tag: val } : r;
+                      });
+                    });
+                    e.target.value = '';
+                  }
+                }}
+              >
+                <option value="">Select category...</option>
+                <option value="Fee Collection">Fee Collection</option>
+                <option value="Transport Alert">Transport Alert</option>
+                <option value="Admissions 2026">Admissions 2026</option>
+                <option value="Exam Notices">Exam Notices</option>
+                <option value="Annual Day">Annual Day</option>
+                <option value="General Notice">General Notice</option>
+              </select>
+            </div>
+
             {Permissions.canBulkCreate(currentUser?.role) && (
               <button
                 onClick={handleAddRow}
-                className="flex items-center gap-1 px-3 py-1 rounded bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-300 shadow-2xs transition"
+                aria-label="Add Link Row"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-300 shadow-2xs transition min-h-[40px] sm:min-h-0"
               >
                 <Plus className="w-3.5 h-3.5 text-blue-600" /> Add Link Row
               </button>
@@ -423,7 +468,8 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
             {batchResults.length > 0 && (
               <button
                 onClick={handleExportResults}
-                className="flex items-center gap-1 px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-2xs transition"
+                aria-label="Export Results"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-2xs transition min-h-[40px] sm:min-h-0"
               >
                 <Download className="w-3.5 h-3.5" /> Export Results
               </button>
@@ -439,26 +485,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                 <th className="px-3.5 py-2.5">Destination URL</th>
                 <th className="px-3.5 py-2.5 w-44">Alias</th>
                 <th className="px-3.5 py-2.5 w-48 whitespace-nowrap">
-                  <div className="flex items-center gap-1.5">
-                    Campaign Category
-                    <select
-                      className="text-[9px] font-normal px-1 py-0.5 rounded border border-slate-300 bg-white text-slate-500 focus:outline-none"
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val) {
-                          setBatchRows(prev => prev.map(r => ({ ...r, tag: val })));
-                          e.target.value = "";
-                        }
-                      }}
-                    >
-                      <option value="">Apply all...</option>
-                      <option value="Fee Collection">Fee Collection</option>
-                      <option value="Transport Alert">Transport Alert</option>
-                      <option value="Admissions 2026">Admissions 2026</option>
-                      <option value="Exam Notices">Exam Notices</option>
-                      <option value="Annual Day">Annual Day</option>
-                    </select>
-                  </div>
+                  Campaign Category
                 </th>
                 <th className="px-3.5 py-2.5 w-40">External Ref</th>
                 <th className="px-3.5 py-2.5 w-16 text-center">Action</th>
@@ -545,7 +572,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                         disabled={batchRows.length === 1}
                         aria-label={`Remove Row ${idx + 1}`}
                         title="Remove Row"
-                        className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded transition disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed"
+                        className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded transition disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed min-w-[40px] min-h-[40px] flex items-center justify-center mx-auto"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

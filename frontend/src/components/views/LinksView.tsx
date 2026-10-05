@@ -130,7 +130,9 @@ export const LinksView: React.FC<LinksViewProps> = ({
         {/* Left: View Dropdown & Segmented Status Filter */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 font-bold text-slate-900">
-            <span>All Links</span>
+            <h1 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+              Short Links
+            </h1>
             <span className="text-[11px] font-mono text-slate-400">({filteredLinks.length})</span>
           </div>
 
@@ -365,47 +367,65 @@ export const LinksView: React.FC<LinksViewProps> = ({
                     </td>
 
                     {/* Action Buttons */}
-                    <td className="py-2 px-3 text-right space-x-1" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => onSelectQrLink(link)}
-                        aria-label="View QR Code"
-                        title="View QR Code"
-                        className="p-1.5 hover:bg-slate-100 rounded-md text-slate-500 hover:text-slate-800 transition cursor-pointer"
-                      >
-                        <QrCode className="w-3.5 h-3.5" />
-                      </button>
-
-                      <a
-                        href={`https://${defaultDomain}/${link.short_code}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label="Test Live Redirect"
-                        title="Test Live Redirect"
-                        className="p-1.5 hover:bg-slate-100 rounded-md text-slate-500 hover:text-slate-800 transition inline-block"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-
-                      {Permissions.canEditLinks(currentUser?.role) && (
+                    <td className="py-2 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1 flex-wrap sm:flex-nowrap">
                         <button
-                          onClick={() => {
-                            setConfirmConfig({
-                              isOpen: true,
-                              title: 'Archive Link',
-                              message: `Are you sure you want to archive the link ${defaultDomain}/${link.short_code}?`,
-                              onConfirm: () => {
-                                onArchiveLink(link.id);
-                                setConfirmConfig(prev => ({ ...prev, isOpen: false }));
-                              }
-                            });
-                          }}
-                          aria-label="Archive Short Link"
-                          title="Archive Short Link"
-                          className="p-1.5 ml-3 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600 transition cursor-pointer"
+                          onClick={() => handleCopy(link.short_code, link.id)}
+                          aria-label={`Copy short link https://${defaultDomain}/${link.short_code}`}
+                          title="Copy short link"
+                          className="min-w-[40px] min-h-[40px] p-2 hover:bg-slate-100 rounded-md text-slate-500 hover:text-slate-800 transition cursor-pointer flex items-center justify-center"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          {copiedId === link.id ? (
+                            <Check className="w-4 h-4 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
                         </button>
-                      )}
+
+                        <button
+                          onClick={() => onSelectQrLink(link)}
+                          aria-label={`View QR Code for ${link.short_code}`}
+                          title="View QR Code"
+                          className="min-w-[40px] min-h-[40px] p-2 hover:bg-slate-100 rounded-md text-slate-500 hover:text-slate-800 transition cursor-pointer flex items-center justify-center"
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </button>
+
+                        <a
+                          href={`https://${defaultDomain}/${link.short_code}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`Test Live Redirect for https://${defaultDomain}/${link.short_code}`}
+                          title="Test Live Redirect"
+                          className="min-w-[40px] min-h-[40px] p-2 hover:bg-slate-100 rounded-md text-slate-500 hover:text-slate-800 transition flex items-center justify-center"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+
+                        {Permissions.canEditLinks(currentUser?.role) && (
+                          <div className="ml-3 pl-2.5 border-l border-slate-200 flex items-center">
+                            <button
+                              onClick={() => {
+                                setConfirmConfig({
+                                  isOpen: true,
+                                  title: 'Archive Link',
+                                  message: `Are you sure you want to archive the link https://${defaultDomain}/${link.short_code}?`,
+                                  onConfirm: () => {
+                                    onArchiveLink(link.id);
+                                    setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+                                  }
+                                });
+                              }}
+                              aria-label={`Archive short link https://${defaultDomain}/${link.short_code}`}
+                              title="Archive short link"
+                              className="min-w-[40px] min-h-[40px] px-2.5 py-1.5 border border-red-300 hover:border-red-500 bg-red-50/60 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-md text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1 shadow-2xs"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span className="hidden xl:inline">Archive</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )))}
@@ -421,17 +441,8 @@ export const LinksView: React.FC<LinksViewProps> = ({
                         <p className="text-sm text-slate-500 max-w-sm mx-auto">
                           {searchQuery || statusFilter !== 'all' 
                             ? 'Try adjusting your search or filters.' 
-                            : 'Get started by creating your first short link.'}
+                            : 'No short links found in this workspace.'}
                         </p>
-                        {!searchQuery && statusFilter === 'all' && Permissions.canCreateLinks(currentUser?.role) && (
-                          <button
-                            onClick={onOpenCreateModal}
-                            className="mt-3 flex items-center gap-2 px-5 py-2 rounded-lg bg-[#0F6CBD] hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition-colors mx-auto"
-                          >
-                            <Plus className="w-4 h-4" />
-                            Create Short Link
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
