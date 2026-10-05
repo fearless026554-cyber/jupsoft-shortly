@@ -17,12 +17,14 @@ import { usePagination } from '../../hooks/usePagination';
 import { Pagination } from '../ui/Pagination';
 import { TableSkeleton } from '../ui/Skeleton';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Permissions } from '../../utils/rbac';
 
 interface AbuseViewProps {
   onRefreshBadge?: () => void;
+  currentUser?: any;
 }
 
-export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge }) => {
+export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge, currentUser }) => {
   const [reports, setReports] = useState<AbuseReportItem[]>([]);
   const pagination = usePagination(reports, 10);
   const [loading, setLoading] = useState(true);
@@ -249,23 +251,26 @@ export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge }) => {
                   </td>
 
                   <td className="px-3.5 py-3 text-right space-x-1.5">
-                    {rep.status === 'pending' && (
-                      <>
-                        <button
-                          onClick={() => handleDismiss(rep.id)}
-                          className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs transition"
-                        >
-                          False Positive
-                        </button>
-                        <button
-                          onClick={() => handleTakedown(rep.id)}
-                          className="px-3 py-1 rounded-md bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition shadow-2xs"
-                        >
-                          Deactivate Link
-                        </button>
-                      </>
-                    )}
-                    {rep.status !== 'pending' && (
+                    {rep.status === 'pending' ? (
+                      Permissions.canManageAbuse(currentUser?.role) ? (
+                        <>
+                          <button
+                            onClick={() => handleDismiss(rep.id)}
+                            className="px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs transition"
+                          >
+                            False Positive
+                          </button>
+                          <button
+                            onClick={() => handleTakedown(rep.id)}
+                            className="px-3 py-1 rounded-md bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition shadow-2xs"
+                          >
+                            Deactivate Link
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-amber-600 text-xs font-medium">Pending Admin Review</span>
+                      )
+                    ) : (
                       <span className="text-slate-400 text-xs italic">Action completed</span>
                     )}
                   </td>

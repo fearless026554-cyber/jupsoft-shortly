@@ -21,6 +21,7 @@ import {
   Check,
 } from 'lucide-react';
 import { api, exportToCsv } from '../../api';
+import { Permissions } from '../../utils/rbac';
 
 interface BatchRow {
   destinationUrl: string;
@@ -29,45 +30,11 @@ interface BatchRow {
   externalRef: string;
 }
 
-export const BulkStudioView: React.FC = () => {
-  // Preset batches for quick 1-click loading
-  const presets: { name: string; icon: React.ComponentType<{ className?: string }>; rows: BatchRow[] } = {
-    name: 'Class 10 Fee Reminders',
-    icon: GraduationCap,
-    rows: [
-      {
-        destinationUrl: 'https://jupsoft.com/fees/pay?inv=INV-2026-101',
-        alias: 'fee-class10-101',
-        tag: 'Fee Collection',
-        externalRef: 'INV-2026-101',
-      },
-      {
-        destinationUrl: 'https://jupsoft.com/fees/pay?inv=INV-2026-102',
-        alias: 'fee-class10-102',
-        tag: 'Fee Collection',
-        externalRef: 'INV-2026-102',
-      },
-      {
-        destinationUrl: 'https://jupsoft.com/fees/pay?inv=INV-2026-103',
-        alias: 'fee-class10-103',
-        tag: 'Fee Collection',
-        externalRef: 'INV-2026-103',
-      },
-      {
-        destinationUrl: 'https://jupsoft.com/fees/pay?inv=INV-2026-104',
-        alias: 'fee-class10-104',
-        tag: 'Fee Collection',
-        externalRef: 'INV-2026-104',
-      },
-      {
-        destinationUrl: 'https://jupsoft.com/fees/pay?inv=INV-2026-105',
-        alias: 'fee-class10-105',
-        tag: 'Fee Collection',
-        externalRef: 'INV-2026-105',
-      },
-    ],
-  };
+interface BulkStudioViewProps {
+  currentUser?: any;
+}
 
+export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) => {
   // URL Validation Helper
   const isValidUrl = (url: string) => {
     if (!url || !url.trim()) return false;
@@ -79,7 +46,7 @@ export const BulkStudioView: React.FC = () => {
     }
   };
 
-  // Start with 1 blank single row as per UI Audit P1
+  // Start with 1 blank row
   const [batchRows, setBatchRows] = useState<BatchRow[]>([
     {
       destinationUrl: '',
@@ -97,7 +64,11 @@ export const BulkStudioView: React.FC = () => {
   const hasInvalidRows = batchRows.some(
     (r) => r.destinationUrl.trim().length > 0 && !isValidUrl(r.destinationUrl)
   );
-  const canDispatch = validRowsCount > 0 && !hasInvalidRows && !isProcessing;
+  const canDispatch =
+    validRowsCount > 0 &&
+    !hasInvalidRows &&
+    !isProcessing &&
+    Permissions.canBulkCreate(currentUser?.role);
 
   // Add new editable row
   const handleAddRow = () => {
@@ -122,60 +93,14 @@ export const BulkStudioView: React.FC = () => {
     );
   };
 
-  // Quick preset loader
-  const loadPreset = (type: 'fees' | 'bus' | 'admissions') => {
-    if (type === 'fees') {
-      setBatchRows([
-        {
-          destinationUrl: '',
-          alias: 'apr-fee-201',
-          tag: 'Fee Collection',
-          externalRef: 'INV-2026-201',
-        },
-        {
-          destinationUrl: '',
-          alias: 'apr-fee-202',
-          tag: 'Fee Collection',
-          externalRef: 'INV-2026-202',
-        },
-        {
-          destinationUrl: '',
-          alias: 'apr-fee-203',
-          tag: 'Fee Collection',
-          externalRef: 'INV-2026-203',
-        },
-      ]);
-    } else if (type === 'bus') {
-      setBatchRows([
-        {
-          destinationUrl: '',
-          alias: 'bus-route-12-am',
-          tag: 'Transport Alert',
-          externalRef: 'BUS-RT-12A',
-        },
-        {
-          destinationUrl: '',
-          alias: 'bus-route-14-pm',
-          tag: 'Transport Alert',
-          externalRef: 'BUS-RT-14P',
-        },
-      ]);
-    } else {
-      setBatchRows([
-        {
-          destinationUrl: '',
-          alias: 'adm-merit-2026',
-          tag: 'Admissions 2026',
-          externalRef: 'ADM-MERIT-26',
-        },
-        {
-          destinationUrl: '',
-          alias: 'adm-interview-call',
-          tag: 'Admissions 2026',
-          externalRef: 'ADM-INT-26',
-        },
-      ]);
-    }
+  // Quick preset category tag applicator (sets category tag without injecting mock URLs or dummy invoices)
+  const applyPresetTag = (tag: string) => {
+    setBatchRows((prev) => {
+      if (prev.length === 0) {
+        return [{ destinationUrl: '', alias: '', tag, externalRef: '' }];
+      }
+      return prev.map((r) => ({ ...r, tag }));
+    });
   };
 
   // Handle CSV file upload directly into visual grid
@@ -311,16 +236,18 @@ export const BulkStudioView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-[10px] font-bold uppercase tracking-wider shadow-2xs transition-colors cursor-pointer">
-            <Upload className="w-3.5 h-3.5 text-blue-600" />
-            Upload CSV File
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-          </label>
+          {Permissions.canBulkCreate(currentUser?.role) && (
+            <label className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-[10px] font-bold uppercase tracking-wider shadow-2xs transition-colors cursor-pointer">
+              <Upload className="w-3.5 h-3.5 text-blue-600" />
+              Upload CSV File
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+            </label>
+          )}
           <button
             onClick={downloadSampleTemplate}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 text-[10px] font-bold uppercase tracking-wider shadow-2xs transition-colors"
@@ -345,7 +272,7 @@ export const BulkStudioView: React.FC = () => {
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
             <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              Quick Templates
+              Campaign Category Tags
             </span>
             <span className="text-[11px] text-slate-400">
               {batchRows.length} {batchRows.length === 1 ? 'Link' : 'Links'} in Staging
@@ -354,20 +281,20 @@ export const BulkStudioView: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             <button
-              onClick={() => loadPreset('fees')}
+              onClick={() => applyPresetTag('Fee Collection')}
               className="p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50/60 hover:border-blue-300 text-left transition flex items-start gap-2.5"
             >
               <div className="w-7 h-7 rounded bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
                 <GraduationCap className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-xs font-bold text-slate-800">Fee Notice Batch</div>
-                <div className="text-[10px] text-slate-500 mt-0.5">3 Class 10 Links</div>
+                <div className="text-xs font-bold text-slate-800">Fee Collection</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Tag: Fee Collection</div>
               </div>
             </button>
 
             <button
-              onClick={() => loadPreset('bus')}
+              onClick={() => applyPresetTag('Transport Alert')}
               className="p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-emerald-50/60 hover:border-emerald-300 text-left transition flex items-start gap-2.5"
             >
               <div className="w-7 h-7 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
@@ -375,12 +302,12 @@ export const BulkStudioView: React.FC = () => {
               </div>
               <div>
                 <div className="text-xs font-bold text-slate-800">Transport Alerts</div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Route 12 & 14 Broadcast</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Tag: Transport Alert</div>
               </div>
             </button>
 
             <button
-              onClick={() => loadPreset('admissions')}
+              onClick={() => applyPresetTag('Admissions 2026')}
               className="p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-purple-50/60 hover:border-purple-300 text-left transition flex items-start gap-2.5"
             >
               <div className="w-7 h-7 rounded bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 mt-0.5">
@@ -388,7 +315,7 @@ export const BulkStudioView: React.FC = () => {
               </div>
               <div>
                 <div className="text-xs font-bold text-slate-800">Admissions 2026</div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Merit List & Interviews</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Tag: Admissions 2026</div>
               </div>
             </button>
           </div>
@@ -434,34 +361,40 @@ export const BulkStudioView: React.FC = () => {
           </div>
 
           <div className="pt-2 flex items-center gap-2">
-            <button
-              onClick={handleStartBulk}
-              disabled={!canDispatch}
-              aria-label="Dispatch Batch Creation"
-              className="w-full flex items-center justify-center gap-1.5 px-4 py-2 rounded text-xs font-bold shadow-xs transition bg-[#0F6CBD] hover:bg-[#0c599b] text-white disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed"
-            >
-              {isProcessing ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  Processing In Background...
-                </>
-              ) : validRowsCount === 0 ? (
-                <>
-                  <Play className="w-3.5 h-3.5 fill-current opacity-60" />
-                  Enter Valid URL To Dispatch
-                </>
-              ) : hasInvalidRows ? (
-                <>
-                  <AlertCircle className="w-3.5 h-3.5 opacity-60" />
-                  Fix Invalid URLs in Table
-                </>
-              ) : (
-                <>
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  Dispatch Batch ({validRowsCount} {validRowsCount === 1 ? 'Link' : 'Links'})
-                </>
-              )}
-            </button>
+            {Permissions.canBulkCreate(currentUser?.role) ? (
+              <button
+                onClick={handleStartBulk}
+                disabled={!canDispatch}
+                aria-label="Dispatch Batch Creation"
+                className="w-full flex items-center justify-center gap-1.5 px-4 py-2 rounded text-xs font-bold shadow-xs transition bg-[#0F6CBD] hover:bg-[#0c599b] text-white disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed"
+              >
+                {isProcessing ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Processing In Background...
+                  </>
+                ) : validRowsCount === 0 ? (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-current opacity-60" />
+                    Enter Valid URL To Dispatch
+                  </>
+                ) : hasInvalidRows ? (
+                  <>
+                    <AlertCircle className="w-3.5 h-3.5 opacity-60" />
+                    Fix Invalid URLs in Table
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    Dispatch Batch ({validRowsCount} {validRowsCount === 1 ? 'Link' : 'Links'})
+                  </>
+                )}
+              </button>
+            ) : (
+              <div className="w-full py-2 px-3 text-center bg-slate-100 border border-slate-200 rounded text-xs text-slate-500 font-medium">
+                Read-only auditor mode: Bulk creation disabled
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -479,12 +412,14 @@ export const BulkStudioView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleAddRow}
-              className="flex items-center gap-1 px-3 py-1 rounded bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-300 shadow-2xs transition"
-            >
-              <Plus className="w-3.5 h-3.5 text-blue-600" /> Add Link Row
-            </button>
+            {Permissions.canBulkCreate(currentUser?.role) && (
+              <button
+                onClick={handleAddRow}
+                className="flex items-center gap-1 px-3 py-1 rounded bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-300 shadow-2xs transition"
+              >
+                <Plus className="w-3.5 h-3.5 text-blue-600" /> Add Link Row
+              </button>
+            )}
             {batchResults.length > 0 && (
               <button
                 onClick={handleExportResults}

@@ -16,6 +16,8 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 
+import { Permissions } from '../../utils/rbac';
+
 export type ActiveModule =
   | 'overview'
   | 'links'
@@ -35,6 +37,7 @@ interface RailProps {
   setActiveTab: (tab: ActiveModule) => void;
   linksCount: number;
   abuseCount: number;
+  currentUser?: any;
 }
 
 export const Rail: React.FC<RailProps> = ({
@@ -42,26 +45,32 @@ export const Rail: React.FC<RailProps> = ({
   setActiveTab,
   linksCount,
   abuseCount,
+  currentUser,
 }) => {
-  const navItems: {
+  const userRole = currentUser?.role;
+
+  const allNavItems: {
     id: ActiveModule;
     path: string;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
     badge?: number | null;
+    visible: boolean;
   }[] = [
-    { id: 'overview', path: '/', label: 'Home', icon: LayoutDashboard },
-    { id: 'links', path: '/links', label: 'Links', icon: Link2, badge: linksCount > 0 ? linksCount : null },
-    { id: 'bulk', path: '/bulk', label: 'Bulk CSV', icon: FileSpreadsheet },
-    { id: 'outcomes', path: '/outcomes', label: 'Outcomes', icon: DollarSign },
-    { id: 'qr', path: '/qr', label: 'QR Codes', icon: QrCode },
-    { id: 'analytics', path: '/reports', label: 'Reports', icon: BarChart3 },
-    { id: 'tenants', path: '/tenants', label: 'Tenants', icon: Building2 },
-    { id: 'users', path: '/users', label: 'Users', icon: Users },
-    { id: 'domains', path: '/domains', label: 'Domains', icon: Globe },
-    { id: 'abuse', path: '/abuse', label: 'Abuse', icon: ShieldAlert, badge: abuseCount > 0 ? abuseCount : null },
-    { id: 'apikeys', path: '/apikeys', label: 'API Keys', icon: Key },
+    { id: 'overview', path: '/', label: 'Home', icon: LayoutDashboard, visible: true },
+    { id: 'links', path: '/links', label: 'Links', icon: Link2, badge: linksCount > 0 ? linksCount : null, visible: true },
+    { id: 'bulk', path: '/bulk', label: 'Bulk CSV', icon: FileSpreadsheet, visible: Permissions.canBulkCreate(userRole) },
+    { id: 'outcomes', path: '/outcomes', label: 'Outcomes', icon: DollarSign, visible: true },
+    { id: 'qr', path: '/qr', label: 'QR Codes', icon: QrCode, visible: true },
+    { id: 'analytics', path: '/reports', label: 'Reports', icon: BarChart3, visible: true },
+    { id: 'tenants', path: '/tenants', label: 'Tenants', icon: Building2, visible: Permissions.canManageTenants(userRole) },
+    { id: 'users', path: '/users', label: 'Users', icon: Users, visible: Permissions.canViewUsers(userRole) },
+    { id: 'domains', path: '/domains', label: 'Domains', icon: Globe, visible: Permissions.canManageDomains(userRole) },
+    { id: 'abuse', path: '/abuse', label: 'Abuse', icon: ShieldAlert, badge: abuseCount > 0 ? abuseCount : null, visible: Permissions.canManageAbuse(userRole) },
+    { id: 'apikeys', path: '/apikeys', label: 'API Keys', icon: Key, visible: Permissions.canManageApiKeys(userRole) },
   ];
+
+  const navItems = allNavItems.filter((item) => item.visible);
 
   const handleNavClick = (e: React.MouseEvent, id: ActiveModule, path: string) => {
     e.preventDefault();

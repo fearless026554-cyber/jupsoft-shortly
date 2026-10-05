@@ -17,12 +17,14 @@ import { UserItem, api, exportToCsv } from '../../api';
 import { usePagination } from '../../hooks/usePagination';
 import { Pagination } from '../ui/Pagination';
 import { TableSkeleton } from '../ui/Skeleton';
+import { Permissions } from '../../utils/rbac';
 
 interface UsersViewProps {
   onOpenInviteModal: () => void;
+  currentUser?: any;
 }
 
-export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal }) => {
+export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, currentUser }) => {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -140,13 +142,15 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal }) => {
             <Download className="w-3.5 h-3.5 text-slate-400" />
             Export
           </button>
-          <button
-            onClick={onOpenInviteModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold shadow-xs transition"
-          >
-            <UserPlus className="w-4 h-4" />
-            Invite User
-          </button>
+          {Permissions.canManageUsers(currentUser?.role) && (
+            <button
+              onClick={onOpenInviteModal}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold shadow-xs transition"
+            >
+              <UserPlus className="w-4 h-4" />
+              Invite User
+            </button>
+          )}
         </div>
       </div>
 

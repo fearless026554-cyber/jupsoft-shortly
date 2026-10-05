@@ -50,12 +50,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleFillDemo = () => {
-    setEmail('admin@jupsoft.com');
-    setPassword('Admin@Jupsoft2026!');
-    setError(null);
-  };
-
   return (
     <div className="min-h-screen bg-[#071320] text-slate-100 flex flex-col justify-center items-center px-4 relative overflow-hidden select-none">
       {/* Background Ambient Glow */}
@@ -154,7 +148,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {/* Remember Me & Demo Fill */}
+            {/* Remember Me */}
             <div className="flex items-center justify-between pt-1">
               <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400 hover:text-slate-300">
                 <input
@@ -164,16 +158,6 @@ export default function LoginPage() {
                 />
                 <span>Remember session</span>
               </label>
-
-              {/* 1-Click Demo Fill */}
-              <button
-                type="button"
-                onClick={handleFillDemo}
-                className="text-xs inline-flex items-center gap-1.5 text-amber-400 hover:text-amber-300 bg-amber-950/40 border border-amber-800/60 px-2 py-0.5 rounded font-mono transition"
-                title="Fill Super Admin Credentials"
-              >
-                <Sparkles className="w-3 h-3 text-amber-400" /> Demo Creds
-              </button>
             </div>
 
             {/* Submit Button */}

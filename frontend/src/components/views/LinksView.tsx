@@ -27,6 +27,7 @@ import { usePagination } from '../../hooks/usePagination';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { TableSkeleton } from '../ui/Skeleton';
 import { Pagination } from '../ui/Pagination';
+import { Permissions } from '../../utils/rbac';
 
 interface LinksViewProps {
   links: LinkItem[];
@@ -38,6 +39,7 @@ interface LinksViewProps {
   onSelectQrLink: (link: LinkItem) => void;
   onArchiveLink: (id: string) => void;
   activeDrawerLinkId?: string;
+  currentUser?: any;
 }
 
 export const LinksView: React.FC<LinksViewProps> = ({
@@ -50,6 +52,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
   onSelectQrLink,
   onArchiveLink,
   activeDrawerLinkId,
+  currentUser,
 }) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -211,13 +214,15 @@ export const LinksView: React.FC<LinksViewProps> = ({
             Export
           </button>
 
-          <button
-            onClick={onOpenCreateModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0F6CBD] hover:bg-[#0c599b] text-white text-[10px] font-bold uppercase tracking-wider shadow-xs transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Create Link
-          </button>
+          {Permissions.canCreateLinks(currentUser?.role) && (
+            <button
+              onClick={onOpenCreateModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0F6CBD] hover:bg-[#0c599b] text-white text-[10px] font-bold uppercase tracking-wider shadow-xs transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Create Link
+            </button>
+          )}
         </div>
       </div>
 
@@ -381,24 +386,26 @@ export const LinksView: React.FC<LinksViewProps> = ({
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
 
-                      <button
-                        onClick={() => {
-                          setConfirmConfig({
-                            isOpen: true,
-                            title: 'Archive Link',
-                            message: `Are you sure you want to archive the link ${defaultDomain}/${link.short_code}?`,
-                            onConfirm: () => {
-                              onArchiveLink(link.id);
-                              setConfirmConfig(prev => ({ ...prev, isOpen: false }));
-                            }
-                          });
-                        }}
-                        aria-label="Archive Short Link"
-                        title="Archive Short Link"
-                        className="p-1.5 ml-3 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600 transition cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {Permissions.canEditLinks(currentUser?.role) && (
+                        <button
+                          onClick={() => {
+                            setConfirmConfig({
+                              isOpen: true,
+                              title: 'Archive Link',
+                              message: `Are you sure you want to archive the link ${defaultDomain}/${link.short_code}?`,
+                              onConfirm: () => {
+                                onArchiveLink(link.id);
+                                setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+                              }
+                            });
+                          }}
+                          aria-label="Archive Short Link"
+                          title="Archive Short Link"
+                          className="p-1.5 ml-3 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600 transition cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )))}
@@ -416,7 +423,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
                             ? 'Try adjusting your search or filters.' 
                             : 'Get started by creating your first short link.'}
                         </p>
-                        {!searchQuery && statusFilter === 'all' && (
+                        {!searchQuery && statusFilter === 'all' && Permissions.canCreateLinks(currentUser?.role) && (
                           <button
                             onClick={onOpenCreateModal}
                             className="mt-3 flex items-center gap-2 px-5 py-2 rounded-lg bg-[#0F6CBD] hover:bg-blue-700 text-white text-sm font-bold shadow-xs transition-colors mx-auto"

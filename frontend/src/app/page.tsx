@@ -28,6 +28,7 @@ import { CreateTenantModal } from '../components/modals/CreateTenantModal';
 import { InviteUserModal } from '../components/modals/InviteUserModal';
 import { CreateApiKeyModal } from '../components/modals/CreateApiKeyModal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { Permissions } from '../utils/rbac';
 
 // Route mapping for full semantic routing
 const MODULE_ROUTES: Record<ActiveModule, string> = {
@@ -81,11 +82,29 @@ export default function ShortlyCRMApp() {
   const [searchQuery, setSearchQuery] = useState('');
   const [abuseCount, setAbuseCount] = useState<number>(0);
 
+  const isTabAllowed = (tab: ActiveModule, role?: string): boolean => {
+    switch (tab) {
+      case 'tenants':
+        return Permissions.canManageTenants(role);
+      case 'users':
+        return Permissions.canViewUsers(role);
+      case 'domains':
+        return Permissions.canManageDomains(role);
+      case 'abuse':
+        return Permissions.canManageAbuse(role);
+      case 'apikeys':
+        return Permissions.canManageApiKeys(role);
+      default:
+        return true;
+    }
+  };
+
   // Synchronize route with URL pathname & popstate events
   const handleNavigate = (tab: ActiveModule) => {
-    setActiveTab(tab);
+    const targetTab = isTabAllowed(tab, currentUser?.role) ? tab : 'overview';
+    setActiveTab(targetTab);
     if (typeof window !== 'undefined') {
-      const targetPath = MODULE_ROUTES[tab] || '/';
+      const targetPath = MODULE_ROUTES[targetTab] || '/';
       if (window.location.pathname !== targetPath) {
         window.history.pushState(null, '', targetPath);
       }
@@ -98,14 +117,26 @@ export default function ShortlyCRMApp() {
       const path = window.location.pathname.replace(/\/$/, '') || '/';
       const matched = ROUTE_TO_MODULE[path];
       if (matched) {
-        setActiveTab(matched);
+        if (isTabAllowed(matched, currentUser?.role)) {
+          setActiveTab(matched);
+        } else {
+          setActiveTab('overview');
+          window.history.replaceState(null, '', '/');
+        }
       }
     };
 
     syncRouteFromPath();
     window.addEventListener('popstate', syncRouteFromPath);
     return () => window.removeEventListener('popstate', syncRouteFromPath);
-  }, []);
+  }, [currentUser]);
+
+  // Clamp current tab if role restrictions change
+  useEffect(() => {
+    if (currentUser && !isTabAllowed(activeTab, currentUser?.role)) {
+      handleNavigate('overview');
+    }
+  }, [currentUser, activeTab]);
 
   // Verify authentication on mount
   useEffect(() => {
@@ -254,6 +285,7 @@ export default function ShortlyCRMApp() {
         setActiveTab={handleNavigate}
         linksCount={links.length}
         abuseCount={abuseCount}
+        currentUser={currentUser}
       />
 
       {/* 2. Main Application Container */}
@@ -289,6 +321,7 @@ export default function ShortlyCRMApp() {
               onNavigateToOutcomes={() => handleNavigate('outcomes')}
               onSelectDrawerLink={(link) => setDrawerLink(link)}
               onOpenCreateModal={() => setIsCreateLinkModalOpen(true)}
+              currentUser={currentUser}
             />
           )}
 
@@ -307,14 +340,15 @@ export default function ShortlyCRMApp() {
               }}
               onArchiveLink={handleArchiveLink}
               activeDrawerLinkId={drawerLink?.id}
+              currentUser={currentUser}
             />
           )}
 
           {/* Module 3: Bulk CSV Studio */}
-          {activeTab === 'bulk' && <BulkStudioView />}
+          {activeTab === 'bulk' && <BulkStudioView currentUser={currentUser} />}
 
           {/* Module 4: Outcomes & Fee Ledger */}
-          {activeTab === 'outcomes' && <OutcomesView links={links} />}
+          {activeTab === 'outcomes' && <OutcomesView links={links} currentUser={currentUser} />}
 
           {/* Module 5: QR Code Studio */}
           {activeTab === 'qr' && (
@@ -344,20 +378,29 @@ export default function ShortlyCRMApp() {
 
           {/* Module 8: Users & RBAC */}
           {activeTab === 'users' && (
-            <UsersView onOpenInviteModal={() => setIsInviteUserModalOpen(true)} />
+            <UsersView
+              onOpenInviteModal={() => setIsInviteUserModalOpen(true)}
+              currentUser={currentUser}
+            />
           )}
 
           {/* Module 9: Domains & TRAI DLT */}
-          {activeTab === 'domains' && <DomainsView />}
+          {activeTab === 'domains' && <DomainsView currentUser={currentUser} />}
 
           {/* Module 10: Abuse Quarantine & Killswitch */}
           {activeTab === 'abuse' && (
-            <AbuseView onRefreshBadge={() => setAbuseCount((prev) => Math.max(0, prev - 1))} />
+            <AbuseView
+              onRefreshBadge={() => setAbuseCount((prev) => Math.max(0, prev - 1))}
+              currentUser={currentUser}
+            />
           )}
 
           {/* Module 11: Developer API Keys */}
           {activeTab === 'apikeys' && (
-            <ApiKeysView onOpenCreateKeyModal={() => setIsCreateApiKeyModalOpen(true)} />
+            <ApiKeysView
+              onOpenCreateKeyModal={() => setIsCreateApiKeyModalOpen(true)}
+              currentUser={currentUser}
+            />
           )}
 
           {/* Module 12: Help & TRAI Knowledge Base */}

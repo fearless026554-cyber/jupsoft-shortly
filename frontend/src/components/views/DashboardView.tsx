@@ -17,6 +17,7 @@ import { LinkItem, api } from '../../api';
 import { useTenantDomains } from '../../hooks/useTenantDomains';
 import { formatMoney, formatNumber } from '../../utils/formatters';
 import { CardSkeleton, TableSkeleton, Skeleton } from '../ui/Skeleton';
+import { Permissions } from '../../utils/rbac';
 
 interface DashboardViewProps {
   links: LinkItem[];
@@ -25,6 +26,7 @@ interface DashboardViewProps {
   onNavigateToOutcomes: () => void;
   onSelectDrawerLink: (link: LinkItem) => void;
   onOpenCreateModal: () => void;
+  currentUser?: any;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -34,6 +36,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateToOutcomes,
   onSelectDrawerLink,
   onOpenCreateModal,
+  currentUser,
 }) => {
   const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d' | 'ytd'>('30d');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -272,12 +275,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             <p className="text-xs text-slate-500 max-w-xs mx-auto">
                               Start by creating your first short link to see analytics data.
                             </p>
-                            <button
-                              onClick={onOpenCreateModal}
-                              className="mt-2 px-4 py-1.5 rounded-lg bg-[#0F6CBD] hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors"
-                            >
-                              Create Short Link
-                            </button>
+                            {Permissions.canCreateLinks(currentUser?.role) && (
+                              <button
+                                onClick={onOpenCreateModal}
+                                className="mt-2 px-4 py-1.5 rounded-lg bg-[#0F6CBD] hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors"
+                              >
+                                Create Short Link
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -306,14 +311,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">System is waiting for traffic events.</p>
               </div>
             ) : (
-              links.slice(0, 4).map((l, idx) => (
+              links.slice(0, 4).map((l) => (
                 <div key={l.id} className="p-2 rounded bg-slate-50 border border-slate-100 space-y-1 group hover:border-slate-300 transition">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-700 text-[10px] uppercase tracking-wider truncate mr-2">
                       {l.tag || (l.alias ? l.alias : 'Campaign')}
                     </span>
                     <span className="text-[9px] text-slate-400 font-mono">
-                      {idx === 0 ? 'Just now' : `${idx * 2}m ago`}
+                      {l.created_at
+                        ? new Date(l.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : 'Active'}
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono flex items-center justify-between">

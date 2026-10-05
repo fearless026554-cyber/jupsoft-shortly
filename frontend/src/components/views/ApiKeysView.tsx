@@ -25,17 +25,17 @@ import { usePagination } from '../../hooks/usePagination';
 import { Pagination } from '../ui/Pagination';
 import { TableSkeleton } from '../ui/Skeleton';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { Permissions } from '../../utils/rbac';
 
 interface ApiKeysViewProps {
   onOpenCreateKeyModal: () => void;
+  currentUser?: any;
 }
 
-export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal }) => {
+export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, currentUser }) => {
   const [keys, setKeys] = useState<any[]>([]);
   const pagination = usePagination(keys, 10);
   const [loading, setLoading] = useState(true);
-  const [copiedKey, setCopiedKey] = useState(false);
-  const [showKey, setShowKey] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -47,17 +47,6 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal }
     message: '',
     onConfirm: () => {},
   });
-
-  // Interactive Webhook Ping Simulator State
-  const [selectedIntegration, setSelectedIntegration] = useState('erp_fee');
-  const [isPinging, setIsPinging] = useState(false);
-  const [pingResult, setPingResult] = useState<{
-    status: number;
-    latency: string;
-    target: string;
-    verified: boolean;
-    timestamp: string;
-  } | null>(null);
 
   const loadKeys = async () => {
     setLoading(true);
@@ -106,48 +95,6 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal }
     });
   };
 
-  const handleCopyMasterKey = () => {
-    navigator.clipboard.writeText('Server-side managed key');
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2000);
-  };
-
-  const handleTestPing = async () => {
-    setIsPinging(true);
-    setPingResult(null);
-
-    // Call real health/summary endpoint to measure real backend roundtrip
-    const start = performance.now();
-    try {
-      await api.getHealth();
-      const end = performance.now();
-      const ms = (end - start).toFixed(1);
-
-      setPingResult({
-        status: 200,
-        latency: `${ms} ms`,
-        target:
-          selectedIntegration === 'erp_fee'
-            ? 'eConnect ERP Fee Ingestion Gateway'
-            : selectedIntegration === 'telecom_sms'
-            ? 'TRAI DLT Airtel / Jio SMS Gateway'
-            : 'Payment Gateway Settlement Webhook',
-        verified: true,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-    } catch {
-      setPingResult({
-        status: 500,
-        latency: '> 100 ms',
-        target: 'Integration Gateway',
-        verified: false,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-    } finally {
-      setIsPinging(false);
-    }
-  };
-
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
       {/* Header Banner */}
@@ -177,15 +124,17 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal }
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <button
-            onClick={onOpenCreateKeyModal}
-            aria-label="Create New API Key"
-            title="Create New API Key"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold shadow-xs transition"
-          >
-            <Plus className="w-4 h-4" />
-            Create New API Key
-          </button>
+          {Permissions.canManageApiKeys(currentUser?.role) && (
+            <button
+              onClick={onOpenCreateKeyModal}
+              aria-label="Create New API Key"
+              title="Create New API Key"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold shadow-xs transition"
+            >
+              <Plus className="w-4 h-4" />
+              Create New API Key
+            </button>
+          )}
         </div>
       </div>
 
@@ -260,15 +209,17 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal }
                       <p className="text-[11px] text-slate-500 max-w-sm">
                         Generate scoped API keys for school ERP webhooks, SMS dispatchers, and automated clickstream analytics.
                       </p>
-                      <button
-                        onClick={onOpenCreateKeyModal}
-                        aria-label="Create First API Key"
-                        title="Create First API Key"
-                        className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold transition cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        Create New API Key
-                      </button>
+                      {Permissions.canManageApiKeys(currentUser?.role) && (
+                        <button
+                          onClick={onOpenCreateKeyModal}
+                          aria-label="Create First API Key"
+                          title="Create First API Key"
+                          className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#E42527] hover:bg-[#c91e20] text-white text-xs font-bold transition cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Create New API Key
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -304,14 +255,16 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal }
                     </td>
 
                     <td className="px-3.5 py-2.5 text-right">
-                      <button
-                        onClick={() => handleRevoke(k.id, k.name)}
-                        aria-label={`Revoke API Key ${k.name}`}
-                        title={`Revoke API Key ${k.name}`}
-                        className="px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition"
-                      >
-                        Revoke Key
-                      </button>
+                      {Permissions.canManageApiKeys(currentUser?.role) && (
+                        <button
+                          onClick={() => handleRevoke(k.id, k.name)}
+                          aria-label={`Revoke API Key ${k.name}`}
+                          title={`Revoke API Key ${k.name}`}
+                          className="px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition"
+                        >
+                          Revoke Key
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))
