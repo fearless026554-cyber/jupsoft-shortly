@@ -256,12 +256,22 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_tenant_time ON audit_log(tenant_id, created_at DESC);
 
 -- ============================================================================
--- Row-Level Security (RLS) Policies
+-- Row-Level Security (RLS) Policies (DB-Enforced via FORCE RLS)
 -- ============================================================================
 ALTER TABLE links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE links FORCE ROW LEVEL SECURITY;
+
 ALTER TABLE click_daily ENABLE ROW LEVEL SECURITY;
+ALTER TABLE click_daily FORCE ROW LEVEL SECURITY;
+
 ALTER TABLE outcomes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE outcomes FORCE ROW LEVEL SECURITY;
+
 ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE api_keys FORCE ROW LEVEL SECURITY;
+
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users FORCE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
     DROP POLICY IF EXISTS tenant_isolation_links ON links;
@@ -304,4 +314,33 @@ DO $$ BEGIN
             OR current_setting('app.is_super_admin', true) = 'true'
         );
 END $$;
+
+DO $$ BEGIN
+    DROP POLICY IF EXISTS tenant_isolation_api_keys ON api_keys;
+    CREATE POLICY tenant_isolation_api_keys ON api_keys
+        FOR ALL
+        USING (
+            tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid
+            OR current_setting('app.is_super_admin', true) = 'true'
+        )
+        WITH CHECK (
+            tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid
+            OR current_setting('app.is_super_admin', true) = 'true'
+        );
+END $$;
+
+DO $$ BEGIN
+    DROP POLICY IF EXISTS tenant_isolation_users ON users;
+    CREATE POLICY tenant_isolation_users ON users
+        FOR ALL
+        USING (
+            tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid
+            OR current_setting('app.is_super_admin', true) = 'true'
+        )
+        WITH CHECK (
+            tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid
+            OR current_setting('app.is_super_admin', true) = 'true'
+        );
+END $$;
+
 

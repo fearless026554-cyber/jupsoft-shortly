@@ -271,10 +271,15 @@ export const api = {
   },
 
   // Analytics
-  async getAnalyticsSummary() {
-    return dedupeGet(`${API_BASE_URL}/analytics/summary`, async () => {
+  async getAnalyticsSummary(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.set('startDate', startDate);
+    if (endDate) params.set('endDate', endDate);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const url = `${API_BASE_URL}/analytics/summary${queryString}`;
+    return dedupeGet(url, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/analytics/summary`, { headers });
+        const res = await fetch(url, { headers });
         const json = await res.json();
         return json.success ? json.data : null;
       } catch {

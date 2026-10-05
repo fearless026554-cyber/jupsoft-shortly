@@ -44,10 +44,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const { defaultDomain } = useTenantDomains();
 
   React.useEffect(() => {
-    api.getAnalyticsSummary().then((data) => {
-      if (data) setSummary(data);
-    }).catch(() => {});
-  }, []);
+    const now = new Date();
+    let startDate: string | undefined;
+    const endDate: string = now.toISOString().slice(0, 10);
+
+    if (timeRange === 'today') {
+      startDate = endDate;
+    } else if (timeRange === '7d') {
+      const d = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+      startDate = d.toISOString().slice(0, 10);
+    } else if (timeRange === '30d') {
+      const d = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+      startDate = d.toISOString().slice(0, 10);
+    } else if (timeRange === 'ytd') {
+      startDate = `${now.getUTCFullYear()}-01-01`;
+    }
+
+    api
+      .getAnalyticsSummary(startDate, endDate)
+      .then((data) => {
+        if (data) setSummary(data);
+      })
+      .catch(() => {});
+  }, [timeRange]);
 
   const totalClicks = Number(
     summary?.total_clicks || links.reduce((sum, l) => sum + Number(l.click_count || 0), 0)

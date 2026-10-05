@@ -83,24 +83,54 @@ export class AnalyticsController {
 
   @Get('summary')
   @RequireScope(ApiScopes.ANALYTICS_READ)
-  async getTenantSummary(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+  async getTenantSummary(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
+    const dto = analyticsQuerySchema.parse({ startDate, endDate });
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
 
     const summary = await this.db.withTenantContext(tenantId, async (client) => {
+      const dateConditionDaily = dto.startDate && dto.endDate
+        ? `AND date >= '${dto.startDate}' AND date <= '${dto.endDate}'`
+        : dto.startDate
+        ? `AND date >= '${dto.startDate}'`
+        : dto.endDate
+        ? `AND date <= '${dto.endDate}'`
+        : `AND date >= CURRENT_DATE - INTERVAL '30 days'`;
+
+      const dateConditionOutcomes = dto.startDate && dto.endDate
+        ? `AND occurred_at >= '${dto.startDate}'::date AND occurred_at <= ('${dto.endDate}'::date + INTERVAL '1 day')`
+        : dto.startDate
+        ? `AND occurred_at >= '${dto.startDate}'::date`
+        : dto.endDate
+        ? `AND occurred_at <= ('${dto.endDate}'::date + INTERVAL '1 day')`
+        : `AND occurred_at >= CURRENT_DATE - INTERVAL '30 days'`;
+
+      const dateConditionLinks = dto.startDate && dto.endDate
+        ? `AND created_at >= '${dto.startDate}'::date AND created_at <= ('${dto.endDate}'::date + INTERVAL '1 day')`
+        : dto.startDate
+        ? `AND created_at >= '${dto.startDate}'::date`
+        : dto.endDate
+        ? `AND created_at <= ('${dto.endDate}'::date + INTERVAL '1 day')`
+        : `AND created_at >= CURRENT_DATE - INTERVAL '30 days'`;
+
       const stats = await client.query(
         `SELECT 
-          (SELECT COUNT(id) FROM links WHERE tenant_id = $1 AND status = 'active' AND created_at >= CURRENT_DATE - INTERVAL '30 days') AS total_active_links,
-          (SELECT COALESCE(SUM(click_count), 0) FROM links WHERE tenant_id = $1 AND status = 'active') AS total_clicks,
-          (SELECT COALESCE(SUM(unique_clicks), 0) FROM click_daily WHERE tenant_id = $1 AND date >= CURRENT_DATE - INTERVAL '30 days') AS total_unique_clicks,
-          (SELECT COALESCE(SUM(bot_clicks), 0) FROM click_daily WHERE tenant_id = $1 AND date >= CURRENT_DATE - INTERVAL '30 days') AS total_bot_clicks,
-          (SELECT COUNT(id) FROM outcomes WHERE tenant_id = $1 AND occurred_at >= CURRENT_DATE - INTERVAL '30 days') AS total_outcomes,
-          (SELECT COALESCE(SUM(value), 0) FROM outcomes WHERE tenant_id = $1 AND occurred_at >= CURRENT_DATE - INTERVAL '30 days') AS total_revenue_attributed`,
+          (SELECT COUNT(id) FROM links WHERE tenant_id = $1 AND status = 'active' ${dateConditionLinks}) AS total_active_links,
+          (SELECT COALESCE(SUM(clicks), 0) FROM click_daily WHERE tenant_id = $1 ${dateConditionDaily}) AS total_clicks,
+          (SELECT COALESCE(SUM(unique_clicks), 0) FROM click_daily WHERE tenant_id = $1 ${dateConditionDaily}) AS total_unique_clicks,
+          (SELECT COALESCE(SUM(bot_clicks), 0) FROM click_daily WHERE tenant_id = $1 ${dateConditionDaily}) AS total_bot_clicks,
+          (SELECT COUNT(id) FROM outcomes WHERE tenant_id = $1 ${dateConditionOutcomes}) AS total_outcomes,
+          (SELECT COALESCE(SUM(value), 0) FROM outcomes WHERE tenant_id = $1 ${dateConditionOutcomes}) AS total_revenue_attributed`,
         [tenantId]
       );
       
       const detailsRes = await client.query(
-        `SELECT by_device, by_os, by_browser, by_country, by_referrer FROM click_daily WHERE tenant_id = $1 AND date >= CURRENT_DATE - INTERVAL '30 days'`,
+        `SELECT by_device, by_os, by_browser, by_country, by_referrer FROM click_daily WHERE tenant_id = $1 ${dateConditionDaily}`,
         [tenantId]
       );
 

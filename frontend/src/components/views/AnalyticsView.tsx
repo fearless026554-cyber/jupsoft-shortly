@@ -34,10 +34,28 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d' | '90d' | 'all'>('30d');
 
-  const loadData = async () => {
+  const loadData = async (range = timeRange) => {
     setLoading(true);
     try {
-      const data = await api.getAnalyticsSummary();
+      const now = new Date();
+      let startDate: string | undefined;
+      const endDate: string = now.toISOString().slice(0, 10);
+
+      if (range === '24h') {
+        const d = new Date(now.getTime() - 24 * 3600 * 1000);
+        startDate = d.toISOString().slice(0, 10);
+      } else if (range === '7d') {
+        const d = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+        startDate = d.toISOString().slice(0, 10);
+      } else if (range === '30d') {
+        const d = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+        startDate = d.toISOString().slice(0, 10);
+      } else if (range === '90d') {
+        const d = new Date(now.getTime() - 90 * 24 * 3600 * 1000);
+        startDate = d.toISOString().slice(0, 10);
+      }
+
+      const data = await api.getAnalyticsSummary(startDate, endDate);
       if (data) setSummary(data);
     } catch (err) {
       console.error('Failed to load analytics summary:', err);
@@ -47,8 +65,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    loadData(timeRange);
+  }, [timeRange]);
 
   const totalClicks = Number(
     summary?.total_clicks || links.reduce((s, l) => s + Number(l.click_count || 0), 0)
@@ -198,7 +216,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
           </div>
 
           <button
-            onClick={loadData}
+            onClick={() => loadData()}
             aria-label="Refresh Analytics Data"
             title="Refresh Analytics Data"
             className="p-2 hover:bg-slate-100 rounded-md text-slate-500 transition cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center border border-slate-200"

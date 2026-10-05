@@ -216,11 +216,11 @@ describe('Real Live E2E & Database Verification (Zero Mocks)', () => {
       },
     });
 
-    expect(idorRes.status).toBe(403);
+    expect(idorRes.status).toBe(404);
     const idorData = await idorRes.json();
     expect(idorData.success).toBe(false);
-    expect(idorData.error?.code).toBe(ErrorCodes.FORBIDDEN);
-    expect(idorData.error?.message).toContain('other organizations');
+    expect(idorData.error?.code).toBe(ErrorCodes.NOT_FOUND);
+    expect(idorData.error?.message).toContain('Bulk job not found');
   });
 
   it('Real Live Test (P1 #12): Token revocation on logout invalidates subsequent requests with 401', async () => {
@@ -328,5 +328,69 @@ describe('Real Live E2E & Database Verification (Zero Mocks)', () => {
     if (userId && db?.pool) {
       await db.pool.query('DELETE FROM users WHERE id = $1', [userId]);
     }
+  });
+
+  it('Real Live Test (P1 #13): Unknown or unverified host returns 404 Domain not registered', async () => {
+    // 1. Request with an unknown external host header
+    const unknownHostRes = await fetch(`http://127.0.0.1:${env.PORT || 3000}/nonexistent`, {
+      headers: {
+        'x-forwarded-host': 'unregistered-stranger-domain.com',
+      },
+    });
+
+    expect(unknownHostRes.status).toBe(404);
+    const unknownHostData = await unknownHostRes.json();
+    expect(unknownHostData.error).toBe('Domain not registered');
+
+    // 2. Request with localhost/default domain recognizes domain and returns 'Short link does not exist'
+    const defaultHostRes = await fetch(`http://127.0.0.1:${env.PORT || 3000}/nonexistent`, {
+      headers: {
+        'host': 'localhost:3000',
+      },
+    });
+
+    expect(defaultHostRes.status).toBe(404);
+    const defaultHostData = await defaultHostRes.json();
+    expect(defaultHostData.error?.message).toBe('Short link does not exist');
+  });
+
+  it('Real Live Test (P1 #15): Analytics summary filters correctly with custom date ranges', async () => {
+    const tenantToken = jwt.sign(
+      {
+        userId: '4a0e8559-e3f9-496f-bca2-6ef990744fe6',
+        tenantId: '11111111-1111-1111-1111-111111111111',
+        role: 'tenant_admin',
+        scopes: ['analytics:read'],
+      },
+      env.JWT_SECRET
+    );
+
+    // Valid date range query
+    const res = await fetch(
+      `${BASE_API}/analytics/summary?startDate=2026-01-01&endDate=2026-12-31`,
+      {
+        headers: { 'Authorization': `Bearer ${tenantToken}` },
+      }
+    );
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(data.data).toBeDefined();
+    expect(data.data.total_clicks).toBeDefined();
+    expect(data.data.total_unique_clicks).toBeDefined();
+    expect(data.data.total_active_links).toBeDefined();
+
+    // Invalid date format query should be rejected by Zod validation
+    const invalidRes = await fetch(
+      `${BASE_API}/analytics/summary?startDate=not-a-date&endDate=2026-12-31`,
+      {
+        headers: { 'Authorization': `Bearer ${tenantToken}` },
+      }
+    );
+
+    expect(invalidRes.status).toBe(400);
+    const invalidData = await invalidRes.json();
+    expect(invalidData.error?.code).toBe(ErrorCodes.VALIDATION_ERROR);
   });
 });

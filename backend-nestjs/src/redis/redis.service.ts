@@ -67,14 +67,20 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await pipeline.exec();
   }
 
-  async getDomainByHostname(hostname: string): Promise<Domain> {
+  async getDomainByHostname(hostname: string): Promise<Domain | null> {
+    const isDefaultHost =
+      hostname === env.DEFAULT_DOMAIN_HOST ||
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1';
+
     const cacheKey = RedisKeyBuilder.domain(hostname);
     const cached = await this.client.get(cacheKey);
 
     if (cached) {
       try {
         const d = JSON.parse(cached);
-        if (d.id) return d as Domain;
+        if (d === null) return null;
+        if (d && d.id) return d as Domain;
       } catch {}
     }
 
@@ -83,7 +89,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       [hostname]
     );
 
-    let domainRecord: Domain;
+    let domainRecord: Domain | null = null;
 
     if (res.rowCount && res.rowCount > 0) {
       domainRecord = {
@@ -91,7 +97,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         type: res.rows[0].type,
         tenantId: res.rows[0].tenant_id,
       } as Domain;
-    } else {
+    } else if (isDefaultHost) {
       const defaultRes = await this.db.pool.query(
         `SELECT id, type, tenant_id FROM domains WHERE id = $1`,
         [env.DEFAULT_DOMAIN_ID]
@@ -99,7 +105,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       domainRecord = (defaultRes.rows[0] as Domain) || { id: env.DEFAULT_DOMAIN_ID, type: 'internal', tenantId: null };
     }
 
-    await this.client.setex(cacheKey, CACHE_TTL.DOMAIN_METADATA_SEC, JSON.stringify(domainRecord));
+    if (domainRecord) {
+      await this.client.setex(cacheKey, CACHE_TTL.DOMAIN_METADATA_SEC, JSON.stringify(domainRecord));
+    } else {
+      await this.client.setex(cacheKey, 60, JSON.stringify(null));
+    }
+
     return domainRecord;
   }
 

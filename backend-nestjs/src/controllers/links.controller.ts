@@ -33,6 +33,7 @@ import {
   ScreeningProvider,
   ScreeningVerdict,
   QueueNames,
+  QueueRetryOptions,
   UserRoles,
 } from '../constants/index.js';
 
@@ -180,10 +181,14 @@ export class LinksController {
     await this.redis.setCachedLink(domainId, actualCode, cached);
 
     this.screeningQueue
-      .add(JobNames.SCREEN_URL, {
-        linkId: linkRow.id,
-        destinationUrl: linkRow.destination_url || linkRow.destinationUrl || dto.destinationUrl,
-      })
+      .add(
+        JobNames.SCREEN_URL,
+        {
+          linkId: linkRow.id,
+          destinationUrl: linkRow.destination_url || linkRow.destinationUrl || dto.destinationUrl,
+        },
+        QueueRetryOptions.SCREENING
+      )
       .catch(() => {});
 
     return reply.status(201).send({
@@ -266,7 +271,7 @@ export class LinksController {
     const job = await this.bulkQueue.add(
       JobNames.PROCESS_BULK_LINKS,
       { jobId, tenantId, domainId: defaultDomainId, links: items },
-      { jobId }
+      { jobId, ...QueueRetryOptions.BULK }
     );
 
     return reply.status(202).send({
@@ -303,9 +308,9 @@ export class LinksController {
     }
 
     if (!isSuperAdmin && job.data?.tenantId && job.data.tenantId !== tenantId) {
-      return reply.status(403).send({
+      return reply.status(404).send({
         success: false,
-        error: { code: ErrorCodes.FORBIDDEN, message: 'Access denied: You cannot view bulk jobs from other organizations' },
+        error: { code: ErrorCodes.NOT_FOUND, message: 'Bulk job not found' },
       });
     }
 
@@ -496,7 +501,13 @@ export class LinksController {
     await this.redis.invalidateLink(updated.domain_id, updated.short_code, tenantId, updated.alias);
 
     if (dto.destinationUrl) {
-      this.screeningQueue.add(JobNames.SCREEN_URL, { linkId: updated.id, destinationUrl: updated.destination_url }).catch(() => {});
+      this.screeningQueue
+        .add(
+          JobNames.SCREEN_URL,
+          { linkId: updated.id, destinationUrl: updated.destination_url },
+          QueueRetryOptions.SCREENING
+        )
+        .catch(() => {});
     }
 
     return reply.send({ success: true, data: updated });

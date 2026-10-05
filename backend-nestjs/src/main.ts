@@ -102,7 +102,9 @@ function startLocalDomainGateways(backendPort: number, frontendPort = 5000) {
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter()
+    new FastifyAdapter({
+      trustProxy: env.TRUST_PROXY,
+    })
   );
 
   // Security Headers (disable HSTS on HTTP/local so browsers don't force-upgrade http:// custom domains to https://)

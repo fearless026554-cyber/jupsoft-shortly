@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Req, Res, Headers } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -12,6 +13,7 @@ import {
   JobNames,
   LinkStatus,
   QueueNames,
+  QueueRetryOptions,
   REDIS_KEYS,
   SYSTEM_ROUTES,
   TenantStatus,
@@ -21,6 +23,7 @@ import { env } from '../config/env.js';
 const RESERVED_PATHS = new Set(['api', 'system', 'admin', 'auth', 'dashboard']);
 const isReservedPath = (path: string) => RESERVED_PATHS.has(path.toLowerCase());
 
+@SkipThrottle()
 @Controller()
 export class RedirectController {
   constructor(
@@ -138,16 +141,20 @@ export class RedirectController {
       countryCode: (req.headers['cf-ipcountry'] as string) || undefined,
     };
     this.clicksQueue
-      .add(JobNames.INGEST_CLICK, {
-        linkId: link!.id,
-        tenantId: link!.tenantId,
-        domainId,
-        clickedAt: new Date().toISOString(),
-        ip: geoUa.clientIp,
-        userAgent: geoUa.userAgent,
-        referrer: geoUa.referrer,
-        countryCode: geoUa.countryCode,
-      })
+      .add(
+        JobNames.INGEST_CLICK,
+        {
+          linkId: link!.id,
+          tenantId: link!.tenantId,
+          domainId,
+          clickedAt: new Date().toISOString(),
+          ip: geoUa.clientIp,
+          userAgent: geoUa.userAgent,
+          referrer: geoUa.referrer,
+          countryCode: geoUa.countryCode,
+        },
+        QueueRetryOptions.CLICKS
+      )
       .catch(() => {});
 
     const statusCode = link!.redirectType === 307 ? 307 : 302;
@@ -260,16 +267,20 @@ export class RedirectController {
       countryCode: (req.headers['cf-ipcountry'] as string) || undefined,
     };
     this.clicksQueue
-      .add(JobNames.INGEST_CLICK, {
-        linkId: link!.id,
-        tenantId: link!.tenantId,
-        domainId: link!.domainId,
-        clickedAt: new Date().toISOString(),
-        ip: geoUa.clientIp,
-        userAgent: geoUa.userAgent,
-        referrer: geoUa.referrer,
-        countryCode: geoUa.countryCode,
-      })
+      .add(
+        JobNames.INGEST_CLICK,
+        {
+          linkId: link!.id,
+          tenantId: link!.tenantId,
+          domainId: link!.domainId,
+          clickedAt: new Date().toISOString(),
+          ip: geoUa.clientIp,
+          userAgent: geoUa.userAgent,
+          referrer: geoUa.referrer,
+          countryCode: geoUa.countryCode,
+        },
+        QueueRetryOptions.CLICKS
+      )
       .catch(() => {});
 
     const statusCode = link!.redirectType === 307 ? 307 : 302;

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { RateLimiterGuard } from './common/guards/rate-limiter.guard.js';
 import { DatabaseModule } from './db/database.module.js';
 import { RedisModule } from './redis/redis.module.js';
 import { env } from './config/env.js';
@@ -57,6 +58,10 @@ import { ScreeningProcessor } from './workers/screening.processor.js';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RateLimiterGuard,
     },
     ClickProcessor,
     BulkProcessor,

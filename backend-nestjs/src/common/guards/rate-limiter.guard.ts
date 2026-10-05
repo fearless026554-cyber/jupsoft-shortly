@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { FastifyRequest, FastifyReply } from 'fastify';
+import * as crypto from 'node:crypto';
 import { RedisService } from '../../redis/redis.service.js';
 import { ApiScopes, ErrorCodes, HeaderNames, RATE_LIMITS, REDIS_CONFIG, REDIS_KEYS } from '../../constants/index.js';
 import { env } from '../../config/env.js';
@@ -12,6 +13,11 @@ export class RateLimiterGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const reply = context.switchToHttp().getResponse<FastifyReply>();
 
+    const url = (request.url || '').split('?')[0];
+    if (!url.startsWith('/api') || url.includes('/health')) {
+      return true;
+    }
+
     const auth = (request as any).auth;
     const geoUa = (request as any).geoUa;
 
@@ -20,13 +26,20 @@ export class RateLimiterGuard implements CanActivate {
 
     if (auth) {
       const { keyId, scopes } = auth;
-      const isInternal = scopes.includes(ApiScopes.WILDCARD) || scopes.includes(ApiScopes.ADMIN);
+      const isInternal = scopes?.includes(ApiScopes.WILDCARD) || scopes?.includes(ApiScopes.ADMIN);
       limit = isInternal ? env.RATE_LIMIT_INTERNAL_RPM : env.RATE_LIMIT_STANDARD_RPM;
-      keyIdentifier = keyId || (auth.userId ? `user:${auth.userId}` : `ip:${request.ip || '127.0.0.1'}`);
+      keyIdentifier = keyId ? `apikey:${keyId}` : (auth.userId ? `user:${auth.userId}` : `ip:${request.ip || '127.0.0.1'}`);
     } else {
-      const clientIp = geoUa?.clientIp || request.ip || '127.0.0.1';
-      limit = env.RATE_LIMIT_STANDARD_RPM;
-      keyIdentifier = `ip:${clientIp}`;
+      const xApiKey = request.headers[HeaderNames.X_API_KEY] as string | undefined;
+      if (xApiKey) {
+        const keyHash = crypto.createHash('sha256').update(xApiKey).digest('hex').slice(0, 16);
+        keyIdentifier = `apikey:${keyHash}`;
+        limit = env.RATE_LIMIT_STANDARD_RPM;
+      } else {
+        const clientIp = geoUa?.clientIp || request.ip || '127.0.0.1';
+        limit = env.RATE_LIMIT_STANDARD_RPM;
+        keyIdentifier = `ip:${clientIp}`;
+      }
     }
 
     const now = Math.floor(Date.now() / 1000);
