@@ -92,11 +92,14 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     role user_role NOT NULL DEFAULT 'user',
     status user_status NOT NULL DEFAULT 'active',
+    google_id VARCHAR(255),
+    avatar_url TEXT,
     last_login_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_users_tenant_role ON users(tenant_id, role);
+CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 
 -- 4. Links Table
 CREATE TABLE IF NOT EXISTS links (

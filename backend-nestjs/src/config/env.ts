@@ -66,6 +66,10 @@ const envSchema = z
       .string()
       .url()
       .default('https://safebrowsing.googleapis.com/v4/threatMatches:find'),
+
+    // Google OAuth Authentication
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === 'production') {

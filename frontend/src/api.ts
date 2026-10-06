@@ -514,6 +514,30 @@ export const api = {
     return json;
   },
 
+  async googleLogin(payload: { credential?: string; idToken?: string; code?: string; redirectUri?: string }) {
+    const res = await fetch(`${API_BASE_URL}/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (json.success && json.data?.token) {
+      setAuthToken(json.data.token);
+      setStoredUser(json.data.user);
+    }
+    return json;
+  },
+
+  async getGoogleAuthConfig() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/google/config`);
+      const json = await res.json();
+      return json.success ? json.data : { enabled: false, clientId: null };
+    } catch {
+      return { enabled: false, clientId: null };
+    }
+  },
+
   async logout() {
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {

@@ -393,4 +393,53 @@ describe('Real Live E2E & Database Verification (Zero Mocks)', () => {
     const invalidData = await invalidRes.json();
     expect(invalidData.error?.code).toBe(ErrorCodes.VALIDATION_ERROR);
   });
+
+  it('Real Live Test (Google Auth): GET /auth/google/config returns valid configuration object', async () => {
+    const res = await fetch(`${BASE_API}/auth/google/config`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.data).toBeDefined();
+    expect(typeof body.data.enabled).toBe('boolean');
+  });
+
+  it('Real Live Test (Google Auth): POST /auth/google rejects empty or malformed requests with 400', async () => {
+    const res = await fetch(`${BASE_API}/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.success).toBe(false);
+    expect(body.error?.code).toBe(ErrorCodes.VALIDATION_ERROR);
+  });
+
+  it('Real Live Test (Google Auth): POST /auth/google validates ID token against Google and rejects fake tokens with 401', async () => {
+    const res = await fetch(`${BASE_API}/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idToken: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.fake_payload.fake_signature',
+      }),
+    });
+    expect(res.status).toBe(401);
+    const body = await res.json();
+    expect(body.success).toBe(false);
+    expect(body.error?.code).toBe(ErrorCodes.UNAUTHORIZED);
+    expect(body.error?.message).toContain('Invalid or expired Google token');
+  });
+
+  it('Real Live Test (Google Auth via Next.js Proxy): POST /api/proxy/auth/google forwards properly to backend', async () => {
+    const res = await fetch('http://127.0.0.1:5000/api/proxy/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.success).toBe(false);
+    expect(body.error?.code).toBe(ErrorCodes.VALIDATION_ERROR);
+  });
 });
+
