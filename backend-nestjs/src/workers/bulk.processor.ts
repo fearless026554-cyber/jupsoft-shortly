@@ -26,8 +26,8 @@ export class BulkProcessor extends WorkerHost {
 
       const client = await this.db.pool.connect();
       try {
-        await client.query(`SELECT set_config('${DB_CONTEXT_KEYS.TENANT_ID}', $1, true)`, [tenantId]);
         await client.query('BEGIN');
+        await client.query(`SELECT set_config('${DB_CONTEXT_KEYS.TENANT_ID}', $1, true)`, [tenantId]);
 
         for (let i = 0; i < links.length; i++) {
           const item = links[i];

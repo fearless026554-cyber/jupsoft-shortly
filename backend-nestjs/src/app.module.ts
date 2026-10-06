@@ -26,7 +26,7 @@ import { ScreeningProcessor } from './workers/screening.processor.js';
   imports: [
     ThrottlerModule.forRoot([{
       ttl: 60000,
-      limit: 100, // 100 requests per IP per minute
+      limit: 1000, // 1000 requests per IP per minute
     }]),
     DatabaseModule,
     RedisModule,

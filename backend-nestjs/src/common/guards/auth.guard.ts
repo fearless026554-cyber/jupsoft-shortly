@@ -36,7 +36,6 @@ export class AuthGuard implements CanActivate {
 
     const authHeader = request.headers['authorization'] as string | undefined;
     const xApiKey = request.headers[HeaderNames.X_API_KEY] as string | undefined;
-    const queryApiKey = (request.query as any)?.api_key as string | undefined;
 
     let bearerToken: string | undefined;
     if (authHeader?.startsWith('Bearer ')) {
@@ -64,6 +63,23 @@ export class AuthGuard implements CanActivate {
         }
 
         const decoded = jwt.verify(bearerToken, env.JWT_SECRET) as any;
+
+        // Security C3: Session Versioning Check (invalidates all sessions upon password reset)
+        if (decoded && decoded.userId) {
+          const currentVer = await this.redis.getUserTokenVersion(decoded.userId);
+          const tokenVer = typeof decoded.ver === 'number' ? decoded.ver : 0;
+          if (tokenVer < currentVer) {
+            reply.status(401).send({
+              success: false,
+              error: {
+                code: ErrorCodes.UNAUTHORIZED,
+                message: 'Session has expired or was invalidated due to a security update. Please log in again.',
+              },
+            });
+            return false;
+          }
+        }
+
         const scopes = decoded.scopes || (decoded.role ? (ROLE_SCOPES as any)[decoded.role] : []) || [];
         authData = {
           userId: decoded.userId,
@@ -86,9 +102,9 @@ export class AuthGuard implements CanActivate {
       }
     }
 
-    // 2. Fallback to API Key verification
+    // 2. Fallback to API Key verification (Security H3: Only accept via X-API-Key header or Bearer token, never query string)
     if (!authData) {
-      const apiKey = xApiKey || bearerToken || queryApiKey;
+      const apiKey = xApiKey || (bearerToken && !bearerToken.includes('.') ? bearerToken : undefined);
       if (!apiKey) {
         reply.status(401).send({
           success: false,
@@ -118,10 +134,12 @@ export class AuthGuard implements CanActivate {
           return false;
         }
       } else {
-        const res = await this.db.pool.query(
-          `SELECT id, tenant_id, scopes, revoked_at, expires_at FROM api_keys WHERE key_hash = $1`,
-          [keyHash]
-        );
+        const res = await this.db.withSuperAdminContext(async (client) => {
+          return client.query(
+            `SELECT id, tenant_id, scopes, revoked_at, expires_at FROM api_keys WHERE key_hash = $1`,
+            [keyHash]
+          );
+        });
 
         if (res.rowCount === 0) {
           reply.status(401).send({
@@ -157,7 +175,9 @@ export class AuthGuard implements CanActivate {
         };
 
         await this.redis.client.setex(cacheKey, CACHE_TTL.AUTH_SESSION_SEC, JSON.stringify(authData));
-        this.db.pool.query('UPDATE api_keys SET last_used_at = NOW() WHERE id = $1', [keyRecord.id]).catch(() => {});
+        this.db.withSuperAdminContext(async (client) => {
+          return client.query('UPDATE api_keys SET last_used_at = NOW() WHERE id = $1', [keyRecord.id]);
+        }).catch(() => {});
       }
     }
 

@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend-nestjs/src/db/schema.sql:/docker-entrypoint-initdb.d/init.sql
@@ -24,13 +24,16 @@ services:
     image: redis:7-alpine
     container_name: jupsoft_redis
     restart: always
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: >
+      sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\"; else redis-server --appendonly yes; fi"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -57,7 +60,10 @@ services:
       - PG_DATABASE=${DB_NAME:?DB_NAME is required}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - TRUST_PROXY=${TRUST_PROXY:-true}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - JWT_EXPIRY=${JWT_EXPIRY:-1d}
       - FRONTEND_URL=${FRONTEND_URL:?FRONTEND_URL is required}
       - CORS_ORIGINS=${CORS_ORIGINS:?CORS_ORIGINS is required}
       - DEFAULT_DOMAIN_ID=${DEFAULT_DOMAIN_ID:?DEFAULT_DOMAIN_ID is required}

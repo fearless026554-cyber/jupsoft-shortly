@@ -10,6 +10,7 @@ import {
   QueueNames,
   UA_PATTERNS,
   JobNames,
+  DB_CONTEXT_KEYS,
 } from '../constants/index.js';
 import { ClickIngestJobData } from '../types/index.js';
 import { env } from '../config/env.js';
@@ -134,6 +135,7 @@ export class ClickProcessor extends WorkerHost {
       const client = await this.db.pool.connect();
       try {
         await client.query('BEGIN');
+        await client.query(`SELECT set_config('${DB_CONTEXT_KEYS.IS_SUPER_ADMIN}', 'true', true)`);
 
         const countryCode = geo.code;
 

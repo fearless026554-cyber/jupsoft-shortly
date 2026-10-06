@@ -3,7 +3,7 @@ import { Job } from 'bullmq';
 import { DatabaseService } from '../db/database.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { ScreeningService } from '../services/screening.service.js';
-import { QueueNames, JobNames, LinkStatus, ScreeningVerdict, ScreeningProvider, REDIS_KEYS } from '../constants/index.js';
+import { QueueNames, JobNames, LinkStatus, ScreeningVerdict, ScreeningProvider, REDIS_KEYS, DB_CONTEXT_KEYS } from '../constants/index.js';
 import { UrlScreeningJobData } from '../types/index.js';
 
 @Processor(QueueNames.URL_SCREENING, { concurrency: 2 })
@@ -23,6 +23,7 @@ export class ScreeningProcessor extends WorkerHost {
       const client = await this.db.pool.connect();
       try {
         await client.query('BEGIN');
+        await client.query(`SELECT set_config('${DB_CONTEXT_KEYS.IS_SUPER_ADMIN}', 'true', true)`);
         await client.query(
           `INSERT INTO screening_results (link_id, provider, verdict, checked_at) VALUES ($1, $2, $3, NOW())`,
           [linkId, ScreeningProvider.GOOGLE_SAFE_BROWSING, verdict]

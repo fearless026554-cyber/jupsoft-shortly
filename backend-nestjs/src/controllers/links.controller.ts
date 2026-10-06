@@ -516,23 +516,32 @@ export class LinksController {
   @Delete(':id')
   @RequireScope(ApiScopes.LINKS_WRITE)
   @UseInterceptors(IdempotencyInterceptor)
-  async deleteLink(@Param('id') id: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+  async deleteLink(@Param('id') id: string, @Query('permanent') permanentStr: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
     const geoUa = getGeoUa(req);
+    const isPermanent = permanentStr === 'true' || (req.query as any)?.permanent === 'true';
 
-    const archived = await this.db.withTenantContext(tenantId, async (client) => {
-      const res = await client.query(
-        `UPDATE links SET status = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3 RETURNING id, domain_id, short_code, alias`,
-        [LinkStatus.ARCHIVED, id, tenantId]
-      );
+    const result = await this.db.withTenantContext(tenantId, async (client) => {
+      let res;
+      if (isPermanent) {
+        res = await client.query(
+          `DELETE FROM links WHERE id = $1 AND tenant_id = $2 RETURNING id, domain_id, short_code, alias`,
+          [id, tenantId]
+        );
+      } else {
+        res = await client.query(
+          `UPDATE links SET status = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3 RETURNING id, domain_id, short_code, alias`,
+          [LinkStatus.ARCHIVED, id, tenantId]
+        );
+      }
       if (res.rowCount === 0) return null;
 
       await AuditService.log(client, {
         tenantId,
         actorId: auth.keyId,
         actorType: 'api_key',
-        action: 'link.archive',
+        action: isPermanent ? 'link.delete_permanent' : 'link.archive',
         entity: 'links',
         entityId: id,
         ipAddress: geoUa.clientIp,
@@ -541,12 +550,12 @@ export class LinksController {
       return res.rows[0];
     });
 
-    if (!archived) {
+    if (!result) {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'Link not found' } });
     }
 
-    await this.redis.invalidateLink(archived.domain_id, archived.short_code, tenantId, archived.alias);
-    return reply.send({ success: true, message: 'Link archived successfully' });
+    await this.redis.invalidateLink(result.domain_id, result.short_code, tenantId, result.alias);
+    return reply.send({ success: true, message: isPermanent ? 'Link permanently deleted' : 'Link archived successfully' });
   }
 
   @Get(':id/qr')
@@ -560,7 +569,9 @@ export class LinksController {
       }
     }
 
-    const res = await this.db.pool.query('SELECT short_code FROM links WHERE id = $1', [id]);
+    const res = await this.db.withSuperAdminContext(async (client) => {
+      return client.query('SELECT short_code FROM links WHERE id = $1', [id]);
+    });
     if (res.rowCount === 0) {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'Link not found' } });
     }

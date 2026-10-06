@@ -4,6 +4,7 @@ export * from './queues.js';
 export * from './redis-keys.js';
 export * from './scopes.js';
 export * from './roles.js';
+export * from './permissions.js';
 export * from './reserved-paths.js';
 export * from './qr.js';
 export * from './db.js';

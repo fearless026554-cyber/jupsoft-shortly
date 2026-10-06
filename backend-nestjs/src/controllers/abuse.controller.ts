@@ -50,10 +50,12 @@ export class AbuseController {
 
     if (segments.length >= 2) {
       const [tenantCode, alias] = segments;
-      const aliasRes = await this.db.pool.query(
-        `SELECT l.id FROM links l JOIN tenants t ON l.tenant_id = t.id WHERE t.code = $1 AND l.alias = $2`,
-        [tenantCode.toLowerCase(), alias.toLowerCase()]
-      );
+      const aliasRes = await this.db.withSuperAdminContext(async (client) => {
+        return client.query(
+          `SELECT l.id FROM links l JOIN tenants t ON l.tenant_id = t.id WHERE t.code = $1 AND l.alias = $2`,
+          [tenantCode.toLowerCase(), alias.toLowerCase()]
+        );
+      });
       if (aliasRes.rowCount && aliasRes.rowCount > 0) {
         linkId = aliasRes.rows[0].id;
       }
@@ -72,7 +74,9 @@ export class AbuseController {
         }
       }
       query += ' ORDER BY created_at DESC LIMIT 1';
-      const res = await this.db.pool.query(query, params);
+      const res = await this.db.withSuperAdminContext(async (client) => {
+        return client.query(query, params);
+      });
       if (res.rowCount && res.rowCount > 0) {
         linkId = res.rows[0].id;
       }

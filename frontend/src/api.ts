@@ -9,7 +9,7 @@ export interface LinkItem {
   alias?: string | null;
   destination_url: string;
   redirect_type: string;
-  status: 'active' | 'disabled' | 'expired' | 'blocked';
+  status: 'active' | 'disabled' | 'expired' | 'blocked' | 'archived';
   click_count: number;
   max_clicks?: number | null;
   expires_at?: string | null;
@@ -51,6 +51,7 @@ export interface UserItem {
   email: string;
   role: 'super_admin' | 'tenant_admin' | 'manager' | 'user' | 'read_only';
   status: 'active' | 'invited' | 'suspended';
+  avatar_url?: string | null;
   last_login_at?: string | null;
   created_at: string;
 }
@@ -146,7 +147,7 @@ const headers = new Proxy({} as Record<string, string>, {
 // In-flight deduplication map & response caching (Solves P0 API over-fetch audit)
 const inFlightRequests = new Map<string, Promise<any>>();
 const responseCache = new Map<string, { timestamp: number; data: any }>();
-const CACHE_TTL_MS = 2500;
+const CACHE_TTL_MS = 15000;
 
 export function clearApiCache(prefix?: string) {
   if (!prefix) {
@@ -192,7 +193,7 @@ export const api = {
     return dedupeGet('health', async () => {
       const res = await fetch(`${API_BASE_URL}/health`);
       return res.json();
-    }, 5000);
+    }, 15000);
   },
 
   // Links
@@ -225,6 +226,15 @@ export const api = {
   async archiveLink(id: string) {
     clearApiCache('links');
     const res = await fetch(`${API_BASE_URL}/links/${id}`, {
+      method: 'DELETE',
+      headers,
+    });
+    return res.json();
+  },
+
+  async deleteLinkPermanently(id: string) {
+    clearApiCache('links');
+    const res = await fetch(`${API_BASE_URL}/links/${id}?permanent=true`, {
       method: 'DELETE',
       headers,
     });
@@ -385,7 +395,7 @@ export const api = {
     clearApiCache('users');
     const res = await fetch(`${API_BASE_URL}/users`, {
       method: 'POST',
-      headers,
+      headers: getHeaders(),
       body: JSON.stringify(dto),
     });
     return res.json();
@@ -395,8 +405,27 @@ export const api = {
     clearApiCache('users');
     const res = await fetch(`${API_BASE_URL}/users/${id}`, {
       method: 'PATCH',
-      headers,
+      headers: getHeaders(),
       body: JSON.stringify({ password }),
+    });
+    return res.json();
+  },
+
+  async updateUser(id: string, payload: { role?: string; status?: string; password?: string }) {
+    clearApiCache('users');
+    const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  async deleteUser(id: string) {
+    clearApiCache('users');
+    const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
     });
     return res.json();
   },
@@ -501,6 +530,7 @@ export const api = {
 
   // Auth Operations
   async login(email: string, password: string) {
+    clearApiCache();
     const res = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -514,7 +544,8 @@ export const api = {
     return json;
   },
 
-  async googleLogin(payload: { credential?: string; idToken?: string; code?: string; redirectUri?: string }) {
+  async googleLogin(payload: { credential?: string; idToken?: string; code?: string; redirectUri?: string; nonce?: string; state?: string }) {
+    clearApiCache();
     const res = await fetch(`${API_BASE_URL}/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -529,16 +560,19 @@ export const api = {
   },
 
   async getGoogleAuthConfig() {
-    try {
-      const res = await fetch(`${API_BASE_URL}/auth/google/config`);
-      const json = await res.json();
-      return json.success ? json.data : { enabled: false, clientId: null };
-    } catch {
-      return { enabled: false, clientId: null };
-    }
+    return dedupeGet(`${API_BASE_URL}/auth/google/config`, async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/google/config`);
+        const json = await res.json();
+        return json.success ? json.data : { enabled: false, clientId: null };
+      } catch {
+        return { enabled: false, clientId: null };
+      }
+    }, 60000);
   },
 
   async logout() {
+    clearApiCache();
     try {
       await fetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
@@ -547,20 +581,49 @@ export const api = {
     } catch {}
     setAuthToken(null);
     setStoredUser(null);
-    clearApiCache();
   },
 
   async getMe() {
-    try {
-      const res = await fetch(`${API_BASE_URL}/auth/me`, { headers: getHeaders() });
-      const json = await res.json();
-      if (json.success && json.data?.user) {
-        setStoredUser(json.data.user);
+    const token = getAuthToken();
+    if (!token) return null;
+    return dedupeGet(`${API_BASE_URL}/auth/me`, async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/me`, { headers: getHeaders() });
+        const json = await res.json();
+        if (json.success && json.data?.user) {
+          setStoredUser(json.data.user);
+        }
+        return json;
+      } catch {
+        return null;
       }
-      return json;
-    } catch {
-      return null;
+    }, 15000);
+  },
+
+  async updateProfile(payload: { name?: string; avatar_url?: string | null }) {
+    clearApiCache();
+    const res = await fetch(`${API_BASE_URL}/auth/profile`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (json.success && json.data) {
+      const existingUser = getStoredUser();
+      if (existingUser) {
+        setStoredUser({ ...existingUser, ...json.data });
+      }
     }
+    return json;
+  },
+
+  async changePassword(payload: { currentPassword: string; newPassword: string }) {
+    const res = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return res.json();
   },
 };
 

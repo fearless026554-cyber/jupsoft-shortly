@@ -74,6 +74,10 @@ async function getPublicWanIp(): Promise<string | null> {
 }
 
 async function getLiveServerIp(): Promise<string> {
+  const explicitPublicIp = process.env.SERVER_PUBLIC_IP || env.SERVER_PUBLIC_IP;
+  if (explicitPublicIp) {
+    return explicitPublicIp;
+  }
   const lanIps = getLocalLanIps();
   if (env.NODE_ENV !== 'production' && lanIps.length > 0) {
     return lanIps[0];
@@ -83,9 +87,11 @@ async function getLiveServerIp(): Promise<string> {
 }
 
 async function getValidServerIps(): Promise<string[]> {
+  const explicitPublicIp = process.env.SERVER_PUBLIC_IP || env.SERVER_PUBLIC_IP;
   const lanIps = getLocalLanIps();
   const wanIp = await getPublicWanIp();
   const set = new Set<string>([...lanIps, '127.0.0.1']);
+  if (explicitPublicIp) set.add(explicitPublicIp);
   if (wanIp) set.add(wanIp);
   return Array.from(set);
 }

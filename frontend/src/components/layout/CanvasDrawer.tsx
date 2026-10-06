@@ -24,10 +24,12 @@ interface CanvasDrawerProps {
   link: LinkItem | null;
   onClose: () => void;
   onArchive: (id: string) => void;
+  onRestore?: (id: string) => void;
+  onDeletePermanently?: (id: string) => void;
   onLinkUpdated?: (updated: LinkItem) => void;
 }
 
-export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArchive, onLinkUpdated }) => {
+export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArchive, onRestore, onDeletePermanently, onLinkUpdated }) => {
   const [copied, setCopied] = useState(false);
   const [isEditingExpiry, setIsEditingExpiry] = useState(false);
   const [savingExpiry, setSavingExpiry] = useState(false);
@@ -368,12 +370,31 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
           >
             Test Link
           </a>
-          <button
-            onClick={() => onArchive(link.id)}
-            className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded font-semibold text-center transition"
-          >
-            Archive Short Link
-          </button>
+          {link.status === 'archived' ? (
+            <div className="space-y-2">
+              <button
+                onClick={() => onRestore && onRestore(link.id)}
+                className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded font-semibold text-center transition cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                Restore Short Link
+              </button>
+              {onDeletePermanently && (
+                <button
+                  onClick={() => onDeletePermanently(link.id)}
+                  className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded font-semibold text-center transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  Permanently Delete
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => onArchive(link.id)}
+              className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded font-semibold text-center transition cursor-pointer"
+            >
+              Archive Short Link
+            </button>
+          )}
         </div>
       </div>
     </div>

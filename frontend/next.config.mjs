@@ -5,7 +5,7 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: '/:tab(links|bulk|outcomes|qr|reports|analytics|tenants|users|domains|abuse|apikeys|help)',
+        source: '/:tab(links|bulk|outcomes|qr|reports|analytics|tenants|users|domains|abuse|apikeys|profile|help)',
         destination: '/',
       },
     ];

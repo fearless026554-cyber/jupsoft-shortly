@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { api, LinkItem, TenantItem, getAuthToken, setAuthToken, getStoredUser, setStoredUser } from '../api';
+import { api, clearApiCache, LinkItem, TenantItem, getAuthToken, setAuthToken, getStoredUser, setStoredUser } from '../api';
 
 // Layout Components
 import { Rail, ActiveModule } from '../components/layout/Rail';
@@ -22,6 +22,7 @@ import { AbuseView } from '../components/views/AbuseView';
 import { ApiKeysView } from '../components/views/ApiKeysView';
 import { HelpGuideView } from '../components/views/HelpGuideView';
 import { LandingPageView } from '../components/views/LandingPageView';
+import { ProfileView } from '../components/views/ProfileView';
 
 // Modals
 import { CreateLinkModal } from '../components/modals/CreateLinkModal';
@@ -44,6 +45,7 @@ const MODULE_ROUTES: Record<ActiveModule, string> = {
   domains: '/domains',
   abuse: '/abuse',
   apikeys: '/apikeys',
+  profile: '/profile',
   help: '/help',
 };
 
@@ -61,6 +63,7 @@ const ROUTE_TO_MODULE: Record<string, ActiveModule> = {
   '/domains': 'domains',
   '/abuse': 'abuse',
   '/apikeys': 'apikeys',
+  '/profile': 'profile',
   '/help': 'help',
 };
 
@@ -213,21 +216,40 @@ export default function ShortlyCRMApp() {
     }
   };
 
-  const loadData = async () => {
+  const loadData = async (forceRefresh = false) => {
+    if (!currentUser) return;
     setLoading(true);
     try {
+      if (forceRefresh) {
+        clearApiCache();
+      }
+
+      // 1. Fetch links for the active tenant/workspace
+      const linkPromise = api.getLinks(activeTenantId !== 'all' ? activeTenantId : undefined).catch(() => []);
+
+      // 2. Fetch tenants only if not yet populated OR user forces refresh AND has permission
+      const shouldFetchTenants = (tenants.length === 0 || forceRefresh) && Permissions.canManageTenants(currentUser?.role);
+      const tenantPromise = shouldFetchTenants ? api.getTenants().catch(() => []) : Promise.resolve(tenants);
+
+      // 3. Fetch abuse reports only if user has permission to manage abuse
+      const shouldFetchAbuse = Permissions.canManageAbuse(currentUser?.role);
+      const abusePromise = shouldFetchAbuse ? api.getAbuseReports().catch(() => []) : Promise.resolve([]);
+
+      // 4. Background health status
+      const healthPromise = api.getHealth().catch(() => null);
+
       const [h, l, t, a] = await Promise.all([
-        api.getHealth().catch(() => null),
-        api.getLinks(activeTenantId !== 'all' ? activeTenantId : undefined).catch(() => []),
-        api.getTenants().catch(() => []),
-        api.getAbuseReports().catch(() => []),
+        healthPromise,
+        linkPromise,
+        tenantPromise,
+        abusePromise,
       ]);
 
       if (h) setHealth(h);
       const safeLinks = Array.isArray(l) ? l : [];
       setLinks(safeLinks);
-      if (Array.isArray(t)) setTenants(t);
-      if (Array.isArray(a)) {
+      if (Array.isArray(t) && t.length > 0) setTenants(t);
+      if (Array.isArray(a) && shouldFetchAbuse) {
         setAbuseCount(a.filter((rep: any) => rep.status === 'pending').length);
       }
 
@@ -241,13 +263,24 @@ export default function ShortlyCRMApp() {
     }
   };
 
+  const handleManualRefresh = async () => {
+    await loadData(true);
+  };
+
   useEffect(() => {
+    if (isAuthChecking || !currentUser) return;
+
     loadData();
+
+    // Background health check polling: 30s, only when browser tab is active/visible
     const interval = setInterval(() => {
-      api.getHealth().then(setHealth).catch(() => null);
-    }, 15000);
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        api.getHealth().then(setHealth).catch(() => null);
+      }
+    }, 30000);
+
     return () => clearInterval(interval);
-  }, [activeTenantId]);
+  }, [isAuthChecking, currentUser?.id, activeTenantId]);
 
   // Keyboard shortcut listener (Ctrl + / for Search, C for Create Link)
   useEffect(() => {
@@ -276,7 +309,7 @@ export default function ShortlyCRMApp() {
     setConfirmConfig({
       isOpen: true,
       title: 'Archive Link',
-      message: `Are you sure you want to archive the link ${fullUrl}? It will be deactivated and removed from active SMS routing.`,
+      message: `Are you sure you want to archive the link ${fullUrl}? It will be deactivated and moved to Archive.`,
       onConfirm: async () => {
         await api.archiveLink(id);
         if (drawerLink?.id === id) setDrawerLink(null);
@@ -284,6 +317,63 @@ export default function ShortlyCRMApp() {
         setConfirmConfig(prev => ({ ...prev, isOpen: false }));
       }
     });
+  };
+
+  const handleRestoreLink = async (id: string) => {
+    try {
+      await api.updateLink(id, { status: 'active' });
+      if (drawerLink?.id === id) {
+        setDrawerLink((prev) => prev ? { ...prev, status: 'active' } : null);
+      }
+      loadData();
+    } catch (err) {
+      console.error('Failed to restore link:', err);
+    }
+  };
+
+  const handleDeletePermanently = async (id: string) => {
+    try {
+      await api.deleteLinkPermanently(id);
+      if (drawerLink?.id === id) setDrawerLink(null);
+      loadData();
+    } catch (err) {
+      console.error('Failed to permanently delete link:', err);
+    }
+  };
+
+  const handleBatchArchive = async (ids: string[]) => {
+    try {
+      await Promise.all(ids.map((id) => api.archiveLink(id)));
+      if (drawerLink && ids.includes(drawerLink.id)) setDrawerLink(null);
+      await loadData();
+    } catch (err) {
+      console.error('Batch archive failed:', err);
+      await loadData();
+    }
+  };
+
+  const handleBatchRestore = async (ids: string[]) => {
+    try {
+      await Promise.all(ids.map((id) => api.updateLink(id, { status: 'active' })));
+      if (drawerLink && ids.includes(drawerLink.id)) {
+        setDrawerLink((prev) => (prev ? { ...prev, status: 'active' } : null));
+      }
+      await loadData();
+    } catch (err) {
+      console.error('Batch restore failed:', err);
+      await loadData();
+    }
+  };
+
+  const handleBatchDelete = async (ids: string[]) => {
+    try {
+      await Promise.all(ids.map((id) => api.deleteLinkPermanently(id)));
+      if (drawerLink && ids.includes(drawerLink.id)) setDrawerLink(null);
+      await loadData();
+    } catch (err) {
+      console.error('Batch permanent delete failed:', err);
+      await loadData();
+    }
   };
 
   if (isAuthChecking) {
@@ -327,7 +417,7 @@ export default function ShortlyCRMApp() {
           setSearchQuery={setSearchQuery}
           health={health}
           loading={loading}
-          onRefresh={loadData}
+          onRefresh={handleManualRefresh}
           onCreateLinkClick={() => setIsCreateLinkModalOpen(true)}
           onOpenCreateTenantModal={() => setIsCreateTenantModalOpen(true)}
           currentUser={currentUser}
@@ -336,6 +426,7 @@ export default function ShortlyCRMApp() {
               window.location.href = '/login';
             });
           }}
+          onNavigate={handleNavigate}
         />
 
         {/* Dynamic Content Workspace Area */}
@@ -514,6 +605,11 @@ export default function ShortlyCRMApp() {
                 handleNavigate('qr');
               }}
               onArchiveLink={handleArchiveLink}
+              onRestoreLink={handleRestoreLink}
+              onDeletePermanently={handleDeletePermanently}
+              onBatchArchive={handleBatchArchive}
+              onBatchRestore={handleBatchRestore}
+              onBatchDelete={handleBatchDelete}
               activeDrawerLinkId={drawerLink?.id}
               currentUser={currentUser}
             />
@@ -547,7 +643,10 @@ export default function ShortlyCRMApp() {
                 handleNavigate('links');
               }}
               onOpenCreateTenantModal={() => setIsCreateTenantModalOpen(true)}
-              onRefreshTenants={loadTenants}
+              onRefreshTenants={() => {
+                clearApiCache('tenants');
+                loadTenants();
+              }}
             />
           )}
 
@@ -580,6 +679,22 @@ export default function ShortlyCRMApp() {
 
           {/* Module 12: Help & TRAI Knowledge Base */}
           {activeTab === 'help' && <HelpGuideView />}
+
+          {/* Module 13: Operator Account & Security Profile */}
+          {activeTab === 'profile' && (
+            <ProfileView
+              currentUser={currentUser}
+              tenants={tenants}
+              onUserUpdated={() => {
+                const updated = getStoredUser();
+                if (updated) setCurrentUser(updated);
+                api.getMe().then((res) => {
+                  if (res?.data?.user) setCurrentUser(res.data.user);
+                });
+              }}
+              onNavigate={handleNavigate}
+            />
+          )}
         </main>
       </div>
 
@@ -588,6 +703,8 @@ export default function ShortlyCRMApp() {
         link={drawerLink}
         onClose={() => setDrawerLink(null)}
         onArchive={handleArchiveLink}
+        onRestore={handleRestoreLink}
+        onDeletePermanently={handleDeletePermanently}
         onLinkUpdated={(updated) => {
           setDrawerLink(updated);
           loadData();
@@ -613,7 +730,10 @@ export default function ShortlyCRMApp() {
       <InviteUserModal
         isOpen={isInviteUserModalOpen}
         onClose={() => setIsInviteUserModalOpen(false)}
-        onUserInvited={() => {}}
+        onUserInvited={() => {
+          loadData();
+        }}
+        currentUser={currentUser}
       />
 
       <CreateApiKeyModal

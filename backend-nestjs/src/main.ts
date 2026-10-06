@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import helmet from '@fastify/helmet';
 
-function startLocalDomainGateways(backendPort: number, frontendPort = 5000) {
+function startLocalDomainGateways(backendPort: number, frontendPort = Number(process.env.FRONTEND_PORT || 5001)) {
   const FRONTEND_PREFIXES = [
     '/_next',
     '/api/proxy',
@@ -107,14 +107,17 @@ async function bootstrap() {
     })
   );
 
-  // Security Headers (disable HSTS on HTTP/local so browsers don't force-upgrade http:// custom domains to https://)
+  // Security Headers (M5: HSTS enabled in production; disabled in dev/local to prevent forcing https on local custom domains)
   await app.register(helmet, {
     contentSecurityPolicy: false,
-    hsts: false,
+    hsts: env.NODE_ENV === 'production',
   });
 
-  // Strict CORS
-  const corsOrigins = env.CORS_ORIGINS === '*' ? '*' : env.CORS_ORIGINS.split(',').map(o => o.trim());
+  // Strict CORS (M4: In production, wildcard '*' is forbidden when credentials are enabled)
+  if (env.NODE_ENV === 'production' && env.CORS_ORIGINS === '*') {
+    throw new Error('FATAL: CORS_ORIGINS cannot be "*" in production when credentials are enabled.');
+  }
+  const corsOrigins = env.CORS_ORIGINS === '*' ? true : env.CORS_ORIGINS.split(',').map(o => o.trim());
   app.enableCors({ origin: corsOrigins, credentials: true });
   
   app.useGlobalFilters(new ErrorHandlerFilter());
@@ -129,21 +132,24 @@ async function bootstrap() {
 
   // Removed ValidationPipe as Zod is used for validation within controllers
 
-  const config = new DocumentBuilder()
-    .setTitle('Jupsoft Shortly API')
-    .setDescription('The API documentation for the Jupsoft Link Management Platform (JLMP)')
-    .setVersion('1.0')
-    .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'Api-Key')
-    .addBearerAuth()
-    .build();
-  
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Security M3: Swagger API docs gated in production environments
+  if (env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('Jupsoft Shortly API')
+      .setDescription('The API documentation for the Jupsoft Link Management Platform (JLMP)')
+      .setVersion('1.0')
+      .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'Api-Key')
+      .addBearerAuth()
+      .build();
+    
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
   await app.listen(env.PORT, '0.0.0.0');
   console.log(`Application is running on: ${await app.getUrl()}`);
 
   if (Number(env.PORT) !== 80) {
-    startLocalDomainGateways(Number(env.PORT), 5000);
+    startLocalDomainGateways(Number(env.PORT), Number(process.env.FRONTEND_PORT || 5001));
   }
 }
 bootstrap();

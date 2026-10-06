@@ -76,12 +76,14 @@ export class RedirectController {
     let link: CachedLink | null = await this.redis.getCachedLink(domainId, code);
 
     if (!link) {
-      const res = await this.db.pool.query(
-        `SELECT id, tenant_id, destination_url, redirect_type, status, expires_at, max_clicks, click_count
-         FROM links
-         WHERE domain_id = $1 AND (short_code = $2 OR LOWER(alias) = LOWER($2))`,
-        [domainId, code]
-      );
+      const res = await this.db.withSuperAdminContext(async (client) => {
+        return client.query(
+          `SELECT id, tenant_id, destination_url, redirect_type, status, expires_at, max_clicks, click_count
+           FROM links
+           WHERE domain_id = $1 AND (short_code = $2 OR LOWER(alias) = LOWER($2))`,
+          [domainId, code]
+        );
+      });
 
       if (res.rowCount === 0) {
         return reply.status(404).send({
@@ -207,12 +209,14 @@ export class RedirectController {
     if (rawCachedLink) {
       link = JSON.parse(rawCachedLink);
     } else {
-      const res = await this.db.pool.query(
-        `SELECT l.id, l.domain_id, l.tenant_id, l.destination_url, l.redirect_type, l.status, l.expires_at, l.max_clicks, l.click_count
-         FROM links l
-         WHERE l.tenant_id = $1 AND l.alias = $2`,
-        [tenantId, alias.toLowerCase()]
-      );
+      const res = await this.db.withSuperAdminContext(async (client) => {
+        return client.query(
+          `SELECT l.id, l.domain_id, l.tenant_id, l.destination_url, l.redirect_type, l.status, l.expires_at, l.max_clicks, l.click_count
+           FROM links l
+           WHERE l.tenant_id = $1 AND l.alias = $2`,
+          [tenantId, alias.toLowerCase()]
+        );
+      });
 
       if (res.rowCount === 0) {
         return reply.status(404).send({

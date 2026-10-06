@@ -17,13 +17,13 @@ export default function LoginPage() {
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
 
   const handleGoogleLoginCredential = useCallback(
-    async (credential: string) => {
+    async (credential: string, nonce?: string) => {
       setGoogleLoading(true);
       setError(null);
       setInfo('Authenticating with Google...');
 
       try {
-        const res = await api.googleLogin({ credential });
+        const res = await api.googleLogin({ credential, nonce });
         if (res.success && res.data?.token) {
           router.replace('/');
         } else {
@@ -41,14 +41,14 @@ export default function LoginPage() {
   );
 
   const handleGoogleLoginCode = useCallback(
-    async (code: string) => {
+    async (code: string, state?: string, nonce?: string) => {
       setGoogleLoading(true);
       setError(null);
       setInfo('Exchanging Google authorization code...');
 
       try {
         const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/login` : '';
-        const res = await api.googleLogin({ code, redirectUri });
+        const res = await api.googleLogin({ code, redirectUri, state, nonce });
         if (res.success && res.data?.token) {
           router.replace('/');
         } else {
@@ -88,16 +88,33 @@ export default function LoginPage() {
       const searchParams = new URLSearchParams(window.location.search);
       const codeFromQuery = searchParams.get('code');
       const credentialFromQuery = searchParams.get('credential');
+      const stateFromQuery = searchParams.get('state') || hashParams.get('state');
+
+      // State parameter CSRF protection
+      const expectedState = sessionStorage.getItem('oauth_state');
+      const savedNonce = sessionStorage.getItem('oauth_nonce') || undefined;
+
+      if (idTokenFromHash || credentialFromQuery || codeFromQuery) {
+        if (stateFromQuery && expectedState && stateFromQuery !== expectedState) {
+          setError('OAuth state verification failed. Possible CSRF attack detected.');
+          sessionStorage.removeItem('oauth_state');
+          sessionStorage.removeItem('oauth_nonce');
+          window.history.replaceState(null, '', window.location.pathname);
+          return;
+        }
+        sessionStorage.removeItem('oauth_state');
+        sessionStorage.removeItem('oauth_nonce');
+      }
 
       if (idTokenFromHash || credentialFromQuery) {
         window.history.replaceState(null, '', window.location.pathname);
-        handleGoogleLoginCredential((idTokenFromHash || credentialFromQuery)!);
+        handleGoogleLoginCredential((idTokenFromHash || credentialFromQuery)!, savedNonce);
         return;
       }
 
       if (codeFromQuery) {
         window.history.replaceState(null, '', window.location.pathname);
-        handleGoogleLoginCode(codeFromQuery);
+        handleGoogleLoginCode(codeFromQuery, stateFromQuery || undefined, savedNonce);
         return;
       }
     }
@@ -129,11 +146,15 @@ export default function LoginPage() {
   const initGoogleGsi = (clientId: string) => {
     if (typeof window === 'undefined' || !(window as any).google?.accounts?.id) return;
     try {
+      const nonce = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+      sessionStorage.setItem('oauth_nonce_gsi', nonce);
+
       (window as any).google.accounts.id.initialize({
         client_id: clientId,
+        nonce: nonce,
         callback: (response: any) => {
           if (response?.credential) {
-            handleGoogleLoginCredential(response.credential);
+            handleGoogleLoginCredential(response.credential, nonce);
           }
         },
       });
@@ -177,11 +198,18 @@ export default function LoginPage() {
 
   const redirectToGoogleOAuth = (clientId: string) => {
     const redirectUri = `${window.location.origin}/login`;
+    const state = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+    const nonce = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+    sessionStorage.setItem('oauth_state', state);
+    sessionStorage.setItem('oauth_nonce', nonce);
+
     const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
       clientId
     )}&redirect_uri=${encodeURIComponent(
       redirectUri
-    )}&response_type=token%20id_token&scope=openid%20email%20profile&nonce=${Date.now()}`;
+    )}&response_type=token%20id_token&scope=openid%20email%20profile&state=${encodeURIComponent(
+      state
+    )}&nonce=${encodeURIComponent(nonce)}`;
     window.location.href = oauthUrl;
   };
 

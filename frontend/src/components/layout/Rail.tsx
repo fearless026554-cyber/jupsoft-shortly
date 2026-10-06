@@ -23,6 +23,7 @@ export type ActiveModule =
   | 'domains'
   | 'abuse'
   | 'apikeys'
+  | 'profile'
   | 'help';
 
 interface RailProps {
@@ -88,7 +89,6 @@ export const Rail: React.FC<RailProps> = ({
       path: '/links',
       label: 'Links',
       icon: Link2,
-      badge: linksCount > 0 ? linksCount : null,
       isActive: activeTab === 'links' || activeTab === 'bulk' || activeTab === 'qr',
       visible: true,
     },

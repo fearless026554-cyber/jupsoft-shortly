@@ -17,6 +17,7 @@ import {
 import { TenantItem, api } from '../../api';
 import { useTenantDomains } from '../../hooks/useTenantDomains';
 import { Permissions, getRoleDisplayName } from '../../utils/rbac';
+import { ActiveModule } from './Rail';
 
 export interface HeaderProps {
   tenants: TenantItem[];
@@ -31,6 +32,7 @@ export interface HeaderProps {
   onOpenCreateTenantModal: () => void;
   currentUser?: any;
   onLogout?: () => void;
+  onNavigate?: (tab: ActiveModule) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -46,6 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCreateTenantModal,
   currentUser,
   onLogout,
+  onNavigate,
 }) => {
   const [tenantDropdownOpen, setTenantDropdownOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -94,7 +97,7 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
                   <span>Select Scope</span>
-                  <span className="text-blue-600 font-mono font-normal">Super Admin</span>
+                  <span className="text-slate-400 font-mono text-[9px] font-normal">Organization Scope</span>
                 </div>
 
                 {/* Global View Option */}
@@ -267,23 +270,38 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
 
-              <div className="py-1">
-                <button
-                  onClick={() => {
-                    setUserDropdownOpen(false);
-                    if (onLogout) {
-                      onLogout();
-                    } else {
-                      api.logout().then(() => {
-                        window.location.href = '/login';
-                      });
-                    }
-                  }}
-                  className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition cursor-pointer font-medium"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out of Console</span>
-                </button>
+              <div className="py-1 divide-y divide-slate-100">
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      onNavigate?.('profile');
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 transition cursor-pointer font-medium"
+                  >
+                    <User className="w-3.5 h-3.5 text-slate-400" />
+                    <span>My Account &amp; Profile</span>
+                  </button>
+                </div>
+
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      if (onLogout) {
+                        onLogout();
+                      } else {
+                        api.logout().then(() => {
+                          window.location.href = '/login';
+                        });
+                      }
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition cursor-pointer font-medium"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign Out of Console</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

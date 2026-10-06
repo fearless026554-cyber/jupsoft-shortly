@@ -67,7 +67,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await pipeline.exec();
   }
 
-  async getDomainByHostname(hostname: string): Promise<Domain | null> {
+  async getDomainByHostname(rawHostname: string): Promise<Domain | null> {
+    if (!rawHostname || typeof rawHostname !== 'string') return null;
+
+    // M2: Normalize hostname (lowercase, strip port, length capped at 253 chars per RFC 1035)
+    const hostname = rawHostname.toLowerCase().trim().split(':')[0].slice(0, 253);
+    if (!hostname) return null;
+
     const isDefaultHost =
       hostname === env.DEFAULT_DOMAIN_HOST ||
       hostname === 'localhost' ||
@@ -98,10 +104,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         tenantId: res.rows[0].tenant_id,
       } as Domain;
     } else if (isDefaultHost) {
-      const defaultRes = await this.db.pool.query(
+      let defaultRes = await this.db.pool.query(
         `SELECT id, type, tenant_id FROM domains WHERE id = $1`,
         [env.DEFAULT_DOMAIN_ID]
       );
+      if (defaultRes.rowCount === 0) {
+        defaultRes = await this.db.pool.query(
+          `SELECT id, type, tenant_id FROM domains ORDER BY created_at ASC LIMIT 1`
+        );
+      }
       domainRecord = (defaultRes.rows[0] as Domain) || { id: env.DEFAULT_DOMAIN_ID, type: 'internal', tenantId: null };
     }
 
@@ -134,7 +145,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const cached = await this.client.get(key);
     if (cached) return cached;
 
-    const res = await this.db.pool.query('SELECT status FROM users WHERE id = $1', [userId]);
+    const res = await this.db.withSuperAdminContext(async (client) => {
+      return client.query('SELECT status FROM users WHERE id = $1', [userId]);
+    });
     const status = res.rows[0]?.status || 'active';
     await this.client.setex(key, env.CACHE_TENANT_TTL_SEC || 60, status);
     return status;
@@ -142,6 +155,19 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async invalidateUserStatus(userId: string): Promise<void> {
     await this.client.del(`user:status:${userId}`);
+  }
+
+  // Security C3: Token Session Versioning
+  async getUserTokenVersion(userId: string): Promise<number> {
+    const key = `user:tokenver:${userId}`;
+    const ver = await this.client.get(key);
+    return ver ? parseInt(ver, 10) : 0;
+  }
+
+  async incrementUserTokenVersion(userId: string): Promise<number> {
+    const key = `user:tokenver:${userId}`;
+    const newVer = await this.client.incr(key);
+    return newVer;
   }
 
   async getDailySalt(dateStr: string): Promise<string> {
@@ -153,3 +179,4 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return existing || newSalt;
   }
 }
+

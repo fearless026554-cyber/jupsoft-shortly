@@ -14,15 +14,17 @@ const envSchema = z
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
-    // Base URLs & Domains (Required from env — no hardcoded defaults)
-    BASE_URL: z.string().url('BASE_URL must be a valid URL'),
+    // Base URLs & Domains (Optional overrides from env — auto-resolves from Database if omitted)
+    BASE_URL: z.string().url('BASE_URL must be a valid URL').optional().default('https://localhost:3000'),
     DEFAULT_DOMAIN_ID: z
       .string()
       .regex(
         /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
         'DEFAULT_DOMAIN_ID must be a valid UUID'
-      ),
-    DEFAULT_DOMAIN_HOST: z.string().min(1, 'DEFAULT_DOMAIN_HOST is required'),
+      )
+      .optional()
+      .default('0bb05033-f0ae-4779-b747-d386b8d67be1'),
+    DEFAULT_DOMAIN_HOST: z.string().optional().default('localhost'),
 
     // Security & Networking (Required from env — no hardcoded defaults)
     CORS_ORIGINS: z.string().min(1, 'CORS_ORIGINS is required'),
@@ -30,7 +32,7 @@ const envSchema = z
     JWT_SECRET: z
       .string()
       .min(32, 'JWT_SECRET is required and must be at least 32 characters long'),
-    JWT_EXPIRY: z.string().default('7d'),
+    JWT_EXPIRY: z.string().default('1d'),
 
     // PostgreSQL Database (Required from env — no hardcoded defaults)
     PG_HOST: z.string().min(1, 'PG_HOST is required'),
@@ -70,6 +72,9 @@ const envSchema = z
     // Google OAuth Authentication
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
+
+    // Server Networking & Public IP Override
+    SERVER_PUBLIC_IP: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === 'production') {
