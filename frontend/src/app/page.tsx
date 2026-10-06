@@ -21,6 +21,7 @@ import { DomainsView } from '../components/views/DomainsView';
 import { AbuseView } from '../components/views/AbuseView';
 import { ApiKeysView } from '../components/views/ApiKeysView';
 import { HelpGuideView } from '../components/views/HelpGuideView';
+import { LandingPageView } from '../components/views/LandingPageView';
 
 // Modals
 import { CreateLinkModal } from '../components/modals/CreateLinkModal';
@@ -149,7 +150,7 @@ export default function ShortlyCRMApp() {
   useEffect(() => {
     const token = getAuthToken();
     if (!token) {
-      window.location.href = '/login';
+      setIsAuthChecking(false);
       return;
     }
 
@@ -160,7 +161,8 @@ export default function ShortlyCRMApp() {
       } else {
         setAuthToken(null);
         setStoredUser(null);
-        window.location.href = '/login';
+        setCurrentUser(null);
+        setIsAuthChecking(false);
       }
     }).catch(() => {
       const stored = getStoredUser();
@@ -168,7 +170,10 @@ export default function ShortlyCRMApp() {
         setCurrentUser(stored);
         setIsAuthChecking(false);
       } else {
-        window.location.href = '/login';
+        setAuthToken(null);
+        setStoredUser(null);
+        setCurrentUser(null);
+        setIsAuthChecking(false);
       }
     });
   }, []);
@@ -287,6 +292,16 @@ export default function ShortlyCRMApp() {
         <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-3"></div>
         <p className="text-xs font-mono text-slate-400">Verifying session credentials...</p>
       </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <LandingPageView
+        onLoginClick={() => {
+          window.location.href = '/login';
+        }}
+      />
     );
   }
 
