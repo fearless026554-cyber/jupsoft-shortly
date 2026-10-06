@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     domain_id UUID NOT NULL REFERENCES domains(id),
-    short_code VARCHAR(16) NOT NULL,
+    short_code VARCHAR(64) NOT NULL,
     alias VARCHAR(128),
     destination_url TEXT NOT NULL,
     redirect_type redirect_type NOT NULL DEFAULT '302',

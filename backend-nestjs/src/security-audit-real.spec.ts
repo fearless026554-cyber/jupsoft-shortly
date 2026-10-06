@@ -777,6 +777,58 @@ describe('Real Live E2E & Database Verification (Zero Mocks)', () => {
 
     await appClient.end();
   });
+
+  it('Real Live Test (Alias Links): POST /links with custom alias creates short code matching alias and rejects duplicate alias with 409', async () => {
+    const testAlias = `test-alias-${Date.now().toString().slice(-6)}`;
+    const tenantToken = jwt.sign(
+      {
+        userId: '4a0e8559-e3f9-496f-bca2-6ef990744fe6',
+        tenantId: '11111111-1111-1111-1111-111111111111',
+        role: 'tenant_admin',
+        scopes: ['links:read', 'links:write'],
+      },
+      env.JWT_SECRET
+    );
+
+    // 1. First creation with custom alias should succeed
+    const createRes1 = await fetch(`${BASE_API}/links`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${tenantToken}`,
+      },
+      body: JSON.stringify({
+        destinationUrl: 'https://jupsoft.com/features',
+        alias: testAlias,
+      }),
+    });
+
+    expect(createRes1.status).toBe(201);
+    const body1 = await createRes1.json();
+    expect(body1.success).toBe(true);
+    expect(body1.data.shortCode).toBe(testAlias);
+    expect(body1.data.shortUrl).toContain(testAlias);
+
+    // 2. Second creation with duplicate alias should be rejected with 409 ALIAS_CONFLICT
+    const createRes2 = await fetch(`${BASE_API}/links`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${tenantToken}`,
+      },
+      body: JSON.stringify({
+        destinationUrl: 'https://jupsoft.com/another-page',
+        alias: testAlias,
+      }),
+    });
+
+    expect(createRes2.status).toBe(409);
+    const body2 = await createRes2.json();
+    expect(body2.success).toBe(false);
+    expect(body2.error?.code).toBe(ErrorCodes.ALIAS_CONFLICT);
+    expect(body2.error?.message).toMatch(/duplicate|already in use/i);
+  });
 });
+
 
 

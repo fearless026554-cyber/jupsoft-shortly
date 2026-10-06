@@ -37,9 +37,9 @@ export class ErrorHandlerFilter implements ExceptionFilter {
       code = ErrorCodes.CONFLICT;
       message = 'Resource conflict';
 
-      if (exception.constraint === 'uq_tenant_alias') {
+      if (exception.constraint === 'uq_tenant_alias' || exception.constraint === 'uq_domain_short_code') {
         code = ErrorCodes.ALIAS_CONFLICT;
-        message = 'Alias is already taken for your organization';
+        message = 'Alias is already in use (duplicate). Please choose a different alias.';
       } else if (exception.constraint === 'uq_domain_hostname') {
         code = ErrorCodes.DOMAIN_CONFLICT;
         message = 'Hostname is already registered';
@@ -50,10 +50,10 @@ export class ErrorHandlerFilter implements ExceptionFilter {
       code = ErrorCodes.SCREENING_FAILED;
       message = exception.message;
     } else if (exception.code === ErrorCodes.ALIAS_CONFLICT || 
-              (typeof exception.message === 'string' && exception.message.includes('already taken'))) {
+              (typeof exception.message === 'string' && (exception.message.toLowerCase().includes('already taken') || exception.message.toLowerCase().includes('already in use') || exception.message.toLowerCase().includes('duplicate')))) {
       statusCode = 409;
       code = ErrorCodes.ALIAS_CONFLICT;
-      message = exception.message || 'Alias is already taken for your organization';
+      message = exception.message || 'Alias is already in use (duplicate). Please choose a different alias.';
     } else if (exception.statusCode) {
       statusCode = exception.statusCode;
       message = exception.message;

@@ -71,30 +71,30 @@ export class LinkService {
 
     // 2. Validate tenant-scoped alias if supplied
     let sanitizedAlias: string | null = null;
-    if (dto.alias) {
-      sanitizedAlias = this.sanitizeAlias(dto.alias);
-
-      const existingAlias = await client.query(
-        'SELECT id FROM links WHERE tenant_id = $1 AND alias = $2',
-        [tenantId, sanitizedAlias]
-      );
-      if (existingAlias.rowCount && existingAlias.rowCount > 0) {
-        throw new Error(`Alias '${sanitizedAlias}' is already taken for your organization`);
-      }
-    }
-
-    // 3. Collision-resistant code generation with enterprise retry limits
     let shortCode = '';
     let inserted = false;
     let attempts = 0;
     let linkRecord: Link | null = null;
 
-    while (!inserted && attempts < FALLBACKS.SHORT_CODE_MAX_RETRIES) {
-      attempts++;
-      const codeLen: number =
-        attempts > 2 ? FALLBACKS.SHORT_CODE_MAX_COLLISION_LENGTH : FALLBACKS.SHORT_CODE_DEFAULT_LENGTH;
-      shortCode = this.generateShortCode(codeLen);
+    if (dto.alias && dto.alias.trim()) {
+      sanitizedAlias = this.sanitizeAlias(dto.alias);
 
+      // Check if alias / short code is already taken on this domain OR for this tenant
+      const existing = await client.query(
+        `SELECT id FROM links 
+         WHERE (domain_id = $1 AND (short_code = $2 OR LOWER(alias) = LOWER($2)))
+            OR (tenant_id = $3 AND (short_code = $2 OR LOWER(alias) = LOWER($2)))
+         LIMIT 1`,
+        [domainId, sanitizedAlias, tenantId]
+      );
+      if (existing.rowCount && existing.rowCount > 0) {
+        const conflictErr: any = new Error(`Alias '${sanitizedAlias}' is already in use (duplicate). Please choose a different alias.`);
+        conflictErr.statusCode = 409;
+        conflictErr.code = 'ALIAS_CONFLICT';
+        throw conflictErr;
+      }
+
+      shortCode = sanitizedAlias;
       try {
         const res = await client.query(
           `INSERT INTO links (
@@ -120,16 +120,52 @@ export class LinkService {
         linkRecord = res.rows[0];
         inserted = true;
       } catch (err: any) {
-        if (err.code === '23505' && err.constraint === 'uq_domain_short_code') {
-          continue;
-        }
-        if (err.code === '23505' && err.constraint === 'uq_tenant_alias') {
-          const conflictErr: any = new Error(`Alias '${sanitizedAlias}' is already taken for your organization`);
+        if (err.code === '23505') {
+          const conflictErr: any = new Error(`Alias '${sanitizedAlias}' is already in use (duplicate). Please choose a different alias.`);
           conflictErr.statusCode = 409;
           conflictErr.code = 'ALIAS_CONFLICT';
           throw conflictErr;
         }
         throw err;
+      }
+    } else {
+      // 3. Collision-resistant code generation with enterprise retry limits
+      while (!inserted && attempts < FALLBACKS.SHORT_CODE_MAX_RETRIES) {
+        attempts++;
+        const codeLen: number =
+          attempts > 2 ? FALLBACKS.SHORT_CODE_MAX_COLLISION_LENGTH : FALLBACKS.SHORT_CODE_DEFAULT_LENGTH;
+        shortCode = this.generateShortCode(codeLen);
+
+        try {
+          const res = await client.query(
+            `INSERT INTO links (
+              tenant_id, domain_id, short_code, alias, destination_url,
+              redirect_type, status, expires_at, max_clicks, tag, external_ref
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING *`,
+            [
+              tenantId,
+              domainId,
+              shortCode,
+              null,
+              dto.destinationUrl,
+              dto.redirectType || String(FALLBACKS.REDIRECT_TYPE),
+              LinkStatus.ACTIVE,
+              dto.expiresAt ? new Date(dto.expiresAt) : null,
+              dto.maxClicks || null,
+              dto.tag || null,
+              dto.externalRef || null,
+            ]
+          );
+
+          linkRecord = res.rows[0];
+          inserted = true;
+        } catch (err: any) {
+          if (err.code === '23505' && err.constraint === 'uq_domain_short_code') {
+            continue;
+          }
+          throw err;
+        }
       }
     }
 
@@ -157,9 +193,7 @@ export class LinkService {
     // 6. Query tenant code for human-readable alias URL (FR-05)
     let aliasUrl: string | undefined;
     if (sanitizedAlias) {
-      const tenantRes = await client.query('SELECT code FROM tenants WHERE id = $1', [tenantId]);
-      const tenantCode = tenantRes.rows[0]?.code || BULK_CONSTANTS.FALLBACK_TENANT_CODE;
-      aliasUrl = UrlService.buildAliasUrl(tenantCode, sanitizedAlias);
+      aliasUrl = UrlService.buildShortUrl(sanitizedAlias);
     }
 
     return {

@@ -119,7 +119,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
     try {
       const dto: CreateLinkDto = {
         destinationUrl,
-        alias: alias.trim() || undefined,
+        alias: alias.trim() ? alias.trim().toLowerCase() : undefined,
         tag: tag || undefined,
         externalRef: externalRef.trim() || undefined,
         maxClicks: maxClicks ? Number(maxClicks) : undefined,
@@ -287,11 +287,23 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                     <input
                       type="text"
                       value={alias}
-                      onChange={(e) => setAlias(e.target.value)}
+                      onChange={(e) => {
+                        setAlias(e.target.value);
+                        if (error) setError(null);
+                      }}
                       placeholder="launch-2026"
-                      className="w-full text-xs px-2.5 py-2 rounded-r border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                      className={`w-full text-xs px-2.5 py-2 rounded-r border font-mono focus:outline-none focus:ring-1 ${
+                        error && (error.toLowerCase().includes('alias') || error.toLowerCase().includes('duplicate'))
+                          ? 'border-red-500 focus:ring-red-500 bg-red-50/30'
+                          : 'border-slate-300 focus:ring-blue-500'
+                      }`}
                     />
                   </div>
+                  {error && (error.toLowerCase().includes('alias') || error.toLowerCase().includes('duplicate')) && (
+                    <p className="text-[10px] text-red-600 font-medium mt-1">
+                      ⚠️ Duplicate: This alias is already in use.
+                    </p>
+                  )}
                 </div>
 
                 <div>

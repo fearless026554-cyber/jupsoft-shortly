@@ -135,4 +135,11 @@ describe('JLMP Backend - Full Regression & PRD Verification Suite', () => {
     expect(ErrorCodes.RATE_LIMIT_EXCEEDED).toBe('RATE_LIMIT_EXCEEDED');
     expect(ErrorCodes.SCREENING_FAILED).toBe('SCREENING_FAILED');
   });
+
+  it('Custom Alias sanitization & validation rules', () => {
+    expect(LinkService.sanitizeAlias(' Launch-2026 ')).toBe('launch-2026');
+    expect(LinkService.sanitizeAlias('my-brand_123')).toBe('my-brand_123');
+    expect(() => LinkService.sanitizeAlias('api')).toThrow(/reserved system keyword/);
+    expect(() => LinkService.sanitizeAlias('ab')).toThrow(/must be 3-64 characters/);
+  });
 });
