@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Req, Res, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Req, Res, Body, UseGuards, Logger } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
@@ -31,6 +31,8 @@ const googleAuthSchema = z
 
 @Controller('api/v1/auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly redis: RedisService,
@@ -103,10 +105,14 @@ export class AuthController {
       }
     };
 
-    // Check user in database using system context
+    // Single-query fetch: join user and tenant details in one round-trip
     const userResult = await this.db.withSuperAdminContext(async (client) => {
       return client.query(
-        `SELECT id, tenant_id, name, email, password_hash, role, status FROM users WHERE LOWER(email) = LOWER($1)`,
+        `SELECT u.id, u.tenant_id, u.name, u.email, u.password_hash, u.role, u.status,
+                t.name AS tenant_name, t.code AS tenant_code
+         FROM users u
+         LEFT JOIN tenants t ON u.tenant_id = t.id
+         WHERE LOWER(u.email) = LOWER($1)`,
         [normalizedEmail]
       );
     });
@@ -147,20 +153,26 @@ export class AuthController {
       });
     }
 
-    // Reset failed attempt counters upon successful authentication
-    await this.redis.client.del(`login:fail:ip:${clientIp}`);
-    await this.redis.client.del(`login:fail:email:${normalizedEmail}`);
+    // Reset failed attempt counters and fetch token version concurrently
+    const [, , tokenVer] = await Promise.all([
+      this.redis.client.del(`login:fail:ip:${clientIp}`),
+      this.redis.client.del(`login:fail:email:${normalizedEmail}`),
+      this.redis.getUserTokenVersion(user.id),
+    ]);
 
-    // Update last_login_at and status to active if was invited
-    await this.db.withSuperAdminContext(async (client) => {
-      return client.query(
-        `UPDATE users SET last_login_at = NOW(), status = 'active' WHERE id = $1`,
-        [user.id]
-      );
-    });
+    // Asynchronously update last_login_at and status in background without blocking response latency
+    this.db
+      .withSuperAdminContext(async (client) => {
+        return client.query(
+          `UPDATE users SET last_login_at = NOW(), status = 'active' WHERE id = $1`,
+          [user.id]
+        );
+      })
+      .catch((err) => {
+        this.logger.error(`Failed to update last_login_at for user ${user.id}: ${err?.message || err}`);
+      });
 
     const scopes = ROLE_SCOPES[user.role as UserRoleType] || [];
-    const tokenVer = await this.redis.getUserTokenVersion(user.id);
 
     const tokenPayload = {
       userId: user.id,
@@ -176,22 +188,6 @@ export class AuthController {
       expiresIn: env.JWT_EXPIRY as any,
     });
 
-    // Optionally get tenant name
-    let tenantName: string | null = null;
-    let tenantCode: string | null = null;
-    if (user.tenant_id) {
-      const tenantRes = await this.db.withSuperAdminContext(async (client) => {
-        return client.query(
-          `SELECT name, code FROM tenants WHERE id = $1`,
-          [user.tenant_id]
-        );
-      });
-      if (tenantRes.rowCount && tenantRes.rowCount > 0) {
-        tenantName = tenantRes.rows[0].name;
-        tenantCode = tenantRes.rows[0].code;
-      }
-    }
-
     return reply.status(200).send({
       success: true,
       data: {
@@ -203,8 +199,8 @@ export class AuthController {
           role: user.role,
           status: 'active',
           tenant_id: user.tenant_id,
-          tenant_name: tenantName,
-          tenant_code: tenantCode,
+          tenant_name: user.tenant_name || null,
+          tenant_code: user.tenant_code || null,
         },
       },
     });
