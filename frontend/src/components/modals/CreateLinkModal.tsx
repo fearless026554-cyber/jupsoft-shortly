@@ -116,9 +116,21 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
     setLoading(true);
     setError(null);
 
+    let cleanUrl = destinationUrl.trim();
+    if (!cleanUrl) {
+      setError('Please provide a valid destination URL');
+      setLoading(false);
+      return;
+    }
+
+    if (!/^https?:\/\//i.test(cleanUrl)) {
+      cleanUrl = 'https://' + cleanUrl;
+      setDestinationUrl(cleanUrl);
+    }
+
     try {
       const dto: CreateLinkDto = {
-        destinationUrl,
+        destinationUrl: cleanUrl,
         alias: alias.trim() ? alias.trim().toLowerCase() : undefined,
         tag: tag || undefined,
         externalRef: externalRef.trim() || undefined,
@@ -266,11 +278,17 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                   Destination URL *
                 </label>
                 <input
-                  type="url"
+                  type="text"
                   required
                   value={destinationUrl}
                   onChange={(e) => setDestinationUrl(e.target.value)}
-                  placeholder="https://example.com/landing-page"
+                  onBlur={() => {
+                    const clean = destinationUrl.trim();
+                    if (clean && !/^https?:\/\//i.test(clean)) {
+                      setDestinationUrl('https://' + clean);
+                    }
+                  }}
+                  placeholder="https://example.com, www.example.com or example.com"
                   className="w-full text-xs px-3 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                 />
               </div>

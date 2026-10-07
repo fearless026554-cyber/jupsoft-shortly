@@ -35,12 +35,19 @@ interface BulkStudioViewProps {
 }
 
 export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) => {
-  // URL Validation Helper
+  // URL Normalization & Validation Helper
+  const normalizeUrl = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return '';
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  };
+
   const isValidUrl = (url: string) => {
     if (!url || !url.trim()) return false;
     try {
-      const parsed = new URL(url.trim());
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      const full = normalizeUrl(url);
+      const parsed = new URL(full);
+      return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname.includes('.');
     } catch {
       return false;
     }
@@ -509,10 +516,10 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                     {/* Long Destination URL Input with Inline Error */}
                     <td className="px-3.5 py-2">
                       <input
-                        type="url"
+                        type="text"
                         value={row.destinationUrl}
                         onChange={(e) => handleUpdateRow(idx, 'destinationUrl', e.target.value)}
-                        placeholder="https://example.com/landing-page"
+                        placeholder="https://example.com, www.example.com or example.com"
                         className={`w-full text-xs px-2.5 py-1.5 rounded border transition focus:outline-hidden ${
                           isInvalid
                             ? 'border-red-400 bg-red-50/40 text-red-900 focus:border-red-500 focus:ring-1 focus:ring-red-400'
