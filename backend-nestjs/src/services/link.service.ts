@@ -193,7 +193,13 @@ export class LinkService {
     // 6. Query tenant code for human-readable alias URL (FR-05)
     let aliasUrl: string | undefined;
     if (sanitizedAlias) {
-      aliasUrl = UrlService.buildShortUrl(sanitizedAlias);
+      const tRes = await client.query('SELECT code FROM tenants WHERE id = $1', [tenantId]);
+      const tCode = tRes.rows[0]?.code;
+      if (tCode) {
+        aliasUrl = UrlService.buildAliasUrl(tCode, sanitizedAlias);
+      } else {
+        aliasUrl = UrlService.buildShortUrl(sanitizedAlias);
+      }
     }
 
     return {

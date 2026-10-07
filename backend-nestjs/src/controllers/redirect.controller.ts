@@ -17,11 +17,10 @@ import {
   REDIS_KEYS,
   SYSTEM_ROUTES,
   TenantStatus,
+  isReservedPath,
 } from '../constants/index.js';
 import { env } from '../config/env.js';
 
-const RESERVED_PATHS = new Set(['api', 'system', 'admin', 'auth', 'dashboard']);
-const isReservedPath = (path: string) => RESERVED_PATHS.has(path.toLowerCase());
 
 @SkipThrottle()
 @Controller()
