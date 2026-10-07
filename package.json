@@ -4,9 +4,17 @@
   "private": true,
   "description": "Jupsoft Link Management Platform (JLMP)",
   "scripts": {
-    "dev": "pnpm --filter @jlmp/backend dev",
-    "build": "pnpm --filter @jlmp/backend build",
-    "start": "pnpm --filter @jlmp/backend start"
+    "dev": "pnpm --filter backend-nestjs start:dev",
+    "dev:backend": "pnpm --filter backend-nestjs start:dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build": "pnpm --filter backend-nestjs build && pnpm --filter frontend build",
+    "build:backend": "pnpm --filter backend-nestjs build",
+    "build:frontend": "pnpm --filter frontend build",
+    "start": "pnpm --filter backend-nestjs start:prod",
+    "start:backend": "pnpm --filter backend-nestjs start:prod",
+    "start:frontend": "pnpm --filter frontend start",
+    "test": "pnpm --filter backend-nestjs test",
+    "lint": "pnpm --filter backend-nestjs lint"
   },
   "dependencies": {
     "rxjs": "^7.8.2"

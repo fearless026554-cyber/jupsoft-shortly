@@ -26,14 +26,26 @@ export function useTenantDomains() {
       return;
     }
 
-    api.getDomains().then(domains => {
-      if (domains && domains.length > 0) {
-        const verified = domains.find(d => d.verification_status === 'verified');
-        const resolved = verified ? verified.hostname : domains[0].hostname;
-        cachedDefaultDomain = resolved;
-        setDefaultDomain(resolved);
-      }
-    }).catch(() => {});
+    // Try fetching runtime config from /api/config first if build-time env is missing
+    fetch('/api/config')
+      .then(res => res.json())
+      .then(cfg => {
+        if (cfg.defaultShortDomain) {
+          cachedDefaultDomain = cfg.defaultShortDomain;
+          setDefaultDomain(cfg.defaultShortDomain);
+          return;
+        }
+        return api.getDomains();
+      })
+      .then(domains => {
+        if (Array.isArray(domains) && domains.length > 0) {
+          const verified = domains.find(d => d.verification_status === 'verified');
+          const resolved = verified ? verified.hostname : domains[0].hostname;
+          cachedDefaultDomain = resolved;
+          setDefaultDomain(resolved);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   return { defaultDomain, cnameDomain };

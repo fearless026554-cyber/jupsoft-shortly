@@ -1,25 +1,6 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: jupsoft_postgres
-    restart: always
-    environment:
-      POSTGRES_USER: ${DB_USER:?DB_USER is required}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
-    ports:
-      - "127.0.0.1:5433:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backend-nestjs/src/db/schema.sql:/docker-entrypoint-initdb.d/init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   redis:
     image: redis:7-alpine
     container_name: jupsoft_redis
@@ -40,24 +21,24 @@ services:
 
   backend:
     build:
-      context: ./backend-nestjs
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend-nestjs/Dockerfile
     container_name: jupsoft_backend
     restart: always
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     environment:
+      - NODE_ENV=production
       - PORT=3000
       - HOST=0.0.0.0
       - BASE_URL=${BASE_URL:?BASE_URL is required}
-      - PG_HOST=postgres
-      - PG_PORT=5432
-      - PG_USER=${DB_USER:?DB_USER is required}
-      - PG_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
-      - PG_DATABASE=${DB_NAME:?DB_NAME is required}
+      - PG_HOST=${PG_HOST:?PG_HOST is required}
+      - PG_PORT=${PG_PORT:-5432}
+      - PG_USER=${PG_USER:?PG_USER is required}
+      - PG_PASSWORD=${PG_PASSWORD:?PG_PASSWORD is required}
+      - PG_DATABASE=${PG_DATABASE:-postgres}
+      - PG_SSL=${PG_SSL:-true}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
@@ -68,25 +49,65 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:?CORS_ORIGINS is required}
       - DEFAULT_DOMAIN_ID=${DEFAULT_DOMAIN_ID:?DEFAULT_DOMAIN_ID is required}
       - DEFAULT_DOMAIN_HOST=${DEFAULT_DOMAIN_HOST:?DEFAULT_DOMAIN_HOST is required}
+      - SAFE_BROWSING_API_KEY=${SAFE_BROWSING_API_KEY:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
     ports:
       - "3001:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN: ${NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN:-}
+        NEXT_PUBLIC_CNAME_DOMAIN: ${NEXT_PUBLIC_CNAME_DOMAIN:-}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
     container_name: jupsoft_frontend
     restart: always
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
-      - BACKEND_URL=${BACKEND_URL:?BACKEND_URL is required}
+      - NODE_ENV=production
+      - BACKEND_URL=${BACKEND_URL:-http://backend:3000}
       - CMS_API_KEY=${CMS_API_KEY:-}
-      - NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN=${NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN:?NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN is required}
-      - NEXT_PUBLIC_CNAME_DOMAIN=${NEXT_PUBLIC_CNAME_DOMAIN:?NEXT_PUBLIC_CNAME_DOMAIN is required}
+      - NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN=${NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN:-}
+      - NEXT_PUBLIC_CNAME_DOMAIN=${NEXT_PUBLIC_CNAME_DOMAIN:-}
+      - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
     ports:
       - "5001:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/login > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  nginx:
+    image: nginx:alpine
+    container_name: jupsoft_nginx
+    restart: always
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./nginx/certbot/conf:/etc/letsencrypt:ro
+      - ./nginx/certbot/www:/var/www/certbot:ro
 
 volumes:
-  postgres_data:
   redis_data:

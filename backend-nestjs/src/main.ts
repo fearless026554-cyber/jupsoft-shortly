@@ -148,7 +148,7 @@ async function bootstrap() {
   await app.listen(env.PORT, '0.0.0.0');
   console.log(`Application is running on: ${await app.getUrl()}`);
 
-  if (Number(env.PORT) !== 80) {
+  if (Number(env.PORT) !== 80 && env.NODE_ENV !== 'production') {
     startLocalDomainGateways(Number(env.PORT), Number(process.env.FRONTEND_PORT || 5001));
   }
 }

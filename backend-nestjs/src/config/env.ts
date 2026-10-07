@@ -43,6 +43,7 @@ const envSchema = z
     PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(20),
     PG_IDLE_TIMEOUT_MS: z.coerce.number().int().default(30000),
     PG_CONN_TIMEOUT_MS: z.coerce.number().int().default(5000),
+    PG_SSL: z.coerce.boolean().default(false),
 
     // Redis Cache & Queues
     REDIS_HOST: z.string().min(1, 'REDIS_HOST is required'),

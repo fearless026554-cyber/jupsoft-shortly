@@ -10,6 +10,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private retentionTimer: NodeJS.Timeout | null = null;
 
   async onModuleInit() {
+    const isSsl = env.PG_SSL || env.PG_HOST.includes('supabase.co') || env.PG_HOST.includes('supabase.com');
     this.pool = new Pool({
       host: env.PG_HOST,
       port: env.PG_PORT,
@@ -19,6 +20,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       max: env.PG_POOL_MAX,
       idleTimeoutMillis: env.PG_IDLE_TIMEOUT_MS,
       connectionTimeoutMillis: env.PG_CONN_TIMEOUT_MS,
+      ssl: isSsl ? { rejectUnauthorized: false } : undefined,
     });
 
     // Ensure upcoming click partitions on startup
