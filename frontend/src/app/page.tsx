@@ -50,7 +50,6 @@ const MODULE_ROUTES: Record<ActiveModule, string> = {
 };
 
 const ROUTE_TO_MODULE: Record<string, ActiveModule> = {
-  '/': 'overview',
   '/dashboard': 'overview',
   '/overview': 'overview',
   '/links': 'links',
@@ -69,9 +68,15 @@ const ROUTE_TO_MODULE: Record<string, ActiveModule> = {
 };
 
 export default function ShortlyCRMApp() {
-  // Authentication & Session State
+  // Authentication & Session State (Instant optimistic read from localStorage - zero blocking spinner)
   const [currentUser, setCurrentUser] = useState<any>(() => getStoredUser());
-  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
+  // Landing Page Route State (true if URL is '/' or '/landing')
+  const [isLandingRoute, setIsLandingRoute] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname.replace(/\/$/, '') || '/';
+    return path === '/' || path === '/landing';
+  });
 
   // Navigation Module State
   const [activeTab, setActiveTab] = useState<ActiveModule>('overview');
@@ -107,10 +112,11 @@ export default function ShortlyCRMApp() {
   // Synchronize route with URL pathname & popstate events
   const handleNavigate = (tab: ActiveModule) => {
     const targetTab = isTabAllowed(tab, currentUser?.role) ? tab : 'overview';
+    setIsLandingRoute(false);
     setActiveTab(targetTab);
     setDrawerLink(null);
     if (typeof window !== 'undefined') {
-      const targetPath = MODULE_ROUTES[targetTab] || '/';
+      const targetPath = MODULE_ROUTES[targetTab] || '/dashboard';
       if (window.location.pathname !== targetPath) {
         window.history.pushState(null, '', targetPath);
       }
@@ -122,16 +128,19 @@ export default function ShortlyCRMApp() {
       if (typeof window === 'undefined') return;
       setDrawerLink(null);
       const path = window.location.pathname.replace(/\/$/, '') || '/';
+
+      if (path === '/' || path === '/landing') {
+        setIsLandingRoute(true);
+        return;
+      }
+
+      setIsLandingRoute(false);
       const matched = ROUTE_TO_MODULE[path];
       if (matched) {
         if (isTabAllowed(matched, currentUser?.role)) {
           setActiveTab(matched);
-          if (path === '/' && getAuthToken()) {
-            window.history.replaceState(null, '', '/dashboard');
-          }
         } else {
           setActiveTab('overview');
-          window.history.replaceState(null, '', '/dashboard');
         }
       }
     };
@@ -153,34 +162,32 @@ export default function ShortlyCRMApp() {
     }
   }, [currentUser, activeTab]);
 
-  // Verify authentication on mount
+  // Silent background session revalidation (never blocks UI)
   useEffect(() => {
     const token = getAuthToken();
     if (!token) {
-      setIsAuthChecking(false);
+      setCurrentUser(null);
+      setStoredUser(null);
       return;
     }
 
     api.getMe().then((res) => {
       if (res && res.success && res.data?.user) {
         setCurrentUser(res.data.user);
-        setIsAuthChecking(false);
+        setStoredUser(res.data.user);
       } else {
         setAuthToken(null);
         setStoredUser(null);
         setCurrentUser(null);
-        setIsAuthChecking(false);
       }
     }).catch(() => {
       const stored = getStoredUser();
       if (stored) {
         setCurrentUser(stored);
-        setIsAuthChecking(false);
       } else {
         setAuthToken(null);
         setStoredUser(null);
         setCurrentUser(null);
-        setIsAuthChecking(false);
       }
     });
   }, []);
@@ -272,7 +279,7 @@ export default function ShortlyCRMApp() {
   };
 
   useEffect(() => {
-    if (isAuthChecking || !currentUser) return;
+    if (!currentUser || isLandingRoute) return;
 
     loadData();
 
@@ -284,7 +291,7 @@ export default function ShortlyCRMApp() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [isAuthChecking, currentUser?.id, activeTenantId]);
+  }, [currentUser?.id, activeTenantId, isLandingRoute]);
 
   // Keyboard shortcut listener (Ctrl + / for Search, C for Create Link)
   useEffect(() => {
@@ -380,18 +387,11 @@ export default function ShortlyCRMApp() {
     }
   };
 
-  if (isAuthChecking) {
-    return (
-      <div className="min-h-screen bg-[#071320] flex flex-col items-center justify-center text-white">
-        <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-3"></div>
-        <p className="text-xs font-mono text-slate-400">Verifying session credentials...</p>
-      </div>
-    );
-  }
-
-  if (!currentUser) {
+  if (isLandingRoute || !currentUser) {
     return (
       <LandingPageView
+        currentUser={currentUser}
+        onGoToDashboard={() => handleNavigate('overview')}
         onLoginClick={() => {
           window.location.href = '/login';
         }}
