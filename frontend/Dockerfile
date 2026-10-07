@@ -11,7 +11,6 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_ENV=production
 
 # Pin corepack and pnpm version for reproducible builds
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
@@ -20,8 +19,8 @@ RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY frontend/package.json ./frontend/
 
-# Install dependencies strictly with frozen lockfile
-RUN pnpm --filter frontend install --frozen-lockfile --ignore-scripts
+# Install dependencies including build-time devDependencies (Tailwind, PostCSS, TypeScript)
+RUN pnpm --filter frontend install --frozen-lockfile --ignore-scripts --prod=false
 
 # Copy frontend source code
 COPY frontend ./frontend
@@ -34,6 +33,7 @@ ARG NEXT_PUBLIC_GOOGLE_CLIENT_ID
 ENV NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN=$NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN
 ENV NEXT_PUBLIC_CNAME_DOMAIN=$NEXT_PUBLIC_CNAME_DOMAIN
 ENV NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID
+ENV NODE_ENV=production
 
 # Build Next.js standalone application
 RUN pnpm --filter frontend build

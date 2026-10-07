@@ -18,7 +18,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY backend-nestjs/package.json ./backend-nestjs/
 
 # Install dependencies strictly with frozen lockfile
-RUN pnpm --filter backend-nestjs install --frozen-lockfile --ignore-scripts
+RUN pnpm --filter backend-nestjs install --frozen-lockfile --ignore-scripts --prod=false
 
 # Copy backend source code and build artifacts
 COPY backend-nestjs ./backend-nestjs
