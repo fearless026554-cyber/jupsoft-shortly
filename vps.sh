@@ -94,17 +94,36 @@ ADMIN_EMAIL="${ADMIN_EMAIL:-sachin@jupsoft.com}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-Admin@Jupsoft2026!}"
 DOMAIN_HOST="${DEFAULT_DOMAIN_HOST:-go.jupsoft.com}"
 
-# 4. Build & Launch Containers in Background
-echo -e "\n${BLUE}[*] Building and starting Docker services (backend, frontend, redis, nginx)...${NC}"
+# 4. Host Nginx Integration (for multi-website VPS environments)
+if systemctl is-active --quiet nginx 2>/dev/null; then
+  echo -e "\n${YELLOW}[!] Host Nginx is active on this server. Configuring host reverse proxy for ${DOMAIN_HOST}...${NC}"
+  if [ -d "/etc/nginx/sites-available" ]; then
+    cp nginx/host-go.jupsoft.com.conf "/etc/nginx/sites-available/${DOMAIN_HOST}.conf"
+    mkdir -p /etc/nginx/sites-enabled
+    ln -sf "/etc/nginx/sites-available/${DOMAIN_HOST}.conf" "/etc/nginx/sites-enabled/${DOMAIN_HOST}.conf"
+  elif [ -d "/etc/nginx/conf.d" ]; then
+    cp nginx/host-go.jupsoft.com.conf "/etc/nginx/conf.d/${DOMAIN_HOST}.conf"
+  fi
+
+  if nginx -t >/dev/null 2>&1; then
+    systemctl reload nginx
+    echo -e "${GREEN}[✓] Host Nginx successfully configured and reloaded for ${DOMAIN_HOST}.${NC}"
+  else
+    echo -e "${RED}[!] Host Nginx test failed. Please review Nginx syntax.${NC}"
+  fi
+fi
+
+# 5. Build & Launch Containers in Background
+echo -e "\n${BLUE}[*] Building and starting Docker services (backend, frontend, redis)...${NC}"
 $COMPOSE_CMD up -d --build
 
-# 5. Verify Supabase Database Connectivity
+# 6. Verify Supabase Database Connectivity
 echo -e "\n${BLUE}[*] Verifying Supabase Database connectivity...${NC}"
 echo -e "${GREEN}[✓] Supabase Database (${PG_HOST:-aws-0-ap-northeast-1.pooler.supabase.com}) is online.${NC}"
 echo -e "${GREEN}[✓] Row Level Security (RLS) is ENFORCED on all tables.${NC}"
 echo -e "${GREEN}[✓] Super Administrator (${ADMIN_EMAIL}) provisioned and active on Supabase.${NC}"
 
-# 6. Verification & Health Summary
+# 7. Verification & Health Summary
 echo -e "\n${BLUE}[*] Checking container status...${NC}"
 sleep 3
 $COMPOSE_CMD ps
