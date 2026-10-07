@@ -2,11 +2,17 @@
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
-  async rewrites() {
+  async redirects() {
     return [
       {
-        source: '/:tab(dashboard|overview|links|bulk|outcomes|qr|reports|analytics|tenants|users|domains|abuse|apikeys|profile|help)',
-        destination: '/',
+        source: '/overview',
+        destination: '/dashboard',
+        permanent: true,
+      },
+      {
+        source: '/analytics',
+        destination: '/reports',
+        permanent: true,
       },
     ];
   },
