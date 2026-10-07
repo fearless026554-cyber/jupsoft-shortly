@@ -86,10 +86,12 @@ export class AbuseController {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'Target link could not be located' } });
     }
 
-    const insertRes = await this.db.pool.query(
-      `INSERT INTO abuse_reports (link_id, reason, reporter_email, status) VALUES ($1, $2, $3, 'pending') RETURNING id, status, created_at`,
-      [linkId, dto.reason, dto.reporterEmail || null]
-    );
+    const insertRes = await this.db.withSuperAdminContext(async (client) => {
+      return client.query(
+        `INSERT INTO abuse_reports (link_id, reason, reporter_email, status) VALUES ($1, $2, $3, 'pending') RETURNING id, status, created_at`,
+        [linkId, dto.reason, dto.reporterEmail || null]
+      );
+    });
 
     return reply.status(201).send({
       success: true,
