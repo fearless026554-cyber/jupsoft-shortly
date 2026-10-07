@@ -100,23 +100,67 @@ export class AbuseController {
     });
   }
 
-  @Get()
+  @Get('count')
   @UseGuards(AuthGuard)
   @RequireScope(ApiScopes.ADMIN)
-  async listReports(@Query('status') status: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+  async getPendingCount(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const auth = (req as any).auth;
     const isSuperAdmin = auth.role === UserRoles.SUPER_ADMIN || auth.scopes?.includes(ApiScopes.SUPER_ADMIN) || auth.scopes?.includes(ApiScopes.WILDCARD);
     const tenantId = auth.tenantId;
 
     if (isSuperAdmin) {
+      const res = await this.db.withSuperAdminContext(async (client) => {
+        return client.query(`SELECT COUNT(*)::int AS count FROM abuse_reports WHERE status = 'pending'`);
+      });
+      return reply.send({ success: true, count: res.rows[0]?.count || 0 });
+    }
+
+    const res = await this.db.withTenantContext(tenantId, async (client) => {
+      return client.query(
+        `SELECT COUNT(r.id)::int AS count 
+         FROM abuse_reports r 
+         JOIN links l ON r.link_id = l.id 
+         WHERE l.tenant_id = $1 AND r.status = 'pending'`,
+        [tenantId]
+      );
+    });
+    return reply.send({ success: true, count: res.rows[0]?.count || 0 });
+  }
+
+  @Get()
+  @UseGuards(AuthGuard)
+  @RequireScope(ApiScopes.ADMIN)
+  async listReports(
+    @Query('status') status: string,
+    @Query('limit') limitStr: string,
+    @Query('cursor') cursor: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
+    const auth = (req as any).auth;
+    const isSuperAdmin = auth.role === UserRoles.SUPER_ADMIN || auth.scopes?.includes(ApiScopes.SUPER_ADMIN) || auth.scopes?.includes(ApiScopes.WILDCARD);
+    const tenantId = auth.tenantId;
+    const limit = Math.min(Math.max(1, limitStr ? parseInt(limitStr, 10) || 50 : 50), 100);
+
+    if (isSuperAdmin) {
       const reports = await this.db.withSuperAdminContext(async (client) => {
         let query = `SELECT r.*, l.short_code, l.destination_url, l.tenant_id, t.name AS tenant_name FROM abuse_reports r JOIN links l ON r.link_id = l.id JOIN tenants t ON l.tenant_id = t.id`;
         const params: any[] = [];
+        const conditions: string[] = [];
+
         if (status) {
-          query += ` WHERE r.status = $1`;
           params.push(status);
+          conditions.push(`r.status = $${params.length}`);
         }
-        query += ` ORDER BY r.created_at DESC`;
+        if (cursor) {
+          params.push(new Date(cursor));
+          conditions.push(`r.created_at < $${params.length}`);
+        }
+        if (conditions.length > 0) {
+          query += ` WHERE ` + conditions.join(' AND ');
+        }
+        params.push(limit);
+        query += ` ORDER BY r.created_at DESC LIMIT $${params.length}`;
         const res = await client.query(query, params);
         return res.rows;
       });
@@ -128,10 +172,15 @@ export class AbuseController {
       let query = `SELECT r.*, l.short_code, l.destination_url, l.tenant_id, t.name AS tenant_name FROM abuse_reports r JOIN links l ON r.link_id = l.id JOIN tenants t ON l.tenant_id = t.id WHERE l.tenant_id = $1`;
       const params: any[] = [tenantId];
       if (status) {
-        query += ` AND r.status = $2`;
         params.push(status);
+        query += ` AND r.status = $${params.length}`;
       }
-      query += ` ORDER BY r.created_at DESC`;
+      if (cursor) {
+        params.push(new Date(cursor));
+        query += ` AND r.created_at < $${params.length}`;
+      }
+      params.push(limit);
+      query += ` ORDER BY r.created_at DESC LIMIT $${params.length}`;
       const res = await client.query(query, params);
       return res.rows;
     });

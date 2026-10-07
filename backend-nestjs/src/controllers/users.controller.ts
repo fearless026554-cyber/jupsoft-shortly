@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Query, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import * as crypto from 'node:crypto';
@@ -50,15 +50,43 @@ export class UsersController {
 
   @Get()
   @RequireScope(ApiScopes.USERS_READ)
-  async listUsers(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+  async listUsers(
+    @Query('limit') limitStr: string,
+    @Query('cursor') cursor: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
     const auth = (req as any).auth;
+    const isSuperAdmin = auth.role === UserRoles.SUPER_ADMIN || auth.scopes?.includes(ApiScopes.SUPER_ADMIN) || auth.scopes?.includes(ApiScopes.WILDCARD);
     const tenantId = auth.tenantId;
+    const limit = Math.min(Math.max(1, limitStr ? parseInt(limitStr, 10) || 50 : 50), 100);
+
+    if (isSuperAdmin && !tenantId) {
+      const users = await this.db.withSuperAdminContext(async (client) => {
+        let query = `SELECT id, tenant_id, name, email, role, status, avatar_url, last_login_at, created_at FROM users`;
+        const params: any[] = [];
+        if (cursor) {
+          params.push(new Date(cursor));
+          query += ` WHERE created_at < $1`;
+        }
+        params.push(limit);
+        query += ` ORDER BY created_at DESC LIMIT $${params.length}`;
+        const res = await client.query(query, params);
+        return res.rows;
+      });
+      return reply.send({ success: true, data: users });
+    }
 
     const users = await this.db.withTenantContext(tenantId, async (client) => {
-      const res = await client.query(
-        `SELECT id, tenant_id, name, email, role, status, avatar_url, last_login_at, created_at FROM users WHERE tenant_id = $1 ORDER BY created_at DESC`,
-        [tenantId]
-      );
+      let query = `SELECT id, tenant_id, name, email, role, status, avatar_url, last_login_at, created_at FROM users WHERE tenant_id = $1`;
+      const params: any[] = [tenantId];
+      if (cursor) {
+        params.push(new Date(cursor));
+        query += ` AND created_at < $2`;
+      }
+      params.push(limit);
+      query += ` ORDER BY created_at DESC LIMIT $${params.length}`;
+      const res = await client.query(query, params);
       return res.rows;
     });
 

@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Req, Res, UseGuards, UseInterceptors, Quer
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service.js';
+import { RedisService } from '../redis/redis.service.js';
 import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor.js';
 import { OutcomeService } from '../services/outcome.service.js';
@@ -26,7 +27,10 @@ const outcomeEventSchema = z
 @Controller('api/v1/outcomes')
 @UseGuards(AuthGuard)
 export class OutcomesController {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly redis: RedisService
+  ) {}
 
   @Post()
   @RequireScope(ApiScopes.OUTCOMES_WRITE)
@@ -59,6 +63,12 @@ export class OutcomesController {
       return recorded;
     });
 
+    // Invalidate report cache
+    this.redis.client.del(`outcomes:report:${tenantId}:all`).catch(() => {});
+    if (result.matchedLinkId) {
+      this.redis.client.del(`outcomes:report:${tenantId}:${result.matchedLinkId}`).catch(() => {});
+    }
+
     return reply.status(201).send({ success: true, data: result });
   }
 
@@ -67,7 +77,7 @@ export class OutcomesController {
   async getOutcomes(@Query('limit') limit: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
-    const limitNum = limit ? parseInt(limit, 10) : 50;
+    const limitNum = Math.min(Math.max(1, limit ? parseInt(limit, 10) || 50 : 50), 100);
 
     const outcomes = await this.db.withTenantContext(tenantId, async (client) => {
       const res = await client.query(
@@ -90,9 +100,19 @@ export class OutcomesController {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
 
+    const cacheKey = `outcomes:report:${tenantId}:${linkId || 'all'}`;
+    const cached = await this.redis.client.get(cacheKey);
+    if (cached) {
+      return reply.send({ success: true, data: JSON.parse(cached) });
+    }
+
     const report = await this.db.withTenantContext(tenantId, async (client) => {
       return OutcomeService.getAttributionReport(client, tenantId, linkId);
     });
+
+    if (report) {
+      await this.redis.client.setex(cacheKey, 60, JSON.stringify(report));
+    }
 
     return reply.send({ success: true, data: report });
   }

@@ -428,6 +428,12 @@ export class LinksController {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
 
+    const cacheKey = `link:detail:${tenantId}:${id}`;
+    const cached = await this.redis.client.get(cacheKey);
+    if (cached) {
+      return reply.send({ success: true, data: JSON.parse(cached) });
+    }
+
     const link = await this.db.withTenantContext(tenantId, async (client) => {
       const res = await client.query('SELECT * FROM links WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
       return res.rows[0];
@@ -437,7 +443,10 @@ export class LinksController {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'Link not found' } });
     }
 
-    return reply.send({ success: true, data: { ...link, shortUrl: UrlService.buildShortUrl(link.short_code) } });
+    const responseData = { ...link, shortUrl: UrlService.buildShortUrl(link.short_code) };
+    await this.redis.client.setex(cacheKey, 120, JSON.stringify(responseData));
+
+    return reply.send({ success: true, data: responseData });
   }
 
   @Patch(':id')
@@ -499,6 +508,7 @@ export class LinksController {
     }
 
     await this.redis.invalidateLink(updated.domain_id, updated.short_code, tenantId, updated.alias);
+    await this.redis.client.del(`link:detail:${tenantId}:${id}`).catch(() => {});
 
     if (dto.destinationUrl) {
       this.screeningQueue
@@ -555,6 +565,7 @@ export class LinksController {
     }
 
     await this.redis.invalidateLink(result.domain_id, result.short_code, tenantId, result.alias);
+    await this.redis.client.del(`link:detail:${tenantId}:${id}`).catch(() => {});
     return reply.send({ success: true, message: isPermanent ? 'Link permanently deleted' : 'Link archived successfully' });
   }
 

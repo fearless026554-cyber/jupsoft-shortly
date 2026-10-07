@@ -2,6 +2,7 @@ import { Controller, Get, Param, Query, Req, Res, UseGuards } from '@nestjs/comm
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service.js';
+import { RedisService } from '../redis/redis.service.js';
 import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
 import { ApiScopes, ErrorCodes } from '../constants/index.js';
 
@@ -23,7 +24,10 @@ const analyticsQuerySchema = z
 @Controller('api/v1/analytics')
 @UseGuards(AuthGuard)
 export class AnalyticsController {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly redis: RedisService
+  ) {}
 
   @Get('links/:id')
   @RequireScope(ApiScopes.ANALYTICS_READ)
@@ -37,6 +41,12 @@ export class AnalyticsController {
     const dto = analyticsQuerySchema.parse({ startDate, endDate });
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
+
+    const cacheKey = `analytics:link:${tenantId}:${id}:${dto.startDate || 'all'}:${dto.endDate || 'all'}`;
+    const cached = await this.redis.client.get(cacheKey);
+    if (cached) {
+      return reply.send({ success: true, data: JSON.parse(cached) });
+    }
 
     const result = await this.db.withTenantContext(tenantId, async (client) => {
       const linkRes = await client.query(
@@ -78,6 +88,8 @@ export class AnalyticsController {
       });
     }
 
+    await this.redis.client.setex(cacheKey, 60, JSON.stringify(result));
+
     return reply.send({ success: true, data: result });
   }
 
@@ -92,6 +104,12 @@ export class AnalyticsController {
     const dto = analyticsQuerySchema.parse({ startDate, endDate });
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
+
+    const cacheKey = `analytics:summary:${tenantId}:${dto.startDate || 'all'}:${dto.endDate || 'all'}`;
+    const cached = await this.redis.client.get(cacheKey);
+    if (cached) {
+      return reply.send({ success: true, data: JSON.parse(cached) });
+    }
 
     const summary = await this.db.withTenantContext(tenantId, async (client) => {
       const dateConditionDaily = dto.startDate && dto.endDate
@@ -153,6 +171,10 @@ export class AnalyticsController {
 
       return { ...stats.rows[0], ...agg };
     });
+
+    if (summary) {
+      await this.redis.client.setex(cacheKey, 60, JSON.stringify(summary));
+    }
 
     return reply.send({ success: true, data: summary });
   }

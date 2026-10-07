@@ -242,9 +242,9 @@ export default function ShortlyCRMApp() {
       const shouldFetchTenants = (tenants.length === 0 || forceRefresh) && Permissions.canManageTenants(currentUser?.role);
       const tenantPromise = shouldFetchTenants ? api.getTenants().catch(() => []) : Promise.resolve(tenants);
 
-      // 3. Fetch abuse reports only if user has permission to manage abuse
+      // 3. Fetch lightweight abuse count only if user has permission to manage abuse
       const shouldFetchAbuse = Permissions.canManageAbuse(currentUser?.role);
-      const abusePromise = shouldFetchAbuse ? api.getAbuseReports().catch(() => []) : Promise.resolve([]);
+      const abusePromise = shouldFetchAbuse ? api.getAbuseCount().catch(() => 0) : Promise.resolve(0);
 
       // 4. Background health status
       const healthPromise = api.getHealth().catch(() => null);
@@ -260,8 +260,8 @@ export default function ShortlyCRMApp() {
       const safeLinks = Array.isArray(l) ? l : [];
       setLinks(safeLinks);
       if (Array.isArray(t) && t.length > 0) setTenants(t);
-      if (Array.isArray(a) && shouldFetchAbuse) {
-        setAbuseCount(a.filter((rep: any) => rep.status === 'pending').length);
+      if (shouldFetchAbuse) {
+        setAbuseCount(typeof a === 'number' ? a : 0);
       }
 
       if (safeLinks.length > 0 && !selectedQrLink) {
@@ -271,6 +271,19 @@ export default function ShortlyCRMApp() {
       console.error('Failed to load JLMP data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshLinks = async () => {
+    try {
+      const l = await api.getLinks(activeTenantId !== 'all' ? activeTenantId : undefined);
+      const safeLinks = Array.isArray(l) ? l : [];
+      setLinks(safeLinks);
+      if (safeLinks.length > 0 && !selectedQrLink) {
+        setSelectedQrLink(safeLinks[0]);
+      }
+    } catch (err) {
+      console.error('Failed to refresh links:', err);
     }
   };
 
@@ -324,7 +337,7 @@ export default function ShortlyCRMApp() {
       onConfirm: async () => {
         await api.archiveLink(id);
         if (drawerLink?.id === id) setDrawerLink(null);
-        loadData();
+        await refreshLinks();
         setConfirmConfig(prev => ({ ...prev, isOpen: false }));
       }
     });
@@ -336,7 +349,7 @@ export default function ShortlyCRMApp() {
       if (drawerLink?.id === id) {
         setDrawerLink((prev) => prev ? { ...prev, status: 'active' } : null);
       }
-      loadData();
+      await refreshLinks();
     } catch (err) {
       console.error('Failed to restore link:', err);
     }
@@ -346,7 +359,7 @@ export default function ShortlyCRMApp() {
     try {
       await api.deleteLinkPermanently(id);
       if (drawerLink?.id === id) setDrawerLink(null);
-      loadData();
+      await refreshLinks();
     } catch (err) {
       console.error('Failed to permanently delete link:', err);
     }
@@ -356,10 +369,10 @@ export default function ShortlyCRMApp() {
     try {
       await Promise.all(ids.map((id) => api.archiveLink(id)));
       if (drawerLink && ids.includes(drawerLink.id)) setDrawerLink(null);
-      await loadData();
+      await refreshLinks();
     } catch (err) {
       console.error('Batch archive failed:', err);
-      await loadData();
+      await refreshLinks();
     }
   };
 
@@ -369,10 +382,10 @@ export default function ShortlyCRMApp() {
       if (drawerLink && ids.includes(drawerLink.id)) {
         setDrawerLink((prev) => (prev ? { ...prev, status: 'active' } : null));
       }
-      await loadData();
+      await refreshLinks();
     } catch (err) {
       console.error('Batch restore failed:', err);
-      await loadData();
+      await refreshLinks();
     }
   };
 
@@ -380,10 +393,10 @@ export default function ShortlyCRMApp() {
     try {
       await Promise.all(ids.map((id) => api.deleteLinkPermanently(id)));
       if (drawerLink && ids.includes(drawerLink.id)) setDrawerLink(null);
-      await loadData();
+      await refreshLinks();
     } catch (err) {
       console.error('Batch permanent delete failed:', err);
-      await loadData();
+      await refreshLinks();
     }
   };
 
@@ -711,7 +724,7 @@ export default function ShortlyCRMApp() {
         onDeletePermanently={handleDeletePermanently}
         onLinkUpdated={(updated) => {
           setDrawerLink(updated);
-          loadData();
+          refreshLinks();
         }}
       />
 
@@ -719,7 +732,7 @@ export default function ShortlyCRMApp() {
       <CreateLinkModal
         isOpen={isCreateLinkModalOpen}
         onClose={() => setIsCreateLinkModalOpen(false)}
-        onLinkCreated={loadData}
+        onLinkCreated={refreshLinks}
       />
 
       <CreateTenantModal

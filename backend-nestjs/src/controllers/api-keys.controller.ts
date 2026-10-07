@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Query, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import * as crypto from 'node:crypto';
@@ -24,15 +24,26 @@ export class ApiKeysController {
 
   @Get()
   @RequireScope(ApiScopes.ADMIN)
-  async listApiKeys(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+  async listApiKeys(
+    @Query('limit') limitStr: string,
+    @Query('cursor') cursor: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
     const auth = (req as any).auth;
     const tenantId = auth.tenantId;
+    const limit = Math.min(Math.max(1, limitStr ? parseInt(limitStr, 10) || 50 : 50), 100);
 
     const keys = await this.db.withTenantContext(tenantId, async (client) => {
-      const res = await client.query(
-        `SELECT id, name, key_prefix, scopes, last_used_at, expires_at, revoked_at, created_at FROM api_keys WHERE tenant_id = $1 ORDER BY created_at DESC`,
-        [tenantId]
-      );
+      let query = `SELECT id, name, key_prefix, scopes, last_used_at, expires_at, revoked_at, created_at FROM api_keys WHERE tenant_id = $1`;
+      const params: any[] = [tenantId];
+      if (cursor) {
+        params.push(new Date(cursor));
+        query += ` AND created_at < $2`;
+      }
+      params.push(limit);
+      query += ` ORDER BY created_at DESC LIMIT $${params.length}`;
+      const res = await client.query(query, params);
       return res.rows;
     });
 

@@ -197,20 +197,38 @@ export const api = {
   },
 
   // Links
-  async getLinks(tenantId?: string, limit = DEFAULT_PAGE_LIMIT): Promise<LinkItem[]> {
-    const url = `${API_BASE_URL}/links?limit=${limit}${tenantId ? `&tenantId=${tenantId}` : ''}`;
-    return dedupeGet(url, async () => {
+  async getLinks(tenantId?: string, limit = 500): Promise<LinkItem[]> {
+    const cacheKey = `${API_BASE_URL}/links?tenantId=${tenantId || 'all'}&limit=${limit}`;
+    return dedupeGet(cacheKey, async () => {
       try {
-        const res = await fetch(url, { headers });
-        const json = await res.json();
-        if (json.success && json.data) {
-          return Array.isArray(json.data) ? json.data : (json.data.items || []);
-        }
-        return [];
+        let allItems: LinkItem[] = [];
+        let cursor: string | null = null;
+        const batchSize = Math.min(limit, 100);
+
+        do {
+          const params = new URLSearchParams();
+          params.set('limit', String(batchSize));
+          if (tenantId) params.set('tenantId', tenantId);
+          if (cursor) params.set('cursor', cursor);
+
+          const res = await fetch(`${API_BASE_URL}/links?${params.toString()}`, { headers });
+          const json = await res.json();
+          if (!json.success || !json.data) break;
+
+          const items: LinkItem[] = Array.isArray(json.data) ? json.data : (json.data.items || []);
+          allItems = allItems.concat(items);
+
+          cursor = json.data?.nextCursor || null;
+          if (!cursor || items.length === 0 || allItems.length >= limit) {
+            break;
+          }
+        } while (cursor && allItems.length < limit);
+
+        return allItems;
       } catch {
         return [];
       }
-    });
+    }, 15000);
   },
 
   async createLink(dto: CreateLinkDto) {
@@ -295,7 +313,7 @@ export const api = {
       } catch {
         return null;
       }
-    });
+    }, 60000);
   },
 
   async getLinkAnalytics(id: string) {
@@ -307,7 +325,7 @@ export const api = {
       } catch {
         return null;
       }
-    });
+    }, 60000);
   },
 
   // Outcomes
@@ -473,10 +491,26 @@ export const api = {
   },
 
   // Abuse Reports
-  async getAbuseReports(): Promise<AbuseReportItem[]> {
-    return dedupeGet(`${API_BASE_URL}/abuse-reports`, async () => {
+  async getAbuseCount(): Promise<number> {
+    return dedupeGet(`${API_BASE_URL}/abuse-reports/count`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/abuse-reports`, { headers });
+        const res = await fetch(`${API_BASE_URL}/abuse-reports/count`, { headers });
+        const json = await res.json();
+        return json.success && typeof json.count === 'number' ? json.count : 0;
+      } catch {
+        return 0;
+      }
+    }, 30000);
+  },
+
+  async getAbuseReports(status?: string, limit = 50): Promise<AbuseReportItem[]> {
+    const query = new URLSearchParams();
+    if (status) query.set('status', status);
+    query.set('limit', String(limit));
+    const url = `${API_BASE_URL}/abuse-reports?${query.toString()}`;
+    return dedupeGet(url, async () => {
+      try {
+        const res = await fetch(url, { headers });
         const json = await res.json();
         return json.success && Array.isArray(json.data) ? json.data : [];
       } catch {

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Query, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service.js';
@@ -32,9 +32,22 @@ export class TenantsController {
 
   @Get()
   @RequireScope(ApiScopes.TENANTS_READ)
-  async listTenants(@Res() reply: FastifyReply) {
+  async listTenants(
+    @Query('limit') limitStr: string,
+    @Query('cursor') cursor: string,
+    @Res() reply: FastifyReply
+  ) {
+    const limit = Math.min(Math.max(1, limitStr ? parseInt(limitStr, 10) || 50 : 50), 100);
     const tenants = await this.db.withSuperAdminContext(async (client) => {
-      const res = await client.query('SELECT * FROM tenants ORDER BY created_at DESC');
+      let query = 'SELECT * FROM tenants';
+      const params: any[] = [];
+      if (cursor) {
+        params.push(new Date(cursor));
+        query += ` WHERE created_at < $1`;
+      }
+      params.push(limit);
+      query += ` ORDER BY created_at DESC LIMIT $${params.length}`;
+      const res = await client.query(query, params);
       return res.rows;
     });
     return reply.send({ success: true, data: tenants });

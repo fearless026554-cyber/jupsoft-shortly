@@ -201,6 +201,7 @@ export class AuthGuard implements CanActivate {
     // Check Tenant Organization Status
     if (authData.tenantId && authData.role !== 'super_admin') {
       const tenantStatus = await this.redis.getTenantStatus(authData.tenantId);
+      (request as any).tenantStatus = tenantStatus;
       if (tenantStatus === 'suspended') {
         reply.status(403).send({
           success: false,

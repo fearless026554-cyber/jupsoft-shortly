@@ -95,7 +95,7 @@ export class RedirectController {
       await this.redis.setCachedLink(domainId, code, link);
     }
 
-    const tenantStatus = await this.redis.getTenantStatus(link.tenantId);
+    const tenantStatus = (req as any).tenantStatus || (await this.redis.getTenantStatus(link.tenantId));
     if (tenantStatus === TenantStatus.SUSPENDED || tenantStatus === TenantStatus.ARCHIVED) {
       return reply.status(302).redirect(SYSTEM_ROUTES.UNAVAILABLE);
     }
@@ -188,13 +188,18 @@ export class RedirectController {
         });
       }
       tenantId = res.rows[0].id;
-      await this.redis.client.setex(tenantCodeKey, 86400, tenantId!);
+      const status = res.rows[0].status;
+      await Promise.all([
+        this.redis.client.setex(tenantCodeKey, 86400, tenantId!),
+        this.redis.client.setex(REDIS_KEYS.TENANT_STATUS(tenantId!), 86400, status),
+      ]);
+      (req as any).tenantStatus = status;
       
-      if (res.rows[0].status === TenantStatus.SUSPENDED || res.rows[0].status === TenantStatus.ARCHIVED) {
+      if (status === TenantStatus.SUSPENDED || status === TenantStatus.ARCHIVED) {
         return reply.status(302).redirect(SYSTEM_ROUTES.UNAVAILABLE);
       }
     } else {
-      const tenantStatus = await this.redis.getTenantStatus(tenantId);
+      const tenantStatus = (req as any).tenantStatus || (await this.redis.getTenantStatus(tenantId));
       if (tenantStatus === TenantStatus.SUSPENDED || tenantStatus === TenantStatus.ARCHIVED) {
         return reply.status(302).redirect(SYSTEM_ROUTES.UNAVAILABLE);
       }

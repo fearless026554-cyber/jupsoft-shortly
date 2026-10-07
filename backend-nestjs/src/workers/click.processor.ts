@@ -60,7 +60,7 @@ function isPrivateOrLocalIp(ip: string): boolean {
   );
 }
 
-async function resolveGeoLocation(ip: string, cfCountry?: string): Promise<{ code: string; label: string }> {
+async function resolveGeoLocation(redis: RedisService, ip: string, cfCountry?: string): Promise<{ code: string; label: string }> {
   if (cfCountry && cfCountry !== 'XX' && cfCountry.length <= 8) {
     try {
       const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -72,10 +72,13 @@ async function resolveGeoLocation(ip: string, cfCountry?: string): Promise<{ cod
   }
 
   const cacheKey = isPrivateOrLocalIp(ip) ? '__LOCAL_WAN__' : ip;
-  const cached = geoCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return { code: cached.code, label: cached.label };
-  }
+  const redisGeoKey = `geo:ip:${cacheKey}`;
+  try {
+    const cached = await redis.client.get(redisGeoKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch {}
 
   try {
     const controller = new AbortController();
@@ -97,8 +100,9 @@ async function resolveGeoLocation(ip: string, cfCountry?: string): Promise<{ cod
         const code = data.countryCode.slice(0, 8).toUpperCase();
         const place = data.city || data.regionName;
         const label = place && data.country ? `${place}, ${data.country} (${code})` : `${data.country || code} (${code})`;
-        geoCache.set(cacheKey, { code, label, expiresAt: Date.now() + 6 * 60 * 60 * 1000 });
-        return { code, label };
+        const result = { code, label };
+        await redis.client.setex(redisGeoKey, 7 * 86400, JSON.stringify(result)).catch(() => {});
+        return result;
       }
     }
   } catch {
@@ -130,7 +134,7 @@ export class ClickProcessor extends WorkerHost {
         .digest('hex');
 
       const uaInfo = parseUserAgent(data.userAgent);
-      const geo = await resolveGeoLocation(data.ip, data.countryCode);
+      const geo = await resolveGeoLocation(this.redis, data.ip, data.countryCode);
 
       const client = await this.db.pool.connect();
       try {
@@ -139,11 +143,16 @@ export class ClickProcessor extends WorkerHost {
 
         const countryCode = geo.code;
 
-        const existingVisit = await client.query(
-          `SELECT 1 FROM clicks WHERE link_id = $1 AND clicked_at >= $2::timestamptz AND clicked_at < ($2::timestamptz + INTERVAL '1 day') AND visitor_hash = $3 LIMIT 1`,
-          [data.linkId, dateStr, visitorHash]
-        );
-        const isUniqueToday = existingVisit.rowCount === 0 && !uaInfo.isBot;
+        // Redis atomic unique-visitor check (0 DB queries on clicks table)
+        let isUniqueToday = false;
+        if (!uaInfo.isBot) {
+          const visitKey = `visited:${data.linkId}:${dateStr}`;
+          const isNewVisitor = await this.redis.client.sadd(visitKey, visitorHash);
+          if (isNewVisitor === 1) {
+            await this.redis.client.expire(visitKey, 86400 * 2); // 48h TTL
+            isUniqueToday = true;
+          }
+        }
 
         await client.query(
           `INSERT INTO clicks (link_id, tenant_id, clicked_at, visitor_hash, device, browser, os, country, referrer, is_bot) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
