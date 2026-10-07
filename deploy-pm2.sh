@@ -109,11 +109,15 @@ pm2 save
 
 # 8. Reload Host Nginx
 if systemctl is-active --quiet nginx 2>/dev/null; then
-  echo -e "${BLUE}[*] Verifying Host Nginx...${NC}"
-  if [ -f "/etc/nginx/sites-available/go.jupsoft.com" ]; then
-    ln -sf /etc/nginx/sites-available/go.jupsoft.com /etc/nginx/sites-enabled/go.jupsoft.com
-    nginx -t >/dev/null 2>&1 && systemctl reload nginx
-    echo -e "${GREEN}[✓] Host Nginx reloaded successfully.${NC}"
+  echo -e "${BLUE}[*] Updating and Reloading Host Nginx...${NC}"
+  cp nginx/host-go.jupsoft.com.conf /etc/nginx/sites-available/go.jupsoft.com
+  mkdir -p /etc/nginx/sites-enabled
+  ln -sf /etc/nginx/sites-available/go.jupsoft.com /etc/nginx/sites-enabled/go.jupsoft.com
+  if nginx -t >/dev/null 2>&1; then
+    systemctl reload nginx
+    echo -e "${GREEN}[✓] Host Nginx updated and reloaded successfully.${NC}"
+  else
+    echo -e "${RED}[!] Host Nginx test failed. Please check syntax.${NC}"
   fi
 fi
 

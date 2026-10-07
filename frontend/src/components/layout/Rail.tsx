@@ -78,7 +78,7 @@ export const Rail: React.FC<RailProps> = ({
   }[] = [
     {
       id: 'overview',
-      path: '/',
+      path: '/dashboard',
       label: 'Home',
       icon: LayoutDashboard,
       isActive: activeTab === 'overview',

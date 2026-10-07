@@ -34,7 +34,7 @@ import { Permissions } from '../utils/rbac';
 
 // Route mapping for full semantic routing
 const MODULE_ROUTES: Record<ActiveModule, string> = {
-  overview: '/',
+  overview: '/dashboard',
   links: '/links',
   bulk: '/bulk',
   outcomes: '/outcomes',
@@ -51,6 +51,7 @@ const MODULE_ROUTES: Record<ActiveModule, string> = {
 
 const ROUTE_TO_MODULE: Record<string, ActiveModule> = {
   '/': 'overview',
+  '/dashboard': 'overview',
   '/overview': 'overview',
   '/links': 'links',
   '/bulk': 'bulk',
@@ -125,9 +126,12 @@ export default function ShortlyCRMApp() {
       if (matched) {
         if (isTabAllowed(matched, currentUser?.role)) {
           setActiveTab(matched);
+          if (path === '/' && getAuthToken()) {
+            window.history.replaceState(null, '', '/dashboard');
+          }
         } else {
           setActiveTab('overview');
-          window.history.replaceState(null, '', '/');
+          window.history.replaceState(null, '', '/dashboard');
         }
       }
     };

@@ -20,7 +20,7 @@ export default function LoginPage() {
     if (token) {
       api.getMe().then((res) => {
         if (res && res.success) {
-          router.replace('/');
+          router.replace('/dashboard');
         }
       });
     }
@@ -40,7 +40,7 @@ export default function LoginPage() {
     try {
       const res = await api.login(email.trim(), password);
       if (res.success && res.data?.token) {
-        router.replace('/');
+        router.replace('/dashboard');
       } else {
         setError(res.error?.message || 'Invalid credentials. Please verify your email and password.');
       }
