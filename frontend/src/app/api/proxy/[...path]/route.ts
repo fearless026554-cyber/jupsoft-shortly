@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:3001';
 
 async function handleRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const resolvedParams = await params;
