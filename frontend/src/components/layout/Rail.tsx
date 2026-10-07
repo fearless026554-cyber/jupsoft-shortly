@@ -122,12 +122,9 @@ export const Rail: React.FC<RailProps> = ({
 
   const navItems = allNavItems.filter((item) => item.visible);
 
-  const handleNavClick = (e: React.MouseEvent, id: ActiveModule, path: string) => {
+  const handleNavClick = (e: React.MouseEvent, id: ActiveModule) => {
     e.preventDefault();
     setActiveTab(id);
-    if (typeof window !== 'undefined') {
-      window.history.pushState(null, '', path);
-    }
   };
 
   return (
@@ -135,8 +132,8 @@ export const Rail: React.FC<RailProps> = ({
       {/* Top Brand Logo */}
       <div className="flex flex-col items-center mb-1.5">
         <a
-          href="/"
-          onClick={(e) => handleNavClick(e, 'overview', '/')}
+          href="/dashboard"
+          onClick={(e) => handleNavClick(e, 'overview')}
           aria-label="Jupsoft Shortly Home"
           className="w-10 h-10 rounded-xl bg-white hover:bg-slate-100 flex items-center justify-center p-1 transition-transform hover:scale-105 border border-slate-700/60 shadow-sm cursor-pointer overflow-hidden"
           title="Jupsoft Shortly"
@@ -162,7 +159,7 @@ export const Rail: React.FC<RailProps> = ({
             <a
               key={item.label}
               href={item.path}
-              onClick={(e) => handleNavClick(e, item.id, item.path)}
+              onClick={(e) => handleNavClick(e, item.id)}
               aria-label={`${item.label} Module`}
               title={item.label}
               className={`relative w-full h-[54px] flex flex-col items-center justify-center transition-all group ${
@@ -207,7 +204,7 @@ export const Rail: React.FC<RailProps> = ({
       <div className="w-full flex flex-col items-center pt-1.5 border-t border-slate-800/80 shrink-0 mt-auto">
         <a
           href="/help"
-          onClick={(e) => handleNavClick(e, 'help', '/help')}
+          onClick={(e) => handleNavClick(e, 'help')}
           aria-label="Help"
           title="Help"
           className={`w-full h-[48px] flex flex-col items-center justify-center transition-colors group ${

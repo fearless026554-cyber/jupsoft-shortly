@@ -240,7 +240,7 @@ export const TenantsView: React.FC<TenantsViewProps> = ({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigator.clipboard.writeText(tenant.id);
+                                navigator.clipboard.writeText(tenant.id).catch(() => {});
                                 setCopiedTenantId(tenant.id);
                                 setTimeout(() => setCopiedTenantId(null), 2000);
                               }}

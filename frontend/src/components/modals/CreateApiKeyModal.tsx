@@ -93,7 +93,7 @@ export const CreateApiKeyModal: React.FC<CreateApiKeyModalProps> = ({
 
   const handleCopy = () => {
     if (!generatedKey) return;
-    navigator.clipboard.writeText(generatedKey);
+    navigator.clipboard.writeText(generatedKey).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

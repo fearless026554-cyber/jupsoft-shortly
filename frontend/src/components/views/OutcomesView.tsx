@@ -221,7 +221,7 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
             <DollarSign className="w-4 h-4 text-slate-400" />
           </div>
           <div className="mt-1.5 text-xl font-bold text-slate-900">
-            {totalRev > 0 ? formatMoney(totalRev) : '—'}
+            {formatMoney(totalRev)}
           </div>
         </div>
 
@@ -231,7 +231,7 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
             <Receipt className="w-4 h-4 text-slate-400" />
           </div>
           <div className="mt-1.5 text-xl font-bold text-slate-900">
-            {totalOutcomes > 0 ? formatNumber(totalOutcomes) : '—'}
+            {formatNumber(totalOutcomes)}
           </div>
         </div>
 
@@ -241,7 +241,7 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
             <TrendingUp className="w-4 h-4 text-slate-400" />
           </div>
           <div className="mt-1.5 text-xl font-bold text-slate-900">
-            {totalOutcomes > 0 ? `${convRate}%` : '—'}
+            {`${convRate}%`}
           </div>
         </div>
 
@@ -251,7 +251,7 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
             <CreditCard className="w-4 h-4 text-slate-400" />
           </div>
           <div className="mt-1.5 text-xl font-bold text-slate-900">
-            {totalOutcomes > 0 ? formatMoney(totalRev / totalOutcomes) : '—'}
+            {totalOutcomes > 0 ? formatMoney(totalRev / totalOutcomes) : formatMoney(0)}
           </div>
         </div>
       </div>

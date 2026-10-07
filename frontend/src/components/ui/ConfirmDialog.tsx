@@ -7,9 +7,10 @@ interface ConfirmDialogProps {
   message: string;
   confirmText?: string;
   cancelText?: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onCancel: () => void;
   isDestructive?: boolean;
+  isLoading?: boolean;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -21,8 +22,29 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   onCancel,
   isDestructive = false,
+  isLoading = false,
 }) => {
+  const [internalSubmitting, setInternalSubmitting] = React.useState(false);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setInternalSubmitting(false);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const isBusy = isLoading || internalSubmitting;
+
+  const handleConfirm = async () => {
+    if (isBusy) return;
+    try {
+      setInternalSubmitting(true);
+      await Promise.resolve(onConfirm());
+    } finally {
+      setInternalSubmitting(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -42,19 +64,26 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         
         <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
           <button
+            type="button"
             onClick={onCancel}
-            className="px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors"
+            disabled={isBusy}
+            className="px-4 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {cancelText}
           </button>
           <button
-            onClick={onConfirm}
-            className={`px-4 py-1.5 rounded-lg text-xs font-bold text-white shadow-xs transition-colors ${
+            type="button"
+            onClick={handleConfirm}
+            disabled={isBusy}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold text-white shadow-xs transition-colors flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed ${
               isDestructive 
                 ? 'bg-red-600 hover:bg-red-700' 
                 : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
+            {isBusy && (
+              <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            )}
             {confirmText}
           </button>
         </div>

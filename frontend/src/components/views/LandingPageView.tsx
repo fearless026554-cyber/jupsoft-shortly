@@ -51,7 +51,7 @@ export function LandingPageView({ onLoginClick, currentUser, onGoToDashboard }: 
 
   const copyDemoLink = () => {
     if (typeof navigator !== 'undefined') {
-      navigator.clipboard.writeText('https://jup.st/fee-may26');
+      navigator.clipboard.writeText('https://jup.st/fee-may26').catch(() => {});
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     }

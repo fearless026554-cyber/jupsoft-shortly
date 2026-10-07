@@ -42,7 +42,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
   const txtToken = activeDomain?.txt_token || 'shortly-verify=0bb05033';
 
   const copyValue = (key: string, val: string) => {
-    navigator.clipboard.writeText(val);
+    navigator.clipboard.writeText(val).catch(() => {});
     setCopiedField(key);
     setTimeout(() => setCopiedField(null), 2000);
   };

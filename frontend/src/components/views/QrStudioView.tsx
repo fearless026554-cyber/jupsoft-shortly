@@ -41,7 +41,7 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
 
   const handleCopy = () => {
     if (!shortUrl) return;
-    navigator.clipboard.writeText(shortUrl);
+    navigator.clipboard.writeText(shortUrl).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

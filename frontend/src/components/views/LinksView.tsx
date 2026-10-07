@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Filter,
@@ -87,6 +87,11 @@ export const LinksView: React.FC<LinksViewProps> = ({
   const { defaultDomain } = useTenantDomains();
   const archivedCount = links.filter((l) => l.status === 'archived').length;
 
+  // Clear selected links when search query or filter changes to avoid acting on hidden items
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [statusFilter, timeFilter, searchQuery]);
+
   const getDomainFromUrl = (urlStr: string) => {
     try {
       const parsed = new URL(urlStr);
@@ -118,7 +123,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
   };
 
   const handleCopy = (shortCode: string, id: string) => {
-    navigator.clipboard.writeText(buildShortUrl(defaultDomain, shortCode));
+    navigator.clipboard.writeText(buildShortUrl(defaultDomain, shortCode)).catch(() => {});
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -130,7 +135,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredLinks.length) {
+    if (selectedIds.length === filteredLinks.length && filteredLinks.length > 0) {
       setSelectedIds([]);
     } else {
       setSelectedIds(filteredLinks.map((l) => l.id));
@@ -496,7 +501,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigator.clipboard.writeText(link.destination_url);
+                            navigator.clipboard.writeText(link.destination_url).catch(() => {});
                           }}
                           aria-label="Copy Destination URL"
                           title="Copy Destination URL"

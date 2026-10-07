@@ -2,6 +2,17 @@ import { NextRequest } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:3001';
 
+const HOP_BY_HOP_HEADERS = [
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+];
+
 async function handleRequest(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const resolvedParams = await params;
   const pathParts = resolvedParams.path || [];
@@ -36,12 +47,18 @@ async function handleRequest(req: NextRequest, { params }: { params: Promise<{ p
   const options: RequestInit = {
     method: req.method,
     headers,
+    signal: req.signal, // Propagate client abort signal (B11)
   };
   
   if (req.method !== 'GET' && req.method !== 'HEAD') {
+    const contentType = req.headers.get('content-type');
+    if (contentType) {
+      headers.set('content-type', contentType);
+    } else {
+      headers.set('content-type', 'application/json');
+    }
     const bodyText = await req.text();
     if (bodyText) {
-      headers.set('Content-Type', 'application/json');
       options.body = bodyText;
     }
   }
@@ -50,14 +67,20 @@ async function handleRequest(req: NextRequest, { params }: { params: Promise<{ p
     const response = await fetch(targetUrl, options);
     
     // We construct a new Response object to stream the backend response
-    // back to the client directly.
+    // back to the client directly. Strip hop-by-hop headers.
     const resHeaders = new Headers(response.headers);
+    for (const h of HOP_BY_HOP_HEADERS) {
+      resHeaders.delete(h);
+    }
     
     return new Response(response.body, {
       status: response.status,
       headers: resHeaders
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'AbortError' || req.signal?.aborted) {
+      return new Response(null, { status: 499 });
+    }
     console.error('Proxy Error:', error);
     return new Response(JSON.stringify({ success: false, error: { message: 'Internal Server Error' } }), {
       status: 500,

@@ -56,7 +56,7 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
   const shortUrl = buildShortUrl(defaultDomain, link.short_code);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(shortUrl);
+    navigator.clipboard.writeText(shortUrl).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -316,7 +316,11 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
                   <input
                     type="datetime-local"
                     value={customExpiryInput}
-                    min={new Date().toISOString().slice(0, 16)}
+                    min={(() => {
+                      const d = new Date();
+                      const pad = (n: number) => n.toString().padStart(2, '0');
+                      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                    })()}
                     onChange={(e) => setCustomExpiryInput(e.target.value)}
                     className="flex-1 text-xs px-2 py-1 bg-white border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                   />

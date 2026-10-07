@@ -34,25 +34,32 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d' | '90d' | 'all'>('30d');
 
+  const toLocalDateString = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const loadData = async (range = timeRange) => {
     setLoading(true);
     try {
       const now = new Date();
       let startDate: string | undefined;
-      const endDate: string = now.toISOString().slice(0, 10);
+      const endDate: string = toLocalDateString(now);
 
       if (range === '24h') {
         const d = new Date(now.getTime() - 24 * 3600 * 1000);
-        startDate = d.toISOString().slice(0, 10);
+        startDate = toLocalDateString(d);
       } else if (range === '7d') {
         const d = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
-        startDate = d.toISOString().slice(0, 10);
+        startDate = toLocalDateString(d);
       } else if (range === '30d') {
         const d = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
-        startDate = d.toISOString().slice(0, 10);
+        startDate = toLocalDateString(d);
       } else if (range === '90d') {
         const d = new Date(now.getTime() - 90 * 24 * 3600 * 1000);
-        startDate = d.toISOString().slice(0, 10);
+        startDate = toLocalDateString(d);
       }
 
       const data = await api.getAnalyticsSummary(startDate, endDate);
@@ -69,10 +76,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
   }, [timeRange]);
 
   const totalClicks = Number(
-    summary?.total_clicks || links.reduce((s, l) => s + Number(l.click_count || 0), 0)
+    summary?.total_clicks ?? links.reduce((s, l) => s + Number(l.click_count || 0), 0)
   );
   const totalUniqueClicks = Number(
-    summary?.total_unique_clicks || Math.min(totalClicks, Number(summary?.unique_clicks || totalClicks))
+    summary?.total_unique_clicks ?? Math.min(totalClicks, Number(summary?.unique_clicks ?? totalClicks))
   );
   const totalBotClicks = Number(summary?.total_bot_clicks || 0);
   const totalAllRequests = totalClicks + totalBotClicks;

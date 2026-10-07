@@ -165,7 +165,7 @@ export const AbuseView: React.FC<AbuseViewProps> = ({ onRefreshBadge, currentUse
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <span className="text-xl font-bold text-slate-900 tracking-tight">
-              {reports.filter((r) => r.status === 'reviewed').length}
+              {reports.filter((r) => r.status === 'resolved' || r.status === 'reviewed').length}
             </span>
             <span className="text-xs text-slate-400">terminated</span>
           </div>

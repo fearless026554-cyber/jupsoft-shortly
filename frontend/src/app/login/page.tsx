@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, getAuthToken } from '../../api';
+import { api, getAuthToken, setAuthToken, setStoredUser } from '../../api';
 import { Lock, Mail, Eye, EyeOff, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -14,13 +14,20 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  // If already authenticated, redirect to home
+  // If session expired or already authenticated, handle cleanly
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('expired=1')) {
+      setInfo('Your session has expired. Please sign in again.');
+    }
     const token = getAuthToken();
     if (token) {
       api.getMe().then((res) => {
         if (res && res.success) {
           router.replace('/dashboard');
+        } else {
+          // Token is invalid/expired - clear stale credentials
+          setAuthToken(null);
+          setStoredUser(null);
         }
       });
     }

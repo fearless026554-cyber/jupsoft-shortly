@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, UserPlus, Mail, Shield, KeyRound, RefreshCw, Eye, EyeOff, CheckCircle2, Crown, Sparkles } from 'lucide-react';
 import { api } from '../../api';
 import { getAllowedInviteRoles, getRoleConfig, generateStrongPassword, UserRole } from '../../utils/rbac';
@@ -29,14 +29,18 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const prevIsOpenRef = useRef(false);
+
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpenRef.current) {
       setName('');
       setEmail('');
       setPassword(generateStrongPassword());
       setRole(defaultRole as UserRole);
       setError(null);
+      setLoading(false);
     }
+    prevIsOpenRef.current = isOpen;
   }, [isOpen, defaultRole]);
 
   if (!isOpen) return null;

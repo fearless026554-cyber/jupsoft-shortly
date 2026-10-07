@@ -81,7 +81,9 @@ function resolveTenantDomain(): Promise<string> {
     }
 
     const fallback = DEFAULT_SHORT_DOMAIN || '';
-    cachedDefaultDomain = fallback;
+    if (fallback) {
+      cachedDefaultDomain = fallback;
+    }
     return fallback;
   })();
 
@@ -98,9 +100,7 @@ export function useTenantDomains() {
     let isMounted = true;
 
     if (cachedDefaultDomain) {
-      if (defaultDomain !== cachedDefaultDomain) {
-        setDefaultDomain(cachedDefaultDomain);
-      }
+      setDefaultDomain(cachedDefaultDomain);
       return;
     }
 
@@ -113,7 +113,7 @@ export function useTenantDomains() {
     return () => {
       isMounted = false;
     };
-  }, [defaultDomain]);
+  }, []);
 
   return { defaultDomain, cnameDomain };
 }

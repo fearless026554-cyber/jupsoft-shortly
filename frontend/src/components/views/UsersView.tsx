@@ -237,7 +237,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
     if (!shareCredentials) return;
     const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://shortly.jupsoft.com/login';
     const text = `Jupsoft Shortly — Access Credentials\nPortal URL: ${portalUrl}\nEmail: ${shareCredentials.user.email}\nTemporary Password: ${shareCredentials.password}\nRole: ${getRoleDisplayName(shareCredentials.user.role)}\n\nPlease sign in and update your password upon initial login.`;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(text).catch(() => {});
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2500);
   };

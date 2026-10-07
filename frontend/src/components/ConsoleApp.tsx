@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api, clearApiCache, LinkItem, TenantItem, getAuthToken, setAuthToken, getStoredUser, setStoredUser } from '../api';
 
 // Layout Components
@@ -89,9 +89,22 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
   const [currentUser, setCurrentUser] = useState<any>(() => getStoredUser());
   const [activeTab, setActiveTab] = useState<ActiveModule>(resolveModule);
 
-  // Multi-Tenant Hierarchy State
+  // Multi-Tenant Hierarchy State (Persisted across reload R2)
   const [tenants, setTenants] = useState<TenantItem[]>([]);
-  const [activeTenantId, setActiveTenantId] = useState<string>('all'); // 'all' or Tenant UUID
+  const [activeTenantId, setActiveTenantIdState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('jlmp_active_tenant_id') || 'all';
+    }
+    return 'all';
+  });
+
+  const setActiveTenantId = (id: string) => {
+    setActiveTenantIdState(id);
+    setSelectedQrLink(null); // Reset selected QR link when switching tenant (R5)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('jlmp_active_tenant_id', id);
+    }
+  };
 
   // Core Data State
   const [links, setLinks] = useState<LinkItem[]>([]);
@@ -237,8 +250,11 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
     }
   };
 
+  const loadSeqRef = useRef(0);
+
   const loadData = async (forceRefresh = false) => {
     if (!currentUser) return;
+    const currentSeq = ++loadSeqRef.current;
     setLoading(true);
     try {
       if (forceRefresh) {
@@ -266,6 +282,9 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
         abusePromise,
       ]);
 
+      // Sequence check to prevent stale out-of-order responses overwriting newer data (B5)
+      if (currentSeq !== loadSeqRef.current) return;
+
       if (h) setHealth(h);
       const safeLinks = Array.isArray(l) ? l : [];
       setLinks(safeLinks);
@@ -274,13 +293,23 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
         setAbuseCount(typeof a === 'number' ? a : 0);
       }
 
-      if (safeLinks.length > 0 && !selectedQrLink) {
-        setSelectedQrLink(safeLinks[0]);
+      // Reconcile selectedQrLink (R5)
+      if (safeLinks.length > 0) {
+        setSelectedQrLink((prev) => {
+          if (!prev || !safeLinks.some((x) => x.id === prev.id)) {
+            return safeLinks[0];
+          }
+          return prev;
+        });
+      } else {
+        setSelectedQrLink(null);
       }
     } catch (err) {
       console.error('Failed to load JLMP data:', err);
     } finally {
-      setLoading(false);
+      if (currentSeq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -319,11 +348,14 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
   // Keyboard shortcut listener (Ctrl + / for Search, Alt + C for Create Link)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable);
+
       if ((e.ctrlKey || e.metaKey) && e.key === '/') {
         e.preventDefault();
         const searchInput = document.getElementById('zoho-global-search');
         if (searchInput) searchInput.focus();
-      } else if (e.altKey && e.key.toLowerCase() === 'c') {
+      } else if (e.altKey && e.key.toLowerCase() === 'c' && !isInput) {
         e.preventDefault();
         setIsCreateLinkModalOpen(true);
       }

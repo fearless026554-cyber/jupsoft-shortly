@@ -167,7 +167,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
   const handleCopy = () => {
     if (!createdData) return;
     const url = createdData.shortUrl || buildShortUrl(defaultDomain, createdData.shortCode);
-    navigator.clipboard.writeText(url);
+    navigator.clipboard.writeText(url).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -400,7 +400,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                       <input
                         type="datetime-local"
                         value={toDatetimeLocalValue(expiresAt)}
-                        min={new Date().toISOString().slice(0, 16)}
+                        min={toDatetimeLocalValue(new Date().toISOString())}
                         onChange={(e) => handleDatetimeLocalChange(e.target.value)}
                         className="w-full text-xs px-3 py-1.5 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono bg-white"
                       />

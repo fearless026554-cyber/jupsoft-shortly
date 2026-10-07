@@ -397,12 +397,10 @@ export function hasPermission(role: string | undefined, permissionId: string): b
 export function isRootSuperAdminAccount(user?: { email?: string; name?: string; role?: string } | null): boolean {
   if (!user) return false;
   const email = (user.email || '').toLowerCase().trim();
-  const name = (user.name || '').toLowerCase().trim();
   return (
     email === 'admin@jupsoft.com' ||
     email === 'sachin@jupsoft.com' ||
-    email === 'superadmin@jupsoft.com' ||
-    name.includes('sachin sharma')
+    email === 'superadmin@jupsoft.com'
   );
 }
 
@@ -427,7 +425,10 @@ export function canManageTargetUser(
   isSelf = false
 ): boolean {
   if (!actorRole || isTargetRoot || isSelf) return false;
-  if (actorRole === 'super_admin') return true;
+  if (actorRole === 'super_admin') {
+    // super_admin cannot manage other super_admins unless strictly allowed
+    return targetRole !== 'super_admin';
+  }
 
   const actorLevel = getRoleLevel(actorRole);
   const targetLevel = getRoleLevel(targetRole);
@@ -451,7 +452,6 @@ export function canDeleteTargetUser(
 ): boolean {
   if (isSelf || isTargetRoot) return false;
   if (actorRole !== 'super_admin' && actorRole !== 'tenant_admin') return false;
-  if (actorRole === 'super_admin') return true;
 
   const actorLevel = getRoleLevel(actorRole);
   const targetLevel = getRoleLevel(targetRole);

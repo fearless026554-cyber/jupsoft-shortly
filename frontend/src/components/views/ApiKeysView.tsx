@@ -52,7 +52,7 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
 
     const onFocus = () => {
       api.getApiKeys().then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setKeys(data);
         }
       }).catch(() => {});
@@ -71,6 +71,7 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
       onConfirm: async () => {
         try {
           await api.revokeApiKey(id);
+          setKeys((prev) => prev.filter((k) => k.id !== id));
           loadKeys();
         } catch {
           // handled

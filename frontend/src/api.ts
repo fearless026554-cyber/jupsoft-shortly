@@ -92,12 +92,24 @@ export function getAuthToken(): string | null {
 
 export function setAuthToken(token: string | null) {
   if (typeof window === 'undefined') return;
+  clearApiCache();
   if (token) {
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
     document.cookie = `${TOKEN_STORAGE_KEY}=${token}; path=/; max-age=604800; SameSite=Lax`;
   } else {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     document.cookie = `${TOKEN_STORAGE_KEY}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+  }
+}
+
+export function handleAuthExpired() {
+  if (typeof window === 'undefined') return;
+  setAuthToken(null);
+  setStoredUser(null);
+  clearApiCache();
+  const pathname = window.location.pathname;
+  if (pathname !== '/login' && pathname !== '/' && pathname !== '/landing') {
+    window.location.href = '/login?expired=1';
   }
 }
 
@@ -144,13 +156,14 @@ const headers = new Proxy({} as Record<string, string>, {
   },
 });
 
-// In-flight deduplication map & response caching (Solves P0 API over-fetch audit)
+// In-flight deduplication map & response caching (Solves P0 API over-fetch audit & cross-user leak)
 const inFlightRequests = new Map<string, Promise<any>>();
 const responseCache = new Map<string, { timestamp: number; data: any }>();
 const CACHE_TTL_MS = 15000;
 
 export function clearApiCache(prefix?: string) {
   if (!prefix) {
+    inFlightRequests.clear();
     responseCache.clear();
     return;
   }
@@ -159,31 +172,49 @@ export function clearApiCache(prefix?: string) {
       responseCache.delete(key);
     }
   }
+  for (const key of Array.from(inFlightRequests.keys())) {
+    if (key.includes(prefix)) {
+      inFlightRequests.delete(key);
+    }
+  }
+}
+
+export async function secureFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const res = await fetch(input, init);
+  if (res.status === 401) {
+    const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+    if (!urlStr.includes('/auth/login') && !urlStr.includes('/auth/google')) {
+      handleAuthExpired();
+    }
+  }
+  return res;
 }
 
 async function dedupeGet<T>(url: string, fetchFn: () => Promise<T>, ttl = CACHE_TTL_MS): Promise<T> {
-  const cached = responseCache.get(url);
+  const token = getAuthToken() || 'anon';
+  const scopedKey = `${token}:${url}`;
+  const cached = responseCache.get(scopedKey);
   const now = Date.now();
   if (cached && now - cached.timestamp < ttl) {
     return cached.data as T;
   }
 
-  if (inFlightRequests.has(url)) {
-    return inFlightRequests.get(url) as Promise<T>;
+  if (inFlightRequests.has(scopedKey)) {
+    return inFlightRequests.get(scopedKey) as Promise<T>;
   }
 
   const promise = fetchFn()
     .then((data) => {
-      responseCache.set(url, { timestamp: Date.now(), data });
-      inFlightRequests.delete(url);
+      responseCache.set(scopedKey, { timestamp: Date.now(), data });
+      inFlightRequests.delete(scopedKey);
       return data;
     })
     .catch((err) => {
-      inFlightRequests.delete(url);
+      inFlightRequests.delete(scopedKey);
       throw err;
     });
 
-  inFlightRequests.set(url, promise);
+  inFlightRequests.set(scopedKey, promise);
   return promise;
 }
 
@@ -191,7 +222,7 @@ export const api = {
   // Health
   async getHealth() {
     return dedupeGet('health', async () => {
-      const res = await fetch(`${API_BASE_URL}/health`);
+      const res = await secureFetch(`${API_BASE_URL}/health`);
       return res.json();
     }, 15000);
   },
@@ -211,7 +242,7 @@ export const api = {
           if (tenantId) params.set('tenantId', tenantId);
           if (cursor) params.set('cursor', cursor);
 
-          const res = await fetch(`${API_BASE_URL}/links?${params.toString()}`, { headers });
+          const res = await secureFetch(`${API_BASE_URL}/links?${params.toString()}`, { headers });
           const json = await res.json();
           if (!json.success || !json.data) break;
 
@@ -233,7 +264,7 @@ export const api = {
 
   async createLink(dto: CreateLinkDto) {
     clearApiCache('links');
-    const res = await fetch(`${API_BASE_URL}/links`, {
+    const res = await secureFetch(`${API_BASE_URL}/links`, {
       method: 'POST',
       headers,
       body: JSON.stringify(dto),
@@ -243,7 +274,7 @@ export const api = {
 
   async archiveLink(id: string) {
     clearApiCache('links');
-    const res = await fetch(`${API_BASE_URL}/links/${id}`, {
+    const res = await secureFetch(`${API_BASE_URL}/links/${id}`, {
       method: 'DELETE',
       headers,
     });
@@ -252,7 +283,7 @@ export const api = {
 
   async deleteLinkPermanently(id: string) {
     clearApiCache('links');
-    const res = await fetch(`${API_BASE_URL}/links/${id}?permanent=true`, {
+    const res = await secureFetch(`${API_BASE_URL}/links/${id}?permanent=true`, {
       method: 'DELETE',
       headers,
     });
@@ -261,7 +292,7 @@ export const api = {
 
   async updateLink(id: string, dto: { destinationUrl?: string; status?: string; expiresAt?: string | null; maxClicks?: number | null; tag?: string }) {
     clearApiCache('links');
-    const res = await fetch(`${API_BASE_URL}/links/${id}`, {
+    const res = await secureFetch(`${API_BASE_URL}/links/${id}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify(dto),
@@ -272,7 +303,7 @@ export const api = {
   // Bulk
   async bulkCreate(items: Array<{ destinationUrl: string; alias?: string; tag?: string; externalRef?: string }>) {
     clearApiCache('links');
-    const res = await fetch(`${API_BASE_URL}/links/bulk`, {
+    const res = await secureFetch(`${API_BASE_URL}/links/bulk`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ links: items }),
@@ -282,7 +313,7 @@ export const api = {
 
   async getBulkStatus(jobId: string) {
     try {
-      const res = await fetch(`${API_BASE_URL}/links/bulk/${jobId}`, { headers });
+      const res = await secureFetch(`${API_BASE_URL}/links/bulk/${jobId}`, { headers });
       return res.json();
     } catch {
       return null;
@@ -291,7 +322,7 @@ export const api = {
 
   async cloneLink(id: string) {
     clearApiCache('links');
-    const res = await fetch(`${API_BASE_URL}/links/${id}/clone`, {
+    const res = await secureFetch(`${API_BASE_URL}/links/${id}/clone`, {
       method: 'POST',
       headers,
     });
@@ -307,7 +338,7 @@ export const api = {
     const url = `${API_BASE_URL}/analytics/summary${queryString}`;
     return dedupeGet(url, async () => {
       try {
-        const res = await fetch(url, { headers });
+        const res = await secureFetch(url, { headers });
         const json = await res.json();
         return json.success ? json.data : null;
       } catch {
@@ -319,7 +350,7 @@ export const api = {
   async getLinkAnalytics(id: string) {
     return dedupeGet(`${API_BASE_URL}/analytics/links/${id}`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/analytics/links/${id}`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/analytics/links/${id}`, { headers });
         const json = await res.json();
         return json.success ? json.data : null;
       } catch {
@@ -332,7 +363,7 @@ export const api = {
   async getOutcomesReport() {
     return dedupeGet(`${API_BASE_URL}/outcomes/report`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/outcomes/report`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/outcomes/report`, { headers });
         const json = await res.json();
         return json.success ? json.data : null;
       } catch {
@@ -344,7 +375,7 @@ export const api = {
   async getOutcomes(limit = 50) {
     return dedupeGet(`${API_BASE_URL}/outcomes?limit=${limit}`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/outcomes?limit=${limit}`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/outcomes?limit=${limit}`, { headers });
         const json = await res.json();
         return json.success ? json.data : [];
       } catch {
@@ -355,7 +386,7 @@ export const api = {
 
   async recordOutcome(data: { externalRef: string; outcomeType: string; value: number }) {
     clearApiCache('outcomes');
-    const res = await fetch(`${API_BASE_URL}/outcomes`, {
+    const res = await secureFetch(`${API_BASE_URL}/outcomes`, {
       method: 'POST',
       headers,
       body: JSON.stringify(data),
@@ -367,7 +398,7 @@ export const api = {
   async getTenants(): Promise<TenantItem[]> {
     return dedupeGet(`${API_BASE_URL}/tenants`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/tenants`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/tenants`, { headers });
         const json = await res.json();
         return json.success && Array.isArray(json.data) ? json.data : [];
       } catch {
@@ -378,7 +409,7 @@ export const api = {
 
   async createTenant(dto: { code: string; name: string; planId: string }) {
     clearApiCache('tenants');
-    const res = await fetch(`${API_BASE_URL}/tenants`, {
+    const res = await secureFetch(`${API_BASE_URL}/tenants`, {
       method: 'POST',
       headers,
       body: JSON.stringify(dto),
@@ -388,7 +419,7 @@ export const api = {
 
   async updateTenantStatus(id: string, status: 'active' | 'suspended' | 'archived') {
     clearApiCache('tenants');
-    const res = await fetch(`${API_BASE_URL}/tenants/${id}`, {
+    const res = await secureFetch(`${API_BASE_URL}/tenants/${id}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ status }),
@@ -400,7 +431,7 @@ export const api = {
   async getUsers(): Promise<UserItem[]> {
     return dedupeGet(`${API_BASE_URL}/users`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/users`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/users`, { headers });
         const json = await res.json();
         return json.success && Array.isArray(json.data) ? json.data : [];
       } catch {
@@ -411,7 +442,7 @@ export const api = {
 
   async inviteUser(dto: { name: string; email: string; role: string; password?: string }) {
     clearApiCache('users');
-    const res = await fetch(`${API_BASE_URL}/users`, {
+    const res = await secureFetch(`${API_BASE_URL}/users`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(dto),
@@ -421,7 +452,7 @@ export const api = {
 
   async resetUserPassword(id: string, password: string) {
     clearApiCache('users');
-    const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+    const res = await secureFetch(`${API_BASE_URL}/users/${id}`, {
       method: 'PATCH',
       headers: getHeaders(),
       body: JSON.stringify({ password }),
@@ -431,7 +462,7 @@ export const api = {
 
   async updateUser(id: string, payload: { role?: string; status?: string; password?: string }) {
     clearApiCache('users');
-    const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+    const res = await secureFetch(`${API_BASE_URL}/users/${id}`, {
       method: 'PATCH',
       headers: getHeaders(),
       body: JSON.stringify(payload),
@@ -441,7 +472,7 @@ export const api = {
 
   async deleteUser(id: string) {
     clearApiCache('users');
-    const res = await fetch(`${API_BASE_URL}/users/${id}`, {
+    const res = await secureFetch(`${API_BASE_URL}/users/${id}`, {
       method: 'DELETE',
       headers: getHeaders(),
     });
@@ -452,7 +483,7 @@ export const api = {
   async getDomains(): Promise<DomainItem[]> {
     return dedupeGet(`${API_BASE_URL}/domains`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/domains`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/domains`, { headers });
         const json = await res.json();
         return json.success && Array.isArray(json.data) ? json.data : [];
       } catch {
@@ -463,7 +494,7 @@ export const api = {
 
   async createDomain(dto: { hostname: string; type?: string }) {
     clearApiCache('domains');
-    const res = await fetch(`${API_BASE_URL}/domains`, {
+    const res = await secureFetch(`${API_BASE_URL}/domains`, {
       method: 'POST',
       headers,
       body: JSON.stringify(dto),
@@ -473,7 +504,7 @@ export const api = {
 
   async verifyDomain(id: string) {
     clearApiCache('domains');
-    const res = await fetch(`${API_BASE_URL}/domains/${id}/verify`, {
+    const res = await secureFetch(`${API_BASE_URL}/domains/${id}/verify`, {
       method: 'POST',
       headers,
       body: JSON.stringify({}),
@@ -483,7 +514,7 @@ export const api = {
 
   async deleteDomain(id: string) {
     clearApiCache('domains');
-    const res = await fetch(`${API_BASE_URL}/domains/${id}`, {
+    const res = await secureFetch(`${API_BASE_URL}/domains/${id}`, {
       method: 'DELETE',
       headers,
     });
@@ -494,7 +525,7 @@ export const api = {
   async getAbuseCount(): Promise<number> {
     return dedupeGet(`${API_BASE_URL}/abuse-reports/count`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/abuse-reports/count`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/abuse-reports/count`, { headers });
         const json = await res.json();
         return json.success && typeof json.count === 'number' ? json.count : 0;
       } catch {
@@ -510,7 +541,7 @@ export const api = {
     const url = `${API_BASE_URL}/abuse-reports?${query.toString()}`;
     return dedupeGet(url, async () => {
       try {
-        const res = await fetch(url, { headers });
+        const res = await secureFetch(url, { headers });
         const json = await res.json();
         return json.success && Array.isArray(json.data) ? json.data : [];
       } catch {
@@ -522,7 +553,7 @@ export const api = {
   async updateAbuseReport(id: string, payload: { status: string; disableLink?: boolean; suspendTenant?: boolean } | string) {
     clearApiCache('abuse-reports');
     const body = typeof payload === 'string' ? { status: payload } : payload;
-    const res = await fetch(`${API_BASE_URL}/abuse-reports/${id}`, {
+    const res = await secureFetch(`${API_BASE_URL}/abuse-reports/${id}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify(body),
@@ -534,7 +565,7 @@ export const api = {
   async getApiKeys() {
     return dedupeGet(`${API_BASE_URL}/api-keys`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api-keys`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/api-keys`, { headers });
         const json = await res.json();
         return json.success ? json.data : [];
       } catch {
@@ -545,7 +576,7 @@ export const api = {
 
   async createApiKey(name: string, scopes: string[]) {
     clearApiCache('api-keys');
-    const res = await fetch(`${API_BASE_URL}/api-keys`, {
+    const res = await secureFetch(`${API_BASE_URL}/api-keys`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ name, scopes }),
@@ -555,7 +586,7 @@ export const api = {
 
   async revokeApiKey(id: string) {
     clearApiCache('api-keys');
-    const res = await fetch(`${API_BASE_URL}/api-keys/${id}`, {
+    const res = await secureFetch(`${API_BASE_URL}/api-keys/${id}`, {
       method: 'DELETE',
       headers,
     });
@@ -565,7 +596,7 @@ export const api = {
   // Auth Operations
   async login(email: string, password: string) {
     clearApiCache();
-    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+    const res = await secureFetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -580,7 +611,7 @@ export const api = {
 
   async googleLogin(payload: { credential?: string; idToken?: string; code?: string; redirectUri?: string; nonce?: string; state?: string }) {
     clearApiCache();
-    const res = await fetch(`${API_BASE_URL}/auth/google`, {
+    const res = await secureFetch(`${API_BASE_URL}/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -596,7 +627,7 @@ export const api = {
   async getGoogleAuthConfig() {
     return dedupeGet(`${API_BASE_URL}/auth/google/config`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/auth/google/config`);
+        const res = await secureFetch(`${API_BASE_URL}/auth/google/config`);
         const json = await res.json();
         return json.success ? json.data : { enabled: false, clientId: null };
       } catch {
@@ -608,7 +639,7 @@ export const api = {
   async logout() {
     clearApiCache();
     try {
-      await fetch(`${API_BASE_URL}/auth/logout`, {
+      await secureFetch(`${API_BASE_URL}/auth/logout`, {
         method: 'POST',
         headers: getHeaders(),
       });
@@ -622,7 +653,7 @@ export const api = {
     if (!token) return null;
     return dedupeGet(`${API_BASE_URL}/auth/me`, async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/auth/me`, { headers: getHeaders() });
+        const res = await secureFetch(`${API_BASE_URL}/auth/me`, { headers: getHeaders() });
         const json = await res.json();
         if (json.success && json.data?.user) {
           setStoredUser(json.data.user);
@@ -636,7 +667,7 @@ export const api = {
 
   async updateProfile(payload: { name?: string; avatar_url?: string | null }) {
     clearApiCache();
-    const res = await fetch(`${API_BASE_URL}/auth/profile`, {
+    const res = await secureFetch(`${API_BASE_URL}/auth/profile`, {
       method: 'PATCH',
       headers: getHeaders(),
       body: JSON.stringify(payload),
@@ -652,7 +683,7 @@ export const api = {
   },
 
   async changePassword(payload: { currentPassword: string; newPassword: string }) {
-    const res = await fetch(`${API_BASE_URL}/auth/change-password`, {
+    const res = await secureFetch(`${API_BASE_URL}/auth/change-password`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(payload),

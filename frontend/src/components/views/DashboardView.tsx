@@ -43,21 +43,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [summary, setSummary] = useState<any>(null);
   const { defaultDomain } = useTenantDomains();
 
+  const toLocalDateString = (d: Date): string => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   React.useEffect(() => {
     const now = new Date();
     let startDate: string | undefined;
-    const endDate: string = now.toISOString().slice(0, 10);
+    const endDate: string = toLocalDateString(now);
 
     if (timeRange === 'today') {
       startDate = endDate;
     } else if (timeRange === '7d') {
       const d = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
-      startDate = d.toISOString().slice(0, 10);
+      startDate = toLocalDateString(d);
     } else if (timeRange === '30d') {
       const d = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
-      startDate = d.toISOString().slice(0, 10);
+      startDate = toLocalDateString(d);
     } else if (timeRange === 'ytd') {
-      startDate = `${now.getUTCFullYear()}-01-01`;
+      startDate = `${now.getFullYear()}-01-01`;
     }
 
     api
@@ -69,13 +76,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [timeRange]);
 
   const totalClicks = Number(
-    summary?.total_clicks || links.reduce((sum, l) => sum + Number(l.click_count || 0), 0)
+    summary?.total_clicks ?? links.reduce((sum, l) => sum + Number(l.click_count || 0), 0)
   );
   const totalRevenue = Number(summary?.total_revenue_attributed || 0);
   const totalConversions = Number(summary?.total_outcomes || 0);
 
   const handleCopy = (shortCode: string, id: string) => {
-    navigator.clipboard.writeText(buildShortUrl(defaultDomain, shortCode));
+    navigator.clipboard.writeText(buildShortUrl(defaultDomain, shortCode)).catch(() => {});
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };

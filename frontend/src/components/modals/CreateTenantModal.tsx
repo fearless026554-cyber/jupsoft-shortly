@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Building2, Plus, Sparkles, CheckCircle2 } from 'lucide-react';
 import { api } from '../../api';
 
@@ -20,6 +20,19 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
   const [planId, setPlanId] = useState('internal_unlimited');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const prevIsOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (isOpen && !prevIsOpenRef.current) {
+      setCode('');
+      setName('');
+      setPlanId('internal_unlimited');
+      setError(null);
+      setLoading(false);
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
