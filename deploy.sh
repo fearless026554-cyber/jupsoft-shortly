@@ -3,11 +3,6 @@
 # Jupsoft Shortly (JLMP) - Automated Production Deployment Suite (VPS.sh)
 # Domain: go.jupsoft.com | Database: Supabase PostgreSQL (Remote SSL)
 # ==============================================================================
-# Usage:
-#   curl -sSL https://raw.githubusercontent.com/fearless026554-cyber/jupsoft-shortly/main/vps.sh | bash
-#   OR
-#   chmod +x vps.sh && ./vps.sh
-# ==============================================================================
 
 set -euo pipefail
 
@@ -40,24 +35,41 @@ fi
 
 echo -e "${GREEN}[✓] Docker and Docker Compose detected.${NC}"
 
-# 2. Check Repository Location
-REPO_URL="https://github.com/fearless026554-cyber/jupsoft-shortly.git"
+# 2. Check Repository Location & Synchronize
+AUTH_TOKEN="${GITHUB_TOKEN:-${1:-}}"
+if [ -n "$AUTH_TOKEN" ]; then
+  AUTH_REPO_URL="https://${AUTH_TOKEN}@github.com/fearless026554-cyber/jupsoft-shortly.git"
+else
+  AUTH_REPO_URL="https://github.com/fearless026554-cyber/jupsoft-shortly.git"
+fi
+
 DEFAULT_DEPLOY_DIR="/var/www/go.jupsoft.com"
 
-if [ -f "docker-compose.yml" ]; then
-  APP_DIR="$(pwd)"
-elif [ -d "${DEFAULT_DEPLOY_DIR}/.git" ]; then
-  APP_DIR="${DEFAULT_DEPLOY_DIR}"
-  cd "$APP_DIR"
-  echo -e "${BLUE}[*] Pulling latest repository updates in ${APP_DIR}...${NC}"
-  git pull origin main || true
-else
-  echo -e "${BLUE}[*] Cloning repository to ${DEFAULT_DEPLOY_DIR}...${NC}"
-  mkdir -p "$DEFAULT_DEPLOY_DIR"
-  git clone "$REPO_URL" "$DEFAULT_DEPLOY_DIR"
-  APP_DIR="${DEFAULT_DEPLOY_DIR}"
-  cd "$APP_DIR"
+# If current directory is not default deploy dir, switch or create
+if [ -d "$DEFAULT_DEPLOY_DIR" ]; then
+  cd "$DEFAULT_DEPLOY_DIR"
 fi
+
+echo -e "${BLUE}[*] Synchronizing repository files in $(pwd)...${NC}"
+if [ -d ".git" ]; then
+  git remote set-url origin "$AUTH_REPO_URL" 2>/dev/null || git remote add origin "$AUTH_REPO_URL"
+  git fetch origin main --quiet
+  git reset --hard origin/main --quiet
+elif [ -f "docker-compose.yml" ]; then
+  git init --quiet
+  git remote add origin "$AUTH_REPO_URL" 2>/dev/null || git remote set-url origin "$AUTH_REPO_URL"
+  git fetch origin main --quiet
+  git reset --hard origin/main --quiet
+else
+  mkdir -p "$DEFAULT_DEPLOY_DIR"
+  cd "$DEFAULT_DEPLOY_DIR"
+  git init --quiet
+  git remote add origin "$AUTH_REPO_URL" 2>/dev/null || git remote set-url origin "$AUTH_REPO_URL"
+  git fetch origin main --quiet
+  git reset --hard origin/main --quiet
+fi
+
+echo -e "${GREEN}[✓] Repository synchronized to latest main branch.${NC}"
 
 # 3. Verify .env file
 if [ ! -f ".env" ]; then
