@@ -264,7 +264,7 @@ export class AuthController {
       try {
         const tokenResponse = await oauthClient.getToken({
           code,
-          redirect_uri: redirectUri || '',
+          redirect_uri: redirectUri || 'https://go.jupsoft.com/dashboard',
         });
         tokenToVerify = tokenResponse.tokens.id_token || undefined;
       } catch (err: any) {
@@ -345,6 +345,16 @@ export class AuthController {
       );
 
       if (userRes.rowCount === 0) {
+        if (email.endsWith('@jupsoft.com')) {
+          const defaultName = googlePayload.name || email.split('@')[0];
+          const newRes = await client.query(
+            `INSERT INTO users (tenant_id, name, email, role, status, google_id, avatar_url, last_login_at)
+             VALUES ('11111111-1111-1111-1111-111111111111', $1, $2, 'admin', 'active', $3, $4, NOW())
+             RETURNING id, tenant_id, name, email, role, status, avatar_url`,
+            [defaultName, email, googleId, avatarUrl]
+          );
+          return { user: newRes.rows[0], tenantName: 'Jupsoft Technologies', tenantCode: 'jupsoft' };
+        }
         return { notFound: true };
       }
 
