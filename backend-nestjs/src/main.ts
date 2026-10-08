@@ -113,11 +113,13 @@ async function bootstrap() {
     hsts: env.NODE_ENV === 'production',
   });
 
-  // Strict CORS (M4: In production, wildcard '*' is forbidden when credentials are enabled)
-  if (env.NODE_ENV === 'production' && env.CORS_ORIGINS === '*') {
-    throw new Error('FATAL: CORS_ORIGINS cannot be "*" in production when credentials are enabled.');
+  // Strict CORS (M4: In production, wildcard '*' with credentials enabled must resolve to actual origins)
+  let corsOrigins: any = true;
+  if (env.CORS_ORIGINS && env.CORS_ORIGINS !== '*') {
+    corsOrigins = env.CORS_ORIGINS.split(',').map((o) => o.trim());
+  } else if (env.NODE_ENV === 'production') {
+    corsOrigins = [env.BASE_URL, 'https://go.jupsoft.com', 'https://api.jupsoft.com'].filter(Boolean);
   }
-  const corsOrigins = env.CORS_ORIGINS === '*' ? true : env.CORS_ORIGINS.split(',').map(o => o.trim());
   app.enableCors({ origin: corsOrigins, credentials: true });
   
   app.useGlobalFilters(new ErrorHandlerFilter());

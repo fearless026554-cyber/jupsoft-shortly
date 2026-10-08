@@ -137,7 +137,13 @@ async function handleRequest(req: NextRequest, { params }: { params: Promise<{ p
       });
     }
 
-    return new Response(response.body, {
+    // Read full buffer to ensure exact byte length and prevent compression/stream mismatches
+    const bodyBuffer = await response.arrayBuffer();
+    resHeaders.delete('content-encoding');
+    resHeaders.delete('content-length');
+    resHeaders.set('content-length', String(bodyBuffer.byteLength));
+
+    return new Response(bodyBuffer, {
       status: response.status,
       headers: resHeaders,
     });
