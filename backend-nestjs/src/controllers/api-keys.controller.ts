@@ -40,7 +40,7 @@ export class ApiKeysController {
     const limit = Math.min(Math.max(1, limitStr ? parseInt(limitStr, 10) || 50 : 50), 100);
 
     const keys = await this.db.withTenantContext(tenantId, async (client) => {
-      let query = `SELECT id, name, key_prefix, scopes, last_used_at, expires_at, revoked_at, created_at FROM api_keys WHERE tenant_id = $1`;
+      let query = `SELECT id, name, key_prefix, scopes, last_used_at, expires_at, revoked_at, created_at, rate_limit_rpm, created_by FROM api_keys WHERE tenant_id = $1`;
       const params: any[] = [tenantId];
       if (cursor) {
         params.push(new Date(cursor));
@@ -67,11 +67,14 @@ export class ApiKeysController {
           } catch {}
         }
 
+        const effectiveRpm = limitStr ? parseInt(limitStr, 10) : (key.rate_limit_rpm || RATE_LIMITS.DEFAULT_API_KEY_RPM);
+        const creator = meta.created_by || key.created_by || 'Admin';
+
         return {
           ...key,
           total_calls: totalCallsStr ? parseInt(totalCallsStr, 10) : 0,
-          rate_limit_rpm: limitStr ? parseInt(limitStr, 10) : RATE_LIMITS.DEFAULT_API_KEY_RPM,
-          created_by: meta.created_by || 'Admin',
+          rate_limit_rpm: effectiveRpm,
+          created_by: creator,
           created_by_email: meta.created_by_email || null,
           created_by_id: meta.created_by_id || null,
           revoked_by: meta.revoked_by || null,
@@ -107,16 +110,17 @@ export class ApiKeysController {
     const keyPrefix = rawSecret.slice(0, AUTH_CONSTANTS.API_KEY_PREFIX_LEN);
     const keyHash = crypto.createHash(AUTH_CONSTANTS.HASH_ALGO).update(rawSecret).digest('hex');
 
+    const keyRateLimit = dto.rateLimitRpm || RATE_LIMITS.DEFAULT_API_KEY_RPM;
+    const creatorName = auth.name || (auth.email ? auth.email.split('@')[0] : 'Admin');
+
     const created = await this.db.withTenantContext(tenantId, async (client) => {
       const res = await client.query(
-        `INSERT INTO api_keys (tenant_id, name, key_prefix, key_hash, scopes, expires_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, key_prefix, scopes, created_at`,
-        [tenantId, dto.name, keyPrefix, keyHash, dto.scopes, dto.expiresAt ? new Date(dto.expiresAt) : null]
+        `INSERT INTO api_keys (tenant_id, name, key_prefix, key_hash, scopes, expires_at, rate_limit_rpm, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, key_prefix, scopes, created_at, rate_limit_rpm, created_by`,
+        [tenantId, dto.name, keyPrefix, keyHash, dto.scopes, dto.expiresAt ? new Date(dto.expiresAt) : null, keyRateLimit, creatorName]
       );
       return res.rows[0];
     });
 
-    const keyRateLimit = dto.rateLimitRpm || RATE_LIMITS.DEFAULT_API_KEY_RPM;
-    const creatorName = auth.name || (auth.email ? auth.email.split('@')[0] : 'Admin');
     const meta = {
       created_by: creatorName,
       created_by_email: auth.email || null,
@@ -166,12 +170,15 @@ export class ApiKeysController {
 
     const { rateLimitRpm } = updateRateLimitSchema.parse(req.body);
 
-    const key = await this.db.withSuperAdminContext(async (client) => {
-      const res = await client.query('SELECT id, name, tenant_id FROM api_keys WHERE id = $1', [id]);
+    const updated = await this.db.withSuperAdminContext(async (client) => {
+      const res = await client.query(
+        'UPDATE api_keys SET rate_limit_rpm = $1 WHERE id = $2 RETURNING id, name, tenant_id, rate_limit_rpm',
+        [rateLimitRpm, id]
+      );
       return res.rows[0];
     });
 
-    if (!key) {
+    if (!updated) {
       return reply.status(404).send({
         success: false,
         error: { code: ErrorCodes.NOT_FOUND, message: 'API key not found' },
@@ -184,9 +191,9 @@ export class ApiKeysController {
       success: true,
       data: {
         id,
-        name: key.name,
+        name: updated.name,
         rate_limit_rpm: rateLimitRpm,
-        message: `Rate limit updated to ${rateLimitRpm} req/min for API key "${key.name}"`,
+        message: `Rate limit updated to ${rateLimitRpm} req/min for API key "${updated.name}"`,
       },
     });
   }
