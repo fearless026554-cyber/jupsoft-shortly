@@ -98,20 +98,32 @@ export class AnalyticsController {
   async getTenantSummary(
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
+    @Query('tenantId') queryTenantId: string,
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply
   ) {
     const dto = analyticsQuerySchema.parse({ startDate, endDate });
     const auth = (req as any).auth;
-    const tenantId = auth.tenantId;
+    const isSuperAdmin = auth.role === 'super_admin' || auth.scopes?.includes('*');
 
-    const cacheKey = `analytics:summary:${tenantId}:${dto.startDate || 'all'}:${dto.endDate || 'all'}`;
+    let targetTenantId: string | undefined;
+    if (isSuperAdmin) {
+      if (queryTenantId && queryTenantId !== 'all') {
+        targetTenantId = queryTenantId;
+      } else {
+        targetTenantId = undefined;
+      }
+    } else {
+      targetTenantId = auth.tenantId;
+    }
+
+    const cacheKey = `analytics:summary:${targetTenantId || 'global'}:${dto.startDate || 'all'}:${dto.endDate || 'all'}`;
     const cached = await this.redis.client.get(cacheKey);
     if (cached) {
       return reply.send({ success: true, data: JSON.parse(cached) });
     }
 
-    const summary = await this.db.withTenantContext(tenantId, async (client) => {
+    const runQuery = async (client: any) => {
       const dateConditionDaily = dto.startDate && dto.endDate
         ? `AND date >= '${dto.startDate}' AND date <= '${dto.endDate}'`
         : dto.startDate
@@ -136,20 +148,22 @@ export class AnalyticsController {
         ? `AND created_at <= ('${dto.endDate}'::date + INTERVAL '1 day')`
         : `AND created_at >= CURRENT_DATE - INTERVAL '30 days'`;
 
+      const tenantLinkFilter = targetTenantId ? `tenant_id = '${targetTenantId}' AND` : '';
+      const tenantDailyFilter = targetTenantId ? `WHERE tenant_id = '${targetTenantId}'` : 'WHERE 1=1';
+      const tenantOutcomeFilter = targetTenantId ? `WHERE tenant_id = '${targetTenantId}'` : 'WHERE 1=1';
+
       const stats = await client.query(
         `SELECT 
-          (SELECT COUNT(id) FROM links WHERE tenant_id = $1 AND status = 'active' ${dateConditionLinks}) AS total_active_links,
-          (SELECT COALESCE(SUM(clicks), 0) FROM click_daily WHERE tenant_id = $1 ${dateConditionDaily}) AS total_clicks,
-          (SELECT COALESCE(SUM(unique_clicks), 0) FROM click_daily WHERE tenant_id = $1 ${dateConditionDaily}) AS total_unique_clicks,
-          (SELECT COALESCE(SUM(bot_clicks), 0) FROM click_daily WHERE tenant_id = $1 ${dateConditionDaily}) AS total_bot_clicks,
-          (SELECT COUNT(id) FROM outcomes WHERE tenant_id = $1 ${dateConditionOutcomes}) AS total_outcomes,
-          (SELECT COALESCE(SUM(value), 0) FROM outcomes WHERE tenant_id = $1 ${dateConditionOutcomes}) AS total_revenue_attributed`,
-        [tenantId]
+          (SELECT COUNT(id) FROM links WHERE ${tenantLinkFilter} status = 'active' ${dateConditionLinks}) AS total_active_links,
+          (SELECT COALESCE(SUM(clicks), 0) FROM click_daily ${tenantDailyFilter} ${dateConditionDaily}) AS total_clicks,
+          (SELECT COALESCE(SUM(unique_clicks), 0) FROM click_daily ${tenantDailyFilter} ${dateConditionDaily}) AS total_unique_clicks,
+          (SELECT COALESCE(SUM(bot_clicks), 0) FROM click_daily ${tenantDailyFilter} ${dateConditionDaily}) AS total_bot_clicks,
+          (SELECT COUNT(id) FROM outcomes ${tenantOutcomeFilter} ${dateConditionOutcomes}) AS total_outcomes,
+          (SELECT COALESCE(SUM(value), 0) FROM outcomes ${tenantOutcomeFilter} ${dateConditionOutcomes}) AS total_revenue_attributed`
       );
       
       const detailsRes = await client.query(
-        `SELECT by_device, by_os, by_browser, by_country, by_referrer FROM click_daily WHERE tenant_id = $1 ${dateConditionDaily}`,
-        [tenantId]
+        `SELECT by_device, by_os, by_browser, by_country, by_referrer FROM click_daily ${tenantDailyFilter} ${dateConditionDaily}`
       );
 
       const agg: Record<string, Record<string, number>> = {
@@ -170,7 +184,11 @@ export class AnalyticsController {
       }
 
       return { ...stats.rows[0], ...agg };
-    });
+    };
+
+    const summary = isSuperAdmin && !targetTenantId
+      ? await this.db.withSuperAdminContext(runQuery)
+      : await this.db.withTenantContext(targetTenantId || auth.tenantId, runQuery);
 
     if (summary) {
       await this.redis.client.setex(cacheKey, 60, JSON.stringify(summary));

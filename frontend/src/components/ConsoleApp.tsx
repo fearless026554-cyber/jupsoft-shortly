@@ -85,9 +85,18 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
     return 'overview';
   };
 
-  // Authentication & Session State (Instant optimistic read from localStorage)
+  // Authentication & Session State (Instant optimistic read from localStorage with JWT fallback)
   const [currentUser, setCurrentUser] = useState<any>(() => getStoredUser());
   const [activeTab, setActiveTab] = useState<ActiveModule>(resolveModule);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    const stored = getStoredUser();
+    if (stored && !currentUser) {
+      setCurrentUser(stored);
+    }
+  }, []);
 
   // Multi-Tenant Hierarchy State (Persisted across reload R2)
   const [tenants, setTenants] = useState<TenantItem[]>([]);
@@ -253,9 +262,20 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
   const loadSeqRef = useRef(0);
 
   const loadData = async (forceRefresh = false) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
     const currentSeq = ++loadSeqRef.current;
     setLoading(true);
+
+    // Timeout safety fallback: Force disable loading after 6s to ensure UI never permanently hangs on skeleton
+    const timeoutTimer = setTimeout(() => {
+      if (currentSeq >= loadSeqRef.current) {
+        setLoading(false);
+      }
+    }, 6000);
+
     try {
       if (forceRefresh) {
         clearApiCache();
@@ -282,8 +302,8 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
         abusePromise,
       ]);
 
-      // Sequence check to prevent stale out-of-order responses overwriting newer data (B5)
-      if (currentSeq !== loadSeqRef.current) return;
+      // Only skip state update if a strictly newer sequence has started
+      if (currentSeq < loadSeqRef.current) return;
 
       if (h) setHealth(h);
       const safeLinks = Array.isArray(l) ? l : [];
@@ -307,7 +327,8 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
     } catch (err) {
       console.error('Failed to load JLMP data:', err);
     } finally {
-      if (currentSeq === loadSeqRef.current) {
+      clearTimeout(timeoutTimer);
+      if (currentSeq >= loadSeqRef.current) {
         setLoading(false);
       }
     }
@@ -441,6 +462,19 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
       await refreshLinks();
     }
   };
+
+  if (!isMounted) {
+    return (
+      <div className="flex h-screen w-screen bg-[#0d1527] items-center justify-center select-none">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-12 h-12 bg-white rounded-xl p-2 shadow-lg flex items-center justify-center border border-slate-700/60 animate-pulse">
+            <img src="/jupsoft-logo.png" alt="Jupsoft Shortly" className="w-full h-full object-contain" />
+          </div>
+          <span className="text-xs font-semibold text-slate-400 tracking-wider uppercase font-mono">Loading Shortly...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#F4F6F9] font-sans antialiased text-slate-800">

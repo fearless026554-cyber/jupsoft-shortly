@@ -116,12 +116,46 @@ export function handleAuthExpired() {
 export function getStoredUser(): any | null {
   if (typeof window === 'undefined') return null;
   const user = localStorage.getItem(USER_STORAGE_KEY);
-  if (!user) return null;
-  try {
-    return JSON.parse(user);
-  } catch {
-    return null;
+  if (user) {
+    try {
+      const parsed = JSON.parse(user);
+      if (parsed && (parsed.id || parsed.userId || parsed.email)) {
+        return parsed;
+      }
+    } catch {}
   }
+
+  // Fallback: decode session JWT payload if stored user is absent
+  const token = getAuthToken();
+  if (token && token.includes('.')) {
+    try {
+      const parts = token.split('.');
+      if (parts.length >= 2) {
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        const payload = JSON.parse(jsonPayload);
+        if (payload && (payload.userId || payload.email)) {
+          const fallbackUser = {
+            id: payload.userId,
+            email: payload.email,
+            name: payload.name || (payload.email ? payload.email.split('@')[0] : 'User'),
+            role: payload.role || 'user',
+            tenant_id: payload.tenantId,
+            status: 'active',
+          };
+          setStoredUser(fallbackUser);
+          return fallbackUser;
+        }
+      }
+    } catch {}
+  }
+  return null;
 }
 
 export function setStoredUser(user: any | null) {

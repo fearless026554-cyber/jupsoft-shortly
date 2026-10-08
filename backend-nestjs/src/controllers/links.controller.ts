@@ -395,28 +395,62 @@ export class LinksController {
 
   @Get()
   @RequireScope(ApiScopes.LINKS_READ)
-  async listLinks(@Query('limit') limitStr: string, @Query('cursor') cursor: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+  async listLinks(
+    @Query('limit') limitStr: string,
+    @Query('cursor') cursor: string,
+    @Query('tenantId') queryTenantId: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
     const auth = (req as any).auth;
-    const tenantId = auth.tenantId;
+    const isSuperAdmin = auth.role === 'super_admin' || auth.scopes?.includes('*');
     const limit = Math.min(Number(limitStr) || PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
 
-    const links = await this.db.withTenantContext(tenantId, async (client) => {
-      let query = `SELECT * FROM links WHERE tenant_id = $1`;
-      const params: any[] = [tenantId];
-      if (cursor) {
-        query += ` AND created_at < $2`;
-        params.push(new Date(cursor));
+    let targetTenantId: string | undefined;
+    if (isSuperAdmin) {
+      if (queryTenantId && queryTenantId !== 'all') {
+        targetTenantId = queryTenantId;
+      } else {
+        targetTenantId = undefined;
       }
-      query += ` ORDER BY created_at DESC LIMIT $${params.length + 1}`;
+    } else {
+      targetTenantId = auth.tenantId;
+    }
+
+    const runQuery = async (client: any) => {
+      let query = `SELECT * FROM links`;
+      const params: any[] = [];
+      const conditions: string[] = [];
+
+      if (targetTenantId) {
+        params.push(targetTenantId);
+        conditions.push(`tenant_id = $${params.length}`);
+      }
+
+      if (cursor) {
+        params.push(new Date(cursor));
+        conditions.push(`created_at < $${params.length}`);
+      }
+
+      if (conditions.length > 0) {
+        query += ` WHERE ` + conditions.join(' AND ');
+      }
+
       params.push(limit);
+      query += ` ORDER BY created_at DESC LIMIT $${params.length}`;
+
       const res = await client.query(query, params);
       return res.rows;
-    });
+    };
+
+    const links = isSuperAdmin && !targetTenantId
+      ? await this.db.withSuperAdminContext(runQuery)
+      : await this.db.withTenantContext(targetTenantId || auth.tenantId, runQuery);
 
     return reply.send({
       success: true,
       data: {
-        items: links.map((l) => ({ ...l, shortUrl: UrlService.buildShortUrl(l.short_code) })),
+        items: links.map((l: any) => ({ ...l, shortUrl: UrlService.buildShortUrl(l.short_code) })),
         nextCursor: links.length === limit ? links[links.length - 1].created_at : null,
       },
     });
@@ -426,18 +460,24 @@ export class LinksController {
   @RequireScope(ApiScopes.LINKS_READ)
   async getLink(@Param('id') id: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const auth = (req as any).auth;
+    const isSuperAdmin = auth.role === 'super_admin' || auth.scopes?.includes('*');
     const tenantId = auth.tenantId;
 
-    const cacheKey = `link:detail:${tenantId}:${id}`;
+    const cacheKey = `link:detail:${tenantId || 'global'}:${id}`;
     const cached = await this.redis.client.get(cacheKey);
     if (cached) {
       return reply.send({ success: true, data: JSON.parse(cached) });
     }
 
-    const link = await this.db.withTenantContext(tenantId, async (client) => {
-      const res = await client.query('SELECT * FROM links WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
-      return res.rows[0];
-    });
+    const link = isSuperAdmin
+      ? await this.db.withSuperAdminContext(async (client) => {
+          const res = await client.query('SELECT * FROM links WHERE id = $1', [id]);
+          return res.rows[0];
+        })
+      : await this.db.withTenantContext(tenantId, async (client) => {
+          const res = await client.query('SELECT * FROM links WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+          return res.rows[0];
+        });
 
     if (!link) {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'Link not found' } });
