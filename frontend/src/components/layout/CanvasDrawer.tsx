@@ -34,12 +34,19 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
   const [isEditingExpiry, setIsEditingExpiry] = useState(false);
   const [savingExpiry, setSavingExpiry] = useState(false);
   const [customExpiryInput, setCustomExpiryInput] = useState('');
+  const [isEditingDestination, setIsEditingDestination] = useState(false);
+  const [destinationInput, setDestinationInput] = useState('');
+  const [savingDestination, setSavingDestination] = useState(false);
+  const [destinationError, setDestinationError] = useState('');
   const { defaultDomain } = useTenantDomains();
 
   useEffect(() => {
     setIsEditingExpiry(false);
     setCustomExpiryInput('');
-  }, [link?.id]);
+    setIsEditingDestination(false);
+    setDestinationInput(link?.destination_url || '');
+    setDestinationError('');
+  }, [link?.id, link?.destination_url]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -111,6 +118,45 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
       console.error(e);
     } finally {
       setSavingExpiry(false);
+    }
+  };
+
+  const handleSaveDestination = async () => {
+    setDestinationError('');
+    const trimmed = destinationInput.trim();
+    if (!trimmed) {
+      setDestinationError('Target destination URL is required.');
+      return;
+    }
+    try {
+      const parsed = new URL(trimmed);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        setDestinationError('URL must start with http:// or https://');
+        return;
+      }
+    } catch {
+      setDestinationError('Please enter a valid URL (e.g. https://example.com)');
+      return;
+    }
+
+    if (trimmed === link.destination_url) {
+      setIsEditingDestination(false);
+      return;
+    }
+
+    setSavingDestination(true);
+    try {
+      const res = await api.updateLink(link.id, { destinationUrl: trimmed });
+      if (res.success && res.data) {
+        setIsEditingDestination(false);
+        onLinkUpdated?.(res.data);
+      } else {
+        setDestinationError(res.error?.message || 'Failed to update destination URL');
+      }
+    } catch (e: any) {
+      setDestinationError(e?.message || 'Network error updating destination URL');
+    } finally {
+      setSavingDestination(false);
     }
   };
 
@@ -188,11 +234,90 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
         </div>
 
         {/* Destination Target */}
-        <div>
-          <div className="text-slate-400 font-semibold text-[10px] uppercase">Target Destination</div>
-          <div className="text-slate-700 break-all bg-slate-50 p-2.5 rounded border border-slate-200 mt-1 font-mono text-[11px]">
-            {link.destination_url}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="text-slate-400 font-semibold text-[10px] uppercase">Target Destination</div>
+            <button
+              onClick={() => {
+                if (!isEditingDestination) {
+                  setDestinationInput(link.destination_url);
+                  setDestinationError('');
+                }
+                setIsEditingDestination(!isEditingDestination);
+              }}
+              className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+            >
+              <Edit2 className="w-3 h-3" />
+              {isEditingDestination ? 'Cancel' : 'Edit Target'}
+            </button>
           </div>
+
+          {!isEditingDestination ? (
+            <div className="flex items-start justify-between gap-2 bg-slate-50 p-2.5 rounded border border-slate-200 mt-1">
+              <span className="text-slate-700 break-all font-mono text-[11px] leading-relaxed">
+                {link.destination_url}
+              </span>
+              <button
+                onClick={() => {
+                  setDestinationInput(link.destination_url);
+                  setDestinationError('');
+                  setIsEditingDestination(true);
+                }}
+                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-200/60 rounded shrink-0 transition cursor-pointer"
+                title="Edit Target Destination"
+              >
+                <Edit2 className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2 pt-0.5 animate-in fade-in">
+              <input
+                type="url"
+                value={destinationInput}
+                onChange={(e) => {
+                  setDestinationInput(e.target.value);
+                  setDestinationError('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSaveDestination();
+                  } else if (e.key === 'Escape') {
+                    setIsEditingDestination(false);
+                    setDestinationError('');
+                  }
+                }}
+                placeholder="https://example.com/target-page"
+                className="w-full bg-white border border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded p-2 text-xs font-mono text-slate-800"
+                autoFocus
+              />
+              {destinationError && (
+                <div className="text-[11px] text-rose-600 font-medium">
+                  {destinationError}
+                </div>
+              )}
+              <div className="flex justify-end gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingDestination(false);
+                    setDestinationError('');
+                  }}
+                  className="px-2.5 py-1 text-[11px] rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={savingDestination || !destinationInput.trim() || destinationInput.trim() === link.destination_url}
+                  onClick={handleSaveDestination}
+                  className="px-3 py-1 text-[11px] rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs disabled:opacity-50 transition cursor-pointer flex items-center gap-1"
+                >
+                  {savingDestination ? 'Saving...' : 'Save Target'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Clicks & Status Cards */}

@@ -24,6 +24,7 @@ import {
   Archive,
   Globe,
   TrendingUp,
+  Edit2,
 } from 'lucide-react';
 import { LinkItem, exportToCsv } from '../../api';
 import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
@@ -635,6 +636,15 @@ export const LinksView: React.FC<LinksViewProps> = ({
                         >
                           <ExternalLink className="w-4 h-4" />
                         </a>
+
+                        <button
+                          onClick={() => onSelectDrawerLink(link)}
+                          aria-label={`Edit ${link.short_code}`}
+                          title="Edit Target Destination & Timer"
+                          className="min-w-[40px] min-h-[40px] p-2 hover:bg-slate-100 rounded-md text-slate-500 hover:text-blue-600 transition cursor-pointer flex items-center justify-center"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
 
                         {Permissions.canEditLinks(currentUser?.role) && (
                           <div className="ml-3 pl-2.5 border-l border-slate-200 flex items-center">
