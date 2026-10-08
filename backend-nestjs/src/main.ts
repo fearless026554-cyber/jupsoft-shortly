@@ -130,6 +130,22 @@ async function bootstrap() {
     geoMiddleware.use(req, reply, () => {});
   });
 
+  // Gracefully handle empty application/json payloads without throwing FST_ERR_CTP_EMPTY_JSON_BODY (400)
+  fastifyInstance.addContentTypeParser('application/json', { parseAs: 'string' }, (_req: any, body: any, done: any) => {
+    if (!body || (typeof body === 'string' && body.trim() === '')) {
+      done(null, {});
+      return;
+    }
+    try {
+      const json = JSON.parse(body);
+      done(null, json);
+    } catch (err: any) {
+      err.statusCode = 400;
+      done(err, undefined);
+    }
+  });
+
+
   // Removed ValidationPipe as Zod is used for validation within controllers
 
   // Security M3: Swagger API docs gated in production environments

@@ -42,7 +42,7 @@ location = /icon.png {
 }
 
 # Next.js Client Proxy Route
-location /api/proxy/ {
+location /api/proxy {
     proxy_pass http://frontend_upstream;
 }
 
