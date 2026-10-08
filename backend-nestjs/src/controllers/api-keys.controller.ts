@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Query, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Patch, Param, Query, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import * as crypto from 'node:crypto';
@@ -6,12 +6,17 @@ import { DatabaseService } from '../db/database.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor.js';
-import { AUTH_CONSTANTS, ApiScopes, DEFAULT_API_KEY_SCOPES, ErrorCodes, REDIS_KEYS } from '../constants/index.js';
+import { AUTH_CONSTANTS, ApiScopes, DEFAULT_API_KEY_SCOPES, ErrorCodes, RATE_LIMITS, REDIS_KEYS } from '../constants/index.js';
 
 const createKeySchema = z.object({
   name: z.string().min(1).max(128),
   scopes: z.array(z.string()).default([...DEFAULT_API_KEY_SCOPES]),
   expiresAt: z.string().datetime().optional(),
+  rateLimitRpm: z.number().int().min(1).max(100000).optional(),
+});
+
+const updateRateLimitSchema = z.object({
+  rateLimitRpm: z.number().int().min(1).max(100000),
 });
 
 @Controller('api/v1/api-keys')
@@ -47,7 +52,35 @@ export class ApiKeysController {
       return res.rows;
     });
 
-    return reply.send({ success: true, data: keys });
+    const enrichedKeys = await Promise.all(
+      keys.map(async (key) => {
+        const [totalCallsStr, limitStr, metaStr] = await Promise.all([
+          this.redis.client.get(REDIS_KEYS.API_KEY_TOTAL(key.id)),
+          this.redis.client.get(REDIS_KEYS.API_KEY_LIMIT(key.id)),
+          this.redis.client.get(REDIS_KEYS.API_KEY_META(key.id)),
+        ]);
+
+        let meta: any = {};
+        if (metaStr) {
+          try {
+            meta = JSON.parse(metaStr);
+          } catch {}
+        }
+
+        return {
+          ...key,
+          total_calls: totalCallsStr ? parseInt(totalCallsStr, 10) : 0,
+          rate_limit_rpm: limitStr ? parseInt(limitStr, 10) : RATE_LIMITS.DEFAULT_API_KEY_RPM,
+          created_by: meta.created_by || 'Admin',
+          created_by_email: meta.created_by_email || null,
+          created_by_id: meta.created_by_id || null,
+          revoked_by: meta.revoked_by || null,
+          revoked_by_email: meta.revoked_by_email || null,
+        };
+      })
+    );
+
+    return reply.send({ success: true, data: enrichedKeys });
   }
 
   @Post()
@@ -82,7 +115,80 @@ export class ApiKeysController {
       return res.rows[0];
     });
 
-    return reply.status(201).send({ success: true, data: { ...created, secretKey: rawSecret } });
+    const keyRateLimit = dto.rateLimitRpm || RATE_LIMITS.DEFAULT_API_KEY_RPM;
+    const creatorName = auth.name || (auth.email ? auth.email.split('@')[0] : 'Admin');
+    const meta = {
+      created_by: creatorName,
+      created_by_email: auth.email || null,
+      created_by_id: auth.userId || null,
+      created_at: created.created_at,
+    };
+
+    await Promise.all([
+      this.redis.client.set(REDIS_KEYS.API_KEY_LIMIT(created.id), keyRateLimit.toString()),
+      this.redis.client.set(REDIS_KEYS.API_KEY_META(created.id), JSON.stringify(meta)),
+      this.redis.client.set(REDIS_KEYS.API_KEY_HASH_TO_ID(keyHash), created.id),
+      this.redis.client.set(REDIS_KEYS.API_KEY_TOTAL(created.id), '0'),
+    ]);
+
+    return reply.status(201).send({
+      success: true,
+      data: {
+        ...created,
+        secretKey: rawSecret,
+        rate_limit_rpm: keyRateLimit,
+        created_by: creatorName,
+        created_by_email: auth.email || null,
+        total_calls: 0,
+      },
+    });
+  }
+
+  @Patch(':id/rate-limit')
+  @RequireScope(ApiScopes.ADMIN)
+  async updateApiKeyRateLimit(
+    @Param('id') id: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
+    const auth = (req as any).auth;
+    const isSuperAdmin = auth.role === 'super_admin' || auth.scopes?.includes(ApiScopes.WILDCARD) || auth.scopes?.includes(ApiScopes.SUPER_ADMIN);
+
+    if (!isSuperAdmin) {
+      return reply.status(403).send({
+        success: false,
+        error: {
+          code: ErrorCodes.FORBIDDEN,
+          message: 'Only Super Admin can dynamically modify API key rate limits',
+        },
+      });
+    }
+
+    const { rateLimitRpm } = updateRateLimitSchema.parse(req.body);
+
+    const key = await this.db.withSuperAdminContext(async (client) => {
+      const res = await client.query('SELECT id, name, tenant_id FROM api_keys WHERE id = $1', [id]);
+      return res.rows[0];
+    });
+
+    if (!key) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: ErrorCodes.NOT_FOUND, message: 'API key not found' },
+      });
+    }
+
+    await this.redis.client.set(REDIS_KEYS.API_KEY_LIMIT(id), rateLimitRpm.toString());
+
+    return reply.send({
+      success: true,
+      data: {
+        id,
+        name: key.name,
+        rate_limit_rpm: rateLimitRpm,
+        message: `Rate limit updated to ${rateLimitRpm} req/min for API key "${key.name}"`,
+      },
+    });
   }
 
   @Delete(':id')
@@ -94,7 +200,7 @@ export class ApiKeysController {
 
     const revoked = await this.db.withTenantContext(tenantId, async (client) => {
       const res = await client.query(
-        `UPDATE api_keys SET revoked_at = NOW() WHERE id = $1 AND tenant_id = $2 RETURNING id, key_hash`,
+        `UPDATE api_keys SET revoked_at = NOW() WHERE id = $1 AND tenant_id = $2 RETURNING id, key_hash, revoked_at`,
         [id, tenantId]
       );
       return res.rows[0];
@@ -105,6 +211,20 @@ export class ApiKeysController {
     }
 
     await this.redis.client.del(REDIS_KEYS.AUTH_KEY(revoked.key_hash));
+
+    // Update metadata with revoker details
+    const revokerName = auth.name || (auth.email ? auth.email.split('@')[0] : 'Admin');
+    const existingMetaStr = await this.redis.client.get(REDIS_KEYS.API_KEY_META(id));
+    let meta: any = {};
+    if (existingMetaStr) {
+      try { meta = JSON.parse(existingMetaStr); } catch {}
+    }
+    meta.revoked_by = revokerName;
+    meta.revoked_by_email = auth.email || null;
+    meta.revoked_by_id = auth.userId || null;
+    meta.revoked_at = revoked.revoked_at || new Date().toISOString();
+    await this.redis.client.set(REDIS_KEYS.API_KEY_META(id), JSON.stringify(meta));
+
     return reply.send({ success: true, message: 'API key revoked successfully' });
   }
 
@@ -141,7 +261,11 @@ export class ApiKeysController {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'API key not found' } });
     }
 
-    await this.redis.client.del(REDIS_KEYS.AUTH_KEY(rotated.oldKeyHash));
+    await Promise.all([
+      this.redis.client.del(REDIS_KEYS.AUTH_KEY(rotated.oldKeyHash)),
+      this.redis.client.set(REDIS_KEYS.API_KEY_HASH_TO_ID(newKeyHash), id),
+    ]);
+
     return reply.send({ success: true, data: { ...rotated.updated, secretKey: rawSecret } });
   }
 }

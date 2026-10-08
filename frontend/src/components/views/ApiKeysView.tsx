@@ -5,6 +5,12 @@ import {
   Key,
   Plus,
   RefreshCw,
+  Activity,
+  Zap,
+  X,
+  User,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { api } from '../../api';
 import { usePagination } from '../../hooks/usePagination';
@@ -22,6 +28,13 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
   const [keys, setKeys] = useState<any[]>([]);
   const pagination = usePagination(keys, 10);
   const [loading, setLoading] = useState(true);
+
+  // Rate limit editing state for Super Admin
+  const [editingKey, setEditingKey] = useState<any | null>(null);
+  const [editLimitVal, setEditLimitVal] = useState<number>(10);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -33,6 +46,8 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
     message: '',
     onConfirm: () => {},
   });
+
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const loadKeys = async () => {
     setLoading(true);
@@ -62,6 +77,35 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
+  const handleOpenEditLimit = (k: any) => {
+    setEditingKey(k);
+    setEditLimitVal(k.rate_limit_rpm || 10);
+    setEditError(null);
+  };
+
+  const handleSaveRateLimit = async () => {
+    if (!editingKey) return;
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const res = await api.updateApiKeyRateLimit(editingKey.id, editLimitVal);
+      if (res.success) {
+        setKeys((prev) =>
+          prev.map((k) =>
+            k.id === editingKey.id ? { ...k, rate_limit_rpm: editLimitVal } : k
+          )
+        );
+        setEditingKey(null);
+      } else {
+        setEditError(res.error?.message || 'Failed to update rate limit');
+      }
+    } catch (err: any) {
+      setEditError(err.message || 'Network error');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const handleRevoke = async (id: string, name: string, prefix?: string) => {
     const keyPrefix = prefix || 'jlp_live_...';
     setConfirmConfig({
@@ -71,7 +115,6 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
       onConfirm: async () => {
         try {
           await api.revokeApiKey(id);
-          setKeys((prev) => prev.filter((k) => k.id !== id));
           loadKeys();
         } catch {
           // handled
@@ -99,11 +142,18 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
             <Key className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-base font-semibold text-slate-900">
-              Developer API Keys
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-semibold text-slate-900">
+                Developer API Keys & Governance
+              </h1>
+              {isSuperAdmin && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                  Super Admin Mode
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500">
-              Manage your API keys for programmatic access and ERP integrations.
+              Manage keys, monitor usage calls, and enforce dynamic per-minute rate limits.
             </p>
           </div>
         </div>
@@ -136,7 +186,7 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
       <div className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
         <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
           <div className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
-            <span>Custom API Keys</span>
+            <span>Provisioned Keys & Governance</span>
             {loading ? (
               <span className="inline-block w-8 h-3.5 bg-slate-200 animate-pulse rounded" />
             ) : (
@@ -144,7 +194,7 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
             )}
           </div>
           <span className="text-[11px] text-slate-400 font-mono">
-            Securely Stored
+            Default: 10 req/min
           </span>
         </div>
 
@@ -153,7 +203,10 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
             <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 uppercase text-[10px]">
               <tr>
                 <th className="px-3.5 py-2.5">Key Name & Prefix</th>
+                <th className="px-3.5 py-2.5">Created By</th>
                 <th className="px-3.5 py-2.5">Authorized Scopes</th>
+                <th className="px-3.5 py-2.5">Total Invocations</th>
+                <th className="px-3.5 py-2.5">Rate Limit</th>
                 <th className="px-3.5 py-2.5">Last Invocation</th>
                 <th className="px-3.5 py-2.5">Created Date</th>
                 <th className="px-3.5 py-2.5 text-right">Actions</th>
@@ -161,17 +214,27 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
             </thead>
             <tbody className="divide-y divide-slate-100 font-sans">
               {loading ? (
-                Array.from({ length: 2 }).map((_, i) => (
+                Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i} className="animate-pulse">
                     <td className="px-3.5 py-3">
                       <div className="h-4 bg-slate-200 rounded w-44 mb-1.5"></div>
                       <div className="h-3 bg-slate-100 rounded w-28"></div>
                     </td>
                     <td className="px-3.5 py-3">
+                      <div className="h-3.5 bg-slate-100 rounded w-24 mb-1"></div>
+                      <div className="h-3 bg-slate-50 rounded w-32"></div>
+                    </td>
+                    <td className="px-3.5 py-3">
                       <div className="flex gap-1">
                         <div className="h-4 bg-slate-100 rounded w-16"></div>
                         <div className="h-4 bg-slate-100 rounded w-16"></div>
                       </div>
+                    </td>
+                    <td className="px-3.5 py-3">
+                      <div className="h-4 bg-slate-100 rounded w-16"></div>
+                    </td>
+                    <td className="px-3.5 py-3">
+                      <div className="h-4 bg-slate-100 rounded w-20"></div>
                     </td>
                     <td className="px-3.5 py-3">
                       <div className="h-3.5 bg-slate-100 rounded w-20"></div>
@@ -186,21 +249,20 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
                 ))
               ) : pagination.isLazyLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-3.5 py-6">
-                    <TableSkeleton rows={pagination.pageSize} columns={5} />
+                  <td colSpan={8} className="px-3.5 py-6">
+                    <TableSkeleton rows={pagination.pageSize} columns={8} />
                   </td>
                 </tr>
               ) : keys.length === 0 ? (
-                /* Empty state: Single CTA policy (no duplicate Create Key button) */
                 <tr>
-                  <td colSpan={5} className="p-8 text-center">
+                  <td colSpan={8} className="p-8 text-center">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
                         <Key className="w-5 h-5" />
                       </div>
                       <div className="text-xs font-bold text-slate-800">No Custom Tokens Provisioned</div>
                       <p className="text-[11px] text-slate-500 max-w-sm">
-                        Generate scoped API keys from the header button for webhooks, SMS dispatchers, and automated clickstream analytics.
+                        Generate scoped API keys from the header button for webhooks, ERP synchronizers, and REST integrations.
                       </p>
                     </div>
                   </td>
@@ -208,13 +270,35 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
               ) : (
                 pagination.paginatedItems.map((k) => (
                   <tr key={k.id} className="hover:bg-slate-50/80 transition">
+                    {/* Key Name & Prefix */}
                     <td className="px-3.5 py-2.5">
-                      <div className="font-semibold text-slate-800">{k.name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-slate-800">{k.name}</span>
+                        {k.revoked_at && (
+                          <span className="px-1.5 py-0.2 rounded bg-red-100 text-red-700 font-bold text-[9px] uppercase tracking-wider">
+                            Revoked
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[11px] text-slate-500 font-mono mt-0.5">
                         Prefix: <span className="bg-slate-100 px-1.5 py-0.5 rounded font-mono font-medium text-slate-700">{maskPrefix(k.key_prefix || k.keyPrefix)}</span>
                       </div>
                     </td>
 
+                    {/* Created By */}
+                    <td className="px-3.5 py-2.5">
+                      <div className="flex items-center gap-1 text-slate-800 font-medium">
+                        <User className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>{k.created_by || 'Admin'}</span>
+                      </div>
+                      {k.created_by_email && (
+                        <div className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]">
+                          {k.created_by_email}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Scopes */}
                     <td className="px-3.5 py-2.5">
                       {(!k.scopes || k.scopes.length === 0) ? (
                         <span className="text-slate-400 text-xs">No scopes</span>
@@ -238,24 +322,62 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
                       )}
                     </td>
 
-                    <td className="px-3.5 py-2.5 font-mono text-slate-500 text-[11px]">
-                      {k.last_used_at || 'Never'}
+                    {/* Total Invocations */}
+                    <td className="px-3.5 py-2.5">
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 font-mono text-[11px] font-semibold">
+                        <Activity className="w-3 h-3 text-emerald-600" />
+                        <span>{k.total_calls || 0} calls</span>
+                      </div>
                     </td>
 
+                    {/* Rate Limit */}
+                    <td className="px-3.5 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 rounded font-mono text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                          {k.rate_limit_rpm || 10} req/min
+                        </span>
+                        {isSuperAdmin && !k.revoked_at && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditLimit(k)}
+                            aria-label={`Edit rate limit for ${k.name}`}
+                            title="Super Admin: Edit Rate Limit"
+                            className="p-1 rounded hover:bg-slate-100 text-slate-500 hover:text-amber-600 transition cursor-pointer"
+                          >
+                            <Zap className="w-3.5 h-3.5 text-amber-500" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Last Invocation */}
+                    <td className="px-3.5 py-2.5 font-mono text-slate-500 text-[11px]">
+                      {k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Never'}
+                    </td>
+
+                    {/* Created Date */}
                     <td className="px-3.5 py-2.5 font-mono text-slate-400 text-[11px]">
                       {new Date(k.created_at).toLocaleDateString()}
                     </td>
 
+                    {/* Actions */}
                     <td className="px-3.5 py-2.5 text-right">
-                      {Permissions.canManageApiKeys(currentUser?.role) && (
-                        <button
-                          onClick={() => handleRevoke(k.id, k.name, k.key_prefix || k.keyPrefix)}
-                          aria-label={`Revoke API Key ${k.name}`}
-                          title={`Revoke API Key ${k.name}`}
-                          className="min-h-[40px] px-3 py-1.5 rounded bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition cursor-pointer"
-                        >
-                          Revoke Key
-                        </button>
+                      {k.revoked_at ? (
+                        <div className="text-[10px] text-slate-400 text-right">
+                          <span className="font-semibold text-red-600 block">Revoked</span>
+                          {k.revoked_by && <span>by {k.revoked_by}</span>}
+                        </div>
+                      ) : (
+                        Permissions.canManageApiKeys(currentUser?.role) && (
+                          <button
+                            onClick={() => handleRevoke(k.id, k.name, k.key_prefix || k.keyPrefix)}
+                            aria-label={`Revoke API Key ${k.name}`}
+                            title={`Revoke API Key ${k.name}`}
+                            className="min-h-[32px] px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 text-red-700 font-semibold text-xs border border-red-200 transition cursor-pointer"
+                          >
+                            Revoke
+                          </button>
+                        )
                       )}
                     </td>
                   </tr>
@@ -276,6 +398,104 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
           )}
         </div>
       </div>
+
+      {/* Super Admin Rate Limit Edit Modal */}
+      {editingKey && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="h-12 px-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded bg-amber-100 flex items-center justify-center text-amber-600">
+                  <Zap className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-xs text-slate-800">
+                  Change Rate Limit
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingKey(null)}
+                className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3.5 text-xs">
+              <div>
+                <span className="text-slate-500 text-[11px] block">Target Key:</span>
+                <span className="font-bold text-slate-800 text-xs">{editingKey.name}</span>
+                <span className="text-[10px] font-mono text-slate-400 ml-1">({maskPrefix(editingKey.key_prefix)})</span>
+              </div>
+
+              {editError && (
+                <div className="p-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded">
+                  {editError}
+                </div>
+              )}
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Requests Per Minute (RPM)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100000}
+                  required
+                  value={editLimitVal}
+                  onChange={(e) => setEditLimitVal(Math.max(1, parseInt(e.target.value, 10) || 10))}
+                  className="w-full text-xs px-3 py-2 rounded border border-slate-300 font-mono focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Default: 10 req/min. Adjust limit up or down dynamically in real time.
+                </p>
+              </div>
+
+              {/* Presets */}
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                  Quick Presets
+                </label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[10, 60, 300, 1000].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setEditLimitVal(preset)}
+                      className={`py-1 text-[11px] font-mono rounded border transition ${
+                        editLimitVal === preset
+                          ? 'bg-blue-50 border-blue-400 text-blue-700 font-bold'
+                          : 'border-slate-200 hover:bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      {preset}/m
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingKey(null)}
+                  className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 text-xs hover:bg-slate-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={editSaving}
+                  onClick={handleSaveRateLimit}
+                  className="px-3.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs disabled:opacity-50 transition cursor-pointer"
+                >
+                  {editSaving ? 'Updating...' : 'Update Limit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         isOpen={confirmConfig.isOpen}

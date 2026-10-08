@@ -17,6 +17,7 @@ export const CreateApiKeyModal: React.FC<CreateApiKeyModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState<string[]>(['links:read', 'links:write']);
+  const [rateLimitRpm, setRateLimitRpm] = useState<number>(10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
@@ -60,7 +61,7 @@ export const CreateApiKeyModal: React.FC<CreateApiKeyModalProps> = ({
     setError(null);
 
     try {
-      const res = await api.createApiKey(name.trim(), scopes);
+      const res = await api.createApiKey(name.trim(), scopes, rateLimitRpm);
       if (res.success && res.data) {
         const secret = res.data.secretKey || res.data.key || res.data.token;
         if (secret) {
@@ -84,6 +85,7 @@ export const CreateApiKeyModal: React.FC<CreateApiKeyModalProps> = ({
   const resetAndClose = () => {
     setName('');
     setScopes(['links:read', 'links:write']);
+    setRateLimitRpm(10);
     setGeneratedKey(null);
     setIsSecretHidden(false);
     setCountdown(30);
@@ -230,6 +232,29 @@ export const CreateApiKeyModal: React.FC<CreateApiKeyModalProps> = ({
                   placeholder="e.g. Production Key"
                   className="w-full text-xs px-3 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-slate-700">
+                    Rate Limit (Requests / Minute) *
+                  </label>
+                  <span className="text-[10px] font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
+                    Default: 10 req/min
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  max={100000}
+                  required
+                  value={rateLimitRpm}
+                  onChange={(e) => setRateLimitRpm(Math.max(1, parseInt(e.target.value, 10) || 10))}
+                  className="w-full text-xs px-3 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Limits maximum API calls per 60-second window. Super Admins can adjust this anytime.
+                </p>
               </div>
 
               <div>

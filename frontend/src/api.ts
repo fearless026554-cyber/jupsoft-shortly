@@ -608,12 +608,22 @@ export const api = {
     });
   },
 
-  async createApiKey(name: string, scopes: string[]) {
+  async createApiKey(name: string, scopes: string[], rateLimitRpm = 10) {
     clearApiCache('api-keys');
     const res = await secureFetch(`${API_BASE_URL}/api-keys`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ name, scopes }),
+      body: JSON.stringify({ name, scopes, rateLimitRpm }),
+    });
+    return res.json();
+  },
+
+  async updateApiKeyRateLimit(id: string, rateLimitRpm: number) {
+    clearApiCache('api-keys');
+    const res = await secureFetch(`${API_BASE_URL}/api-keys/${id}/rate-limit`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ rateLimitRpm }),
     });
     return res.json();
   },
