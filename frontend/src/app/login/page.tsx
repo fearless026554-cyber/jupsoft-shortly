@@ -6,12 +6,11 @@ import Script from 'next/script';
 import { api, getAuthToken, setAuthToken, setStoredUser } from '../../api';
 import { Lock, Mail, Eye, EyeOff, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 
-const GOOGLE_CLIENT_ID =
-  process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-  '583166649168-lrdduiha7sjsr8hrv0mm66641kevme18.apps.googleusercontent.com';
+const INITIAL_GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
 export default function LoginPage() {
   const router = useRouter();
+  const [googleClientId, setGoogleClientId] = useState(INITIAL_GOOGLE_CLIENT_ID);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -54,6 +53,18 @@ export default function LoginPage() {
       }
     }
 
+    // Dynamically obtain Google Client ID from backend/environment
+    if (!googleClientId) {
+      fetch('/api/config')
+        .then((r) => r.json())
+        .then((cfg) => {
+          if (cfg?.googleClientId) {
+            setGoogleClientId(cfg.googleClientId);
+          }
+        })
+        .catch(() => {});
+    }
+
     const token = getAuthToken();
     if (token) {
       api.getMe().then((res) => {
@@ -65,17 +76,17 @@ export default function LoginPage() {
         }
       });
     }
-  }, [router]);
+  }, [router, googleClientId]);
 
   // Initialize Google Identity Services
   const initGoogleIdentity = () => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !googleClientId) return;
     const google = (window as any).google;
     if (!google?.accounts?.id) return;
 
     try {
       google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
+        client_id: googleClientId,
         callback: async (response: any) => {
           if (response?.credential) {
             setGoogleLoading(true);
@@ -110,7 +121,18 @@ export default function LoginPage() {
     }
   };
 
+  useEffect(() => {
+    if (googleClientId) {
+      initGoogleIdentity();
+    }
+  }, [googleClientId]);
+
   const handleGoogleRedirectFlow = () => {
+    if (!googleClientId) {
+      setError('Google login is not configured on this server.');
+      return;
+    }
+
     setGoogleLoading(true);
     setError(null);
 
@@ -128,9 +150,13 @@ export default function LoginPage() {
   };
 
   const redirectToOAuth = () => {
+    if (!googleClientId) {
+      setError('Google login is not configured on this server.');
+      return;
+    }
     const redirectUri = encodeURIComponent('https://go.jupsoft.com/dashboard');
     const scope = encodeURIComponent('openid email profile');
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=select_account`;
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=select_account`;
     window.location.href = authUrl;
   };
 
