@@ -17,15 +17,22 @@ import {
   Sparkles,
   ShieldCheck,
   LayoutList,
+  Code2,
+  Copy,
+  Check,
+  Terminal,
+  ExternalLink,
 } from 'lucide-react';
 import { useTenantDomains } from '../../hooks/useTenantDomains';
 
-type HelpSection = 'list' | 'quickstart' | 'createlink' | 'bulkcsv' | 'webhooks' | 'faq';
+type HelpSection = 'list' | 'quickstart' | 'createlink' | 'bulkcsv' | 'webhooks' | 'faq' | 'api';
 
 export const HelpGuideView: React.FC = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [search, setSearch] = useState('');
   const [activeSection, setActiveSection] = useState<HelpSection>('list');
+  const [codeLang, setCodeLang] = useState<'curl' | 'php' | 'node' | 'python'>('curl');
+  const [copiedCode, setCopiedCode] = useState(false);
   const { defaultDomain } = useTenantDomains();
 
   const guides = [
@@ -62,8 +69,16 @@ export const HelpGuideView: React.FC = () => {
       tags: ['webhook', 'outcomes', 'api key', 'payments', 'conversions'],
     },
     {
+      id: 'api' as const,
+      title: '5. Enterprise API & ERP Integration',
+      category: 'Developers',
+      icon: Code2,
+      description: 'Production REST API reference for single/bulk links, dynamic QR codes, webhook revenue attribution, and multi-language code snippets.',
+      tags: ['api', 'rest', 'developer', 'curl', 'php', 'laravel', 'python', 'nodejs', 'erp', 'endpoints', 'json'],
+    },
+    {
       id: 'faq' as const,
-      title: '5. FAQs & Regulatory Compliance',
+      title: '6. FAQs & Regulatory Compliance',
       category: 'Compliance',
       icon: HelpCircle,
       description: 'TRAI DLT portal whitelisting, DPDP Act 2023 privacy safeguards, dynamic vector QR codes, and telecom rules.',
@@ -187,7 +202,8 @@ export const HelpGuideView: React.FC = () => {
           { id: 'createlink' as const, label: '2. Creating Links', icon: Link2 },
           { id: 'bulkcsv' as const, label: '3. Bulk CSV Format', icon: FileSpreadsheet },
           { id: 'webhooks' as const, label: '4. Webhooks', icon: DollarSign },
-          { id: 'faq' as const, label: '5. FAQs', icon: HelpCircle },
+          { id: 'api' as const, label: '5. Enterprise API', icon: Code2 },
+          { id: 'faq' as const, label: '6. FAQs', icon: HelpCircle },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeSection === tab.id;
@@ -443,11 +459,11 @@ export const HelpGuideView: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
               <h3 className="font-bold text-slate-900">Webhook Endpoint URL</h3>
-              <div className="p-2 rounded bg-white border border-slate-300 font-mono text-blue-600 font-bold">
-                POST https://api.yourdomain.com/api/v1/outcomes
+              <div className="p-2 rounded bg-white border border-slate-300 font-mono text-blue-600 font-bold select-all">
+                POST https://{defaultDomain}/api/v1/outcomes
               </div>
               <p className="text-slate-500 mt-1">
-                Configure your payment gateway (HDFC, Razorpay, ICICI) or ERP to trigger this callback upon successful transaction.
+                Configure your payment gateway (HDFC, Razorpay, ICICI, PayU) or ERP to trigger this callback upon successful transaction.
               </p>
             </div>
 
@@ -455,14 +471,244 @@ export const HelpGuideView: React.FC = () => {
               <h3 className="font-bold text-slate-900">Required Headers</h3>
               <div className="p-2 rounded bg-white border border-slate-300 font-mono text-slate-700 text-[11px] space-y-1">
                 <div>Content-Type: application/json</div>
-                <div>x-api-key: your_api_key_here</div>
+                <div>Authorization: Bearer &lt;YOUR_API_KEY&gt;</div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* SECTION 5: FAQs & COMPLIANCE */}
+      {/* SECTION 5: ENTERPRISE API & ERP INTEGRATION */}
+      {activeSection === 'api' && (
+        <div className="bg-white p-5 rounded-lg border border-slate-200/80 shadow-2xs space-y-5">
+          {renderBackToListButton()}
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-blue-600" />
+                Enterprise REST API & ERP Integration Guide
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Integrate Shortly with your School ERP, WhatsApp bot, SMS gateway, or custom backend.
+              </p>
+            </div>
+            <a
+              href="/apikeys"
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.hash = 'apikeys';
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition"
+            >
+              <span>Manage API Keys</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+
+          {/* Security & Key Generation Notice */}
+          <div className="p-3.5 rounded-lg bg-amber-50/80 border border-amber-200/80 text-xs text-amber-900 space-y-1">
+            <div className="font-bold flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-amber-600" />
+              <span>Security & Key Provisioning Notice</span>
+            </div>
+            <p className="text-[11px] text-amber-800 leading-relaxed">
+              API Keys are securely provisioned under <strong>Settings ➔ API Keys</strong>. Never expose or hardcode real secret keys into client-side code or public repositories. Pass your secret key via the <code>Authorization: Bearer &lt;YOUR_API_KEY&gt;</code> header.
+            </p>
+          </div>
+
+          {/* Quick Specifications Strip */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <div className="text-[10px] uppercase font-bold text-slate-400">Base Production URL</div>
+              <div className="font-mono font-bold text-blue-600 mt-0.5 truncate">https://{defaultDomain}/api/v1</div>
+            </div>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <div className="text-[10px] uppercase font-bold text-slate-400">Authentication Header</div>
+              <div className="font-mono font-bold text-slate-800 mt-0.5 truncate">Authorization: Bearer &lt;KEY&gt;</div>
+            </div>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <div className="text-[10px] uppercase font-bold text-slate-400">Response Format</div>
+              <div className="font-mono font-bold text-slate-800 mt-0.5 truncate">JSON (RFC 8259 Envelope)</div>
+            </div>
+          </div>
+
+          {/* Interactive Code Snippets Box */}
+          <div className="rounded-lg border border-slate-800 bg-slate-950 overflow-hidden text-xs">
+            <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800">
+              <div className="flex items-center gap-1">
+                {(['curl', 'php', 'node', 'python'] as const).map((lang) => (
+                  <button
+                    key={lang}
+                    onClick={() => setCodeLang(lang)}
+                    className={`px-2.5 py-1 rounded text-[11px] font-mono font-semibold transition cursor-pointer ${
+                      codeLang === lang
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    }`}
+                  >
+                    {lang === 'curl' ? 'cURL' : lang === 'php' ? 'PHP (Laravel)' : lang === 'node' ? 'Node.js' : 'Python'}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => {
+                  let textToCopy = '';
+                  if (codeLang === 'curl') {
+                    textToCopy = `curl -X POST "https://${defaultDomain}/api/v1/links" \\\n  -H "Authorization: Bearer YOUR_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"destinationUrl": "https://erp.jupsoft.com/fees/pay?inv=INV-2026-001", "alias": "fee-inv-001", "externalRef": "INV-2026-001", "tag": "Fees"}'`;
+                  } else if (codeLang === 'php') {
+                    textToCopy = `// Laravel HTTP Client\n$res = Http::withToken($apiKey)->post('https://${defaultDomain}/api/v1/links', [\n    'destinationUrl' => 'https://erp.jupsoft.com/fees/pay?inv=INV-2026-001',\n    'externalRef'    => 'INV-2026-001',\n    'tag'            => 'School-Fees',\n]);\n$shortUrl = $res->json('data.shortUrl');`;
+                  } else if (codeLang === 'node') {
+                    textToCopy = `// Node.js Axios\nconst res = await axios.post('https://${defaultDomain}/api/v1/links', {\n  destinationUrl: 'https://erp.jupsoft.com/fees/pay?inv=INV-2026-001',\n  externalRef: 'INV-2026-001',\n  tag: 'School-Fees',\n}, {\n  headers: { Authorization: \`Bearer \${API_KEY}\` }\n});\nconsole.log(res.data.data.shortUrl);`;
+                  } else {
+                    textToCopy = `# Python requests\nimport requests\nres = requests.post('https://${defaultDomain}/api/v1/links', json={\n    'destinationUrl': 'https://erp.jupsoft.com/fees/pay?inv=INV-2026-001',\n    'externalRef': 'INV-2026-001',\n    'tag': 'School-Fees'\n}, headers={'Authorization': f'Bearer {API_KEY}'})\nprint(res.json()['data']['shortUrl'])`;
+                  }
+                  navigator.clipboard.writeText(textToCopy).catch(() => {});
+                  setCopiedCode(true);
+                  setTimeout(() => setCopiedCode(false), 2000);
+                }}
+                className="flex items-center gap-1 text-[11px] text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-slate-800 transition cursor-pointer"
+              >
+                {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
+              </button>
+            </div>
+
+            <pre className="p-4 text-slate-300 font-mono text-[11px] leading-relaxed overflow-x-auto select-all">
+              {codeLang === 'curl' && `curl -X POST "https://${defaultDomain}/api/v1/links" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "destinationUrl": "https://erp.jupsoft.com/fees/pay?inv=INV-2026-001",
+    "alias": "fee-inv-001",
+    "externalRef": "INV-2026-001",
+    "tag": "School-Fees",
+    "expiresAt": "2026-10-31T23:59:59.000Z"
+  }'`}
+
+              {codeLang === 'php' && `// Laravel / PHP Integration
+use Illuminate\\Support\\Facades\\Http;
+
+$response = Http::withToken($apiKey)->post('https://${defaultDomain}/api/v1/links', [
+    'destinationUrl' => 'https://erp.jupsoft.com/fees/pay?inv=' . $invoiceNo,
+    'alias'          => 'fee-' . strtolower($invoiceNo),
+    'externalRef'    => $invoiceNo,
+    'tag'            => 'School-Fees',
+    'expiresAt'      => now()->addDays(30)->toIso8601String(),
+]);
+
+$shortUrl = $response->json('data.shortUrl');`}
+
+              {codeLang === 'node' && `// Node.js (Axios / Fetch)
+import axios from 'axios';
+
+const { data } = await axios.post('https://${defaultDomain}/api/v1/links', {
+  destinationUrl: \`https://erp.jupsoft.com/fees/pay?inv=\${invoiceNo}\`,
+  alias: \`fee-\${invoiceNo.toLowerCase()}\`,
+  externalRef: invoiceNo,
+  tag: 'School-Fees',
+  expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+}, {
+  headers: {
+    'Authorization': \`Bearer \${process.env.SHORTLY_API_KEY}\`,
+    'Content-Type': 'application/json'
+  }
+});
+
+console.log('Short URL:', data.data.shortUrl);`}
+
+              {codeLang === 'python' && `# Python 3.8+ (requests)
+import requests
+
+payload = {
+    "destinationUrl": f"https://erp.jupsoft.com/fees/pay?inv={invoice_no}",
+    "alias": f"fee-{invoice_no.lower()}",
+    "externalRef": invoice_no,
+    "tag": "School-Fees"
+}
+
+res = requests.post(
+    "https://${defaultDomain}/api/v1/links",
+    json=payload,
+    headers={"Authorization": f"Bearer {API_KEY}"}
+)
+short_url = res.json()["data"]["shortUrl"]`}
+            </pre>
+          </div>
+
+          {/* Core Endpoints Grid */}
+          <div className="space-y-3 pt-2">
+            <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wide">
+              Production Endpoints Reference
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">POST</span>
+                  <span className="font-bold text-slate-800">/api/v1/links</span>
+                </div>
+                <p className="text-slate-600 text-[11px] leading-relaxed">
+                  Generate branded single links with custom alias, DLT-safe short length, expiration timer, and external reference.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">POST</span>
+                  <span className="font-bold text-slate-800">/api/v1/links/bulk</span>
+                </div>
+                <p className="text-slate-600 text-[11px] leading-relaxed">
+                  Generate thousands of links in one atomic batch for mass SMS or WhatsApp fee dispatch campaigns.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]">PATCH</span>
+                  <span className="font-bold text-slate-800">/api/v1/links/:id</span>
+                </div>
+                <p className="text-slate-600 text-[11px] leading-relaxed">
+                  Update target destination URL, pause link, or change timer expiration with sub-millisecond cache refresh.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[10px]">POST</span>
+                  <span className="font-bold text-slate-800">/api/v1/outcomes</span>
+                </div>
+                <p className="text-slate-600 text-[11px] leading-relaxed">
+                  Reconcile payment success callbacks from Razorpay/PayU/ERP back to the link via <code>externalRef</code>.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-bold text-[10px]">GET</span>
+                  <span className="font-bold text-slate-800">/api/v1/links/:id/qr</span>
+                </div>
+                <p className="text-slate-600 text-[11px] leading-relaxed">
+                  Dynamic Vector QR code in SVG or 1024px PNG with <code>?size=1024&format=png</code> for ID cards and print media.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-800 font-bold text-[10px]">GET</span>
+                  <span className="font-bold text-slate-800">/api/v1/analytics/summary</span>
+                </div>
+                <p className="text-slate-600 text-[11px] leading-relaxed">
+                  Pull click counts, unique visitors, devices (Mobile/Desktop), browsers, and referrers directly into ERP.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 6: FAQs & COMPLIANCE */}
       {activeSection === 'faq' && (
         <div className="bg-white rounded-lg border border-slate-200/80 shadow-2xs overflow-hidden">
           <div className="p-4 border-b border-slate-200">
