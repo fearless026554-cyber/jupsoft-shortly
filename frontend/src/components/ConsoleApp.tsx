@@ -553,6 +553,34 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
             </div>
           )}
 
+          {/* Contextual Sub-Tab Bar for Reports Modules */}
+          {(activeTab === 'analytics' || activeTab === 'outcomes') && (
+            <div className="mb-3.5 flex items-center gap-1 border-b border-slate-200 pb-2">
+              <button
+                type="button"
+                onClick={() => handleNavigate('analytics')}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                  activeTab === 'analytics'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                }`}
+              >
+                Traffic Reports
+              </button>
+              <button
+                type="button"
+                onClick={() => handleNavigate('outcomes')}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+                  activeTab === 'outcomes'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                }`}
+              >
+                Outcomes & Revenue
+              </button>
+            </div>
+          )}
+
           {/* Contextual Sub-Tab Bar for Settings Modules */}
           {(activeTab === 'tenants' || activeTab === 'users' || activeTab === 'domains' || activeTab === 'abuse' || activeTab === 'apikeys') && (
             <div className="mb-3.5 flex items-center gap-1 border-b border-slate-200 pb-2 overflow-x-auto">

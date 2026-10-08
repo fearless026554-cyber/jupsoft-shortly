@@ -174,7 +174,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Metric 4 */}
-            <div className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs">
+            <div
+              onClick={onNavigateToOutcomes}
+              className="p-3 bg-white border border-slate-200 rounded-lg shadow-2xs cursor-pointer hover:border-slate-400 hover:shadow-xs transition"
+              title="Click to view Outcomes & Revenue Ledger"
+            >
               <div className="flex items-center justify-between text-xs font-medium text-slate-500">
                 <span>Attributed Revenue</span>
                 <DollarSign className="w-4 h-4 text-slate-400" />
