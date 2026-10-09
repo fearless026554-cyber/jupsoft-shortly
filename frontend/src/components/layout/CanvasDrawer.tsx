@@ -178,6 +178,8 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
       const res = await api.updateLink(link.id, payload);
       if (res.success && res.data) {
         setIsEditingLink(false);
+        setDestinationInput(res.data.destination_url || trimmedDest);
+        setAliasInput(res.data.alias || res.data.short_code || trimmedAlias);
         onLinkUpdated?.(res.data);
       } else {
         setLinkError(res.error?.message || 'Failed to update link configuration');

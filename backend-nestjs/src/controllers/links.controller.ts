@@ -55,6 +55,7 @@ const patchLinkSchema = z.object({
   expiresAt: z.string().datetime().nullable().optional(),
   maxClicks: z.number().int().positive().nullable().optional(),
   tag: z.string().max(LINK_LIMITS.MAX_TAG_LEN).nullable().optional(),
+  alias: z.string().max(LINK_LIMITS.MAX_ALIAS_LEN).nullable().optional(),
 });
 
 const bulkCreateSchema = z.object({
@@ -456,16 +457,57 @@ export class LinksController {
     const geoUa = getGeoUa(req);
 
     let previousAlias: string | null = null;
+    let previousShortCode: string | null = null;
     const updated = await this.db.withTenantContext(tenantId, async (client) => {
       const currentRes = await client.query('SELECT * FROM links WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
       if (currentRes.rowCount === 0) return null;
       const current = currentRes.rows[0];
+      previousAlias = current.alias;
+      previousShortCode = current.short_code;
 
       const destinationUrl = dto.destinationUrl ?? current.destination_url;
       const status = dto.status ?? current.status;
       const expiresAt = dto.expiresAt !== undefined ? (dto.expiresAt ? new Date(dto.expiresAt) : null) : current.expires_at;
       const maxClicks = dto.maxClicks !== undefined ? dto.maxClicks : current.max_clicks;
       const tag = dto.tag !== undefined ? dto.tag : current.tag;
+
+      let newAlias = current.alias;
+      let newShortCode = current.short_code;
+
+      if (dto.alias !== undefined) {
+        if (dto.alias && dto.alias.trim()) {
+          let sanitized: string;
+          try {
+            sanitized = LinkService.sanitizeAlias(dto.alias);
+          } catch (err: any) {
+            const badReq: any = new Error(err.message || 'Invalid alias');
+            badReq.statusCode = 400;
+            badReq.code = ErrorCodes.VALIDATION_ERROR;
+            throw badReq;
+          }
+
+          // Check if alias / short code is already taken on this domain OR for this tenant (excluding this link)
+          const existing = await client.query(
+            `SELECT id FROM links 
+             WHERE ((domain_id = $1 AND (short_code = $2 OR LOWER(alias) = LOWER($2)))
+                OR (tenant_id = $3 AND (short_code = $2 OR LOWER(alias) = LOWER($2))))
+               AND id != $4
+             LIMIT 1`,
+            [current.domain_id, sanitized, tenantId, id]
+          );
+          if (existing.rowCount && existing.rowCount > 0) {
+            const conflictErr: any = new Error(`Alias '${sanitized}' is already in use. Please choose a different alias.`);
+            conflictErr.statusCode = 409;
+            conflictErr.code = 'ALIAS_CONFLICT';
+            throw conflictErr;
+          }
+
+          newAlias = sanitized;
+          newShortCode = sanitized;
+        } else {
+          newAlias = null;
+        }
+      }
 
       if (dto.destinationUrl && dto.destinationUrl !== current.destination_url) {
         const screening = ScreeningService.validateDestinationUrl(dto.destinationUrl);
@@ -482,8 +524,11 @@ export class LinksController {
       }
 
       const res = await client.query(
-        `UPDATE links SET destination_url = $1, status = $2, expires_at = $3, max_clicks = $4, tag = $5, updated_at = NOW() WHERE id = $6 AND tenant_id = $7 RETURNING *`,
-        [destinationUrl, status, expiresAt, maxClicks, tag, id, tenantId]
+        `UPDATE links 
+         SET destination_url = $1, status = $2, expires_at = $3, max_clicks = $4, tag = $5, short_code = $6, alias = $7, updated_at = NOW() 
+         WHERE id = $8 AND tenant_id = $9 
+         RETURNING *`,
+        [destinationUrl, status, expiresAt, maxClicks, tag, newShortCode, newAlias, id, tenantId]
       );
 
       await AuditService.log(client, {
@@ -493,8 +538,8 @@ export class LinksController {
         action: 'link.update',
         entity: 'links',
         entityId: id,
-        beforeState: { destinationUrl: current.destination_url, status: current.status },
-        afterState: { destinationUrl, status },
+        beforeState: { destinationUrl: current.destination_url, status: current.status, alias: current.alias, shortCode: current.short_code },
+        afterState: { destinationUrl, status, alias: newAlias, shortCode: newShortCode },
         ipAddress: geoUa.clientIp,
       });
 
@@ -505,6 +550,9 @@ export class LinksController {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'Link not found' } });
     }
 
+    if (previousShortCode && previousShortCode !== updated.short_code) {
+      await this.redis.invalidateLink(updated.domain_id, previousShortCode, tenantId, previousAlias);
+    }
     if (previousAlias && previousAlias !== updated.alias) {
       await this.redis.invalidateLink(updated.domain_id, updated.short_code, tenantId, previousAlias);
     }
