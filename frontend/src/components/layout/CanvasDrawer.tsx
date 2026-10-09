@@ -34,19 +34,21 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
   const [isEditingExpiry, setIsEditingExpiry] = useState(false);
   const [savingExpiry, setSavingExpiry] = useState(false);
   const [customExpiryInput, setCustomExpiryInput] = useState('');
-  const [isEditingDestination, setIsEditingDestination] = useState(false);
+  const [isEditingLink, setIsEditingLink] = useState(false);
   const [destinationInput, setDestinationInput] = useState('');
-  const [savingDestination, setSavingDestination] = useState(false);
-  const [destinationError, setDestinationError] = useState('');
+  const [aliasInput, setAliasInput] = useState('');
+  const [savingLink, setSavingLink] = useState(false);
+  const [linkError, setLinkError] = useState('');
   const { defaultDomain } = useTenantDomains();
 
   useEffect(() => {
     setIsEditingExpiry(false);
     setCustomExpiryInput('');
-    setIsEditingDestination(false);
+    setIsEditingLink(false);
     setDestinationInput(link?.destination_url || '');
-    setDestinationError('');
-  }, [link?.id, link?.destination_url]);
+    setAliasInput(link?.alias || link?.short_code || '');
+    setLinkError('');
+  }, [link?.id, link?.destination_url, link?.alias, link?.short_code]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -60,7 +62,8 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
 
   if (!link) return null;
 
-  const shortUrl = buildShortUrl(defaultDomain, link.short_code);
+  const activeCode = link.alias || link.short_code;
+  const shortUrl = buildShortUrl(defaultDomain, activeCode);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(shortUrl).catch(() => {});
@@ -121,42 +124,68 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
     }
   };
 
-  const handleSaveDestination = async () => {
-    setDestinationError('');
-    const trimmed = destinationInput.trim();
-    if (!trimmed) {
-      setDestinationError('Target destination URL is required.');
+    const handleOpenEdit = () => {
+    setDestinationInput(link?.destination_url || '');
+    setAliasInput(link?.alias || link?.short_code || '');
+    setLinkError('');
+    setIsEditingLink(true);
+  };
+
+  const handleSaveLink = async () => {
+    setLinkError('');
+    const trimmedDest = destinationInput.trim();
+    let trimmedAlias = aliasInput.trim().toLowerCase();
+    try {
+      trimmedAlias = decodeURIComponent(trimmedAlias);
+    } catch {}
+    trimmedAlias = trimmedAlias.replace(/^\/+|\/+$/g, '');
+
+    if (!trimmedDest) {
+      setLinkError('Target destination URL is required.');
       return;
     }
+
     try {
-      const parsed = new URL(trimmed);
+      const parsed = new URL(trimmedDest);
       if (!['http:', 'https:'].includes(parsed.protocol)) {
-        setDestinationError('URL must start with http:// or https://');
+        setLinkError('Target destination URL must start with http:// or https://');
         return;
       }
     } catch {
-      setDestinationError('Please enter a valid URL (e.g. https://example.com)');
+      setLinkError('Please enter a valid target URL (e.g. https://example.com)');
       return;
     }
 
-    if (trimmed === link.destination_url) {
-      setIsEditingDestination(false);
+    if (!trimmedAlias) {
+      setLinkError('Short URL / custom alias cannot be empty.');
       return;
     }
 
-    setSavingDestination(true);
+    const destChanged = trimmedDest !== link.destination_url;
+    const aliasChanged = trimmedAlias !== (link.alias || link.short_code);
+
+    if (!destChanged && !aliasChanged) {
+      setIsEditingLink(false);
+      return;
+    }
+
+    setSavingLink(true);
     try {
-      const res = await api.updateLink(link.id, { destinationUrl: trimmed });
+      const payload: { destinationUrl?: string; alias?: string } = {};
+      if (destChanged) payload.destinationUrl = trimmedDest;
+      if (aliasChanged) payload.alias = trimmedAlias;
+
+      const res = await api.updateLink(link.id, payload);
       if (res.success && res.data) {
-        setIsEditingDestination(false);
+        setIsEditingLink(false);
         onLinkUpdated?.(res.data);
       } else {
-        setDestinationError(res.error?.message || 'Failed to update destination URL');
+        setLinkError(res.error?.message || 'Failed to update link configuration');
       }
     } catch (e: any) {
-      setDestinationError(e?.message || 'Network error updating destination URL');
+      setLinkError(e?.message || 'Network error updating link configuration');
     } finally {
-      setSavingDestination(false);
+      setSavingLink(false);
     }
   };
 
@@ -217,108 +246,161 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
           </div>
         </div>
 
-        {/* Short URL Section */}
-        <div>
-          <div className="text-slate-400 font-semibold text-[10px] uppercase">Branded Short URL</div>
-          <div className="font-mono text-sm font-bold text-blue-600 flex items-center justify-between mt-1 bg-blue-50/50 p-2 rounded border border-blue-100">
-            <span className="truncate">{shortUrl}</span>
-            <button
-              onClick={handleCopy}
-              aria-label="Copy Branded Short URL"
-              className="text-slate-500 hover:text-slate-800 p-1 cursor-pointer"
-              title="Copy"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Destination Target */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <div className="text-slate-400 font-semibold text-[10px] uppercase">Target Destination</div>
-            <button
-              onClick={() => {
-                if (!isEditingDestination) {
-                  setDestinationInput(link.destination_url);
-                  setDestinationError('');
-                }
-                setIsEditingDestination(!isEditingDestination);
-              }}
-              className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
-            >
-              <Edit2 className="w-3 h-3" />
-              {isEditingDestination ? 'Cancel' : 'Edit Target'}
-            </button>
-          </div>
-
-          {!isEditingDestination ? (
-            <div className="flex items-start justify-between gap-2 bg-slate-50 p-2.5 rounded border border-slate-200 mt-1">
-              <span className="text-slate-700 break-all font-mono text-[11px] leading-relaxed">
-                {link.destination_url}
-              </span>
-              <button
-                onClick={() => {
-                  setDestinationInput(link.destination_url);
-                  setDestinationError('');
-                  setIsEditingDestination(true);
-                }}
-                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-200/60 rounded shrink-0 transition cursor-pointer"
-                title="Edit Target Destination"
-              >
-                <Edit2 className="w-3 h-3" />
-              </button>
+        {/* Unified Link Configuration Section */}
+        {!isEditingLink ? (
+          <>
+            {/* Branded Short URL Card */}
+            <div>
+              <div className="flex items-center justify-between">
+                <div className="text-slate-400 font-semibold text-[10px] uppercase">Branded Short URL</div>
+                <button
+                  onClick={handleOpenEdit}
+                  className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  <Edit2 className="w-3 h-3" />
+                  Edit Link
+                </button>
+              </div>
+              <div className="font-mono text-sm font-bold text-blue-600 flex items-center justify-between mt-1 bg-blue-50/50 p-2 rounded border border-blue-100">
+                <span className="truncate">{shortUrl}</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={handleOpenEdit}
+                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-100/50 rounded shrink-0 transition cursor-pointer"
+                    title="Edit Link Configuration"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    aria-label="Copy Branded Short URL"
+                    className="text-slate-500 hover:text-slate-800 p-1 cursor-pointer"
+                    title="Copy"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="space-y-2 pt-0.5 animate-in fade-in">
+
+            {/* Target Destination Card */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="text-slate-400 font-semibold text-[10px] uppercase">Target Destination</div>
+                <button
+                  onClick={handleOpenEdit}
+                  className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  <Edit2 className="w-3 h-3" />
+                  Edit Target
+                </button>
+              </div>
+
+              <div className="flex items-start justify-between gap-2 bg-slate-50 p-2.5 rounded border border-slate-200 mt-1">
+                <span className="text-slate-700 break-all font-mono text-[11px] leading-relaxed">
+                  {link.destination_url}
+                </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={handleOpenEdit}
+                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-200/60 rounded shrink-0 transition cursor-pointer"
+                    title="Edit Target Destination"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                  <a
+                    href={link.destination_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded transition"
+                    title="Open Destination"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          /* Unified Single-Click Edit Mode: Both fields editable together */
+          <div className="p-3.5 bg-blue-50/40 rounded-lg border border-blue-200 space-y-3 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between pb-1 border-b border-blue-100">
+              <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                Edit Link Configuration
+              </div>
+              <span className="text-[10px] text-slate-500">Edit both URL and alias</span>
+            </div>
+
+            {/* 1. Branded Short URL Input */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">
+                Branded Short URL (Custom Alias)
+              </label>
+              <div className="flex items-center rounded border border-slate-300 overflow-hidden focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 bg-white shadow-2xs">
+                <span className="bg-slate-100 text-slate-500 px-2.5 py-1.5 text-xs font-mono border-r border-slate-200 select-none shrink-0">
+                  https://{defaultDomain}/
+                </span>
+                <input
+                  type="text"
+                  value={aliasInput}
+                  onChange={(e) => {
+                    setAliasInput(e.target.value);
+                    setLinkError('');
+                  }}
+                  placeholder="custom-slug"
+                  className="w-full text-xs font-mono p-1.5 text-slate-800 focus:outline-hidden"
+                />
+              </div>
+            </div>
+
+            {/* 2. Target Destination Input */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wide">
+                Target Destination URL
+              </label>
               <input
                 type="url"
                 value={destinationInput}
                 onChange={(e) => {
                   setDestinationInput(e.target.value);
-                  setDestinationError('');
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSaveDestination();
-                  } else if (e.key === 'Escape') {
-                    setIsEditingDestination(false);
-                    setDestinationError('');
-                  }
+                  setLinkError('');
                 }}
                 placeholder="https://example.com/target-page"
-                className="w-full bg-white border border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded p-2 text-xs font-mono text-slate-800"
-                autoFocus
+                className="w-full bg-white border border-slate-300 focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 rounded p-1.5 text-xs font-mono text-slate-800 shadow-2xs"
               />
-              {destinationError && (
-                <div className="text-[11px] text-rose-600 font-medium">
-                  {destinationError}
-                </div>
-              )}
-              <div className="flex justify-end gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsEditingDestination(false);
-                    setDestinationError('');
-                  }}
-                  className="px-2.5 py-1 text-[11px] rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={savingDestination || !destinationInput.trim() || destinationInput.trim() === link.destination_url}
-                  onClick={handleSaveDestination}
-                  className="px-3 py-1 text-[11px] rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs disabled:opacity-50 transition cursor-pointer flex items-center gap-1"
-                >
-                  {savingDestination ? 'Saving...' : 'Save Target'}
-                </button>
-              </div>
             </div>
-          )}
-        </div>
+
+            {linkError && (
+              <div className="text-[11px] text-rose-600 font-medium bg-rose-50 p-2 rounded border border-rose-200">
+                {linkError}
+              </div>
+            )}
+
+            {/* Unified Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                disabled={savingLink}
+                onClick={() => {
+                  setIsEditingLink(false);
+                  setLinkError('');
+                }}
+                className="px-3 py-1.5 text-xs rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={savingLink || (!aliasInput.trim() && !destinationInput.trim())}
+                onClick={handleSaveLink}
+                className="px-3.5 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs disabled:opacity-50 transition cursor-pointer flex items-center gap-1.5"
+              >
+                {savingLink ? 'Saving Changes...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Clicks & Status Cards */}
         <div className="grid grid-cols-2 gap-3 pt-1">

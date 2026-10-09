@@ -4,8 +4,8 @@ import { ScreeningService } from './services/screening.service.js';
 import { parseUserAgent } from './workers/click.processor.js';
 import { UrlService } from './services/url.service.js';
 import { isReservedPath } from './constants/reserved-paths.js';
-import { RedisKeyBuilder, REDIS_KEYS } from './constants/redis-keys.js';
-import { LinkStatus, ScreeningVerdict } from './constants/status.js';
+import { RedisKeyBuilder } from './constants/redis-keys.js';
+import { LinkStatus } from './constants/status.js';
 import { ErrorCodes } from './constants/error-codes.js';
 
 describe('JLMP Backend - Full Regression & PRD Verification Suite', () => {

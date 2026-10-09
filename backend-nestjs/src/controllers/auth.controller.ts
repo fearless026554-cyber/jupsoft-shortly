@@ -244,7 +244,7 @@ export class AuthController {
       });
     }
 
-    const { credential, idToken, code, redirectUri, nonce, state } = parseResult.data;
+    const { credential, idToken, code, redirectUri, nonce, state: _state } = parseResult.data;
     let tokenToVerify = credential || idToken;
 
     const oauthClient = new OAuth2Client(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET);

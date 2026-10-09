@@ -37,40 +37,35 @@ export class ScreeningService {
       throw new Error('SAFE_BROWSING_API_KEY is not configured. Cannot perform malware screening.');
     }
 
-    try {
-      const endpoint = `${env.SAFE_BROWSING_ENDPOINT}?key=${env.SAFE_BROWSING_API_KEY}`;
-      const body = {
-        client: {
-          clientId: SAFE_BROWSING_CONFIG.CLIENT_ID,
-          clientVersion: SAFE_BROWSING_CONFIG.CLIENT_VERSION,
-        },
-        threatInfo: {
-          threatTypes: [...SAFE_BROWSING_CONFIG.THREAT_TYPES],
-          platformTypes: [...SAFE_BROWSING_CONFIG.PLATFORM_TYPES],
-          threatEntryTypes: [...SAFE_BROWSING_CONFIG.THREAT_ENTRY_TYPES],
-          threatEntries: [{ url: urlStr }],
-        },
-      };
+    const endpoint = `${env.SAFE_BROWSING_ENDPOINT}?key=${env.SAFE_BROWSING_API_KEY}`;
+    const body = {
+      client: {
+        clientId: SAFE_BROWSING_CONFIG.CLIENT_ID,
+        clientVersion: SAFE_BROWSING_CONFIG.CLIENT_VERSION,
+      },
+      threatInfo: {
+        threatTypes: [...SAFE_BROWSING_CONFIG.THREAT_TYPES],
+        platformTypes: [...SAFE_BROWSING_CONFIG.PLATFORM_TYPES],
+        threatEntryTypes: [...SAFE_BROWSING_CONFIG.THREAT_ENTRY_TYPES],
+        threatEntries: [{ url: urlStr }],
+      },
+    };
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
 
-      if (!res.ok) {
-        throw new Error(`Safe Browsing API failed with HTTP status ${res.status}`);
-      }
-
-      const data = (await res.json()) as { matches?: Array<{ threatType: string }> };
-      if (data.matches && data.matches.length > 0) {
-        return { clean: false, verdict: data.matches[0].threatType.toLowerCase() };
-      }
-
-      return { clean: true, verdict: ScreeningVerdict.CLEAN };
-    } catch (err) {
-      // Re-throw to allow BullMQ to retry the job instead of faking a clean verdict
-      throw err;
+    if (!res.ok) {
+      throw new Error(`Safe Browsing API failed with HTTP status ${res.status}`);
     }
+
+    const data = (await res.json()) as { matches?: Array<{ threatType: string }> };
+    if (data.matches && data.matches.length > 0) {
+      return { clean: false, verdict: data.matches[0].threatType.toLowerCase() };
+    }
+
+    return { clean: true, verdict: ScreeningVerdict.CLEAN };
   }
 }

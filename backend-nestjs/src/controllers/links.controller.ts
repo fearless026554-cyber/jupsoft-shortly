@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Query, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -7,6 +7,7 @@ import * as crypto from 'node:crypto';
 import { DatabaseService } from '../db/database.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { LinkService } from '../services/link.service.js';
+import { parseCsvLinks } from '../utils/csv.util.js';
 import { QrService } from '../services/qr.service.js';
 import { AuditService } from '../services/audit.service.js';
 import { UrlService } from '../services/url.service.js';
@@ -73,51 +74,7 @@ const bulkCreateSchema = z.object({
   csvContent: z.string().max(5 * 1024 * 1024, 'CSV content must not exceed 5MB').optional(),
 });
 
-export function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  result.push(current.trim());
-  return result;
-}
 
-export function parseCsvLinks(csvText: string): any[] {
-  const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return [];
-  const results = [];
-  const firstParts = parseCsvLine(lines[0]);
-  const firstCol = (firstParts[0] || '').toLowerCase();
-  const isHeader = !firstCol.startsWith('http://') && !firstCol.startsWith('https://') && (firstCol.includes('destination') || firstCol === 'url' || firstCol === 'link');
-  const startIdx = isHeader ? 1 : 0;
-  for (let i = startIdx; i < lines.length; i++) {
-    const parts = parseCsvLine(lines[i]);
-    if (!parts[0]) continue;
-    results.push({
-      destinationUrl: parts[0],
-      alias: parts[1] || undefined,
-      tag: parts[2] || undefined,
-      externalRef: parts[3] || undefined,
-      expiresAt: parts[4] || undefined,
-    });
-  }
-  return results;
-}
 
 @Controller('api/v1/links')
 @UseGuards(AuthGuard)
@@ -498,6 +455,7 @@ export class LinksController {
     const tenantId = auth.tenantId;
     const geoUa = getGeoUa(req);
 
+    let previousAlias: string | null = null;
     const updated = await this.db.withTenantContext(tenantId, async (client) => {
       const currentRes = await client.query('SELECT * FROM links WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
       if (currentRes.rowCount === 0) return null;
@@ -547,6 +505,9 @@ export class LinksController {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'Link not found' } });
     }
 
+    if (previousAlias && previousAlias !== updated.alias) {
+      await this.redis.invalidateLink(updated.domain_id, updated.short_code, tenantId, previousAlias);
+    }
     await this.redis.invalidateLink(updated.domain_id, updated.short_code, tenantId, updated.alias);
     await this.redis.client.del(`link:detail:${tenantId}:${id}`).catch(() => {});
 

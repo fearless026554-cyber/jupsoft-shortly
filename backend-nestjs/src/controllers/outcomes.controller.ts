@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Req, Res, UseGuards, UseInterceptors, Query } from '@nestjs/common';
+import { Controller, Get, Post, Req, Res, UseGuards, UseInterceptors, Query } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { DatabaseService } from '../db/database.service.js';

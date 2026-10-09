@@ -29,7 +29,8 @@ export class ScreeningProcessor extends WorkerHost {
           [linkId, ScreeningProvider.GOOGLE_SAFE_BROWSING, verdict]
         );
 
-        if (!clean) {
+        const isThreat = !clean || (verdict && verdict !== ScreeningVerdict.CLEAN);
+        if (isThreat) {
           await client.query(`UPDATE links SET status = $1, updated_at = NOW() WHERE id = $2`, [LinkStatus.ARCHIVED, linkId]);
           const linkRes = await client.query('SELECT domain_id, short_code, tenant_id, alias FROM links WHERE id = $1', [linkId]);
           if (linkRes.rows.length > 0) {

@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import { DatabaseService } from '../../db/database.service.js';
 import { RedisService } from '../../redis/redis.service.js';
 import { env } from '../../config/env.js';
-import { AUTH_CONSTANTS, CACHE_TTL, ErrorCodes, HeaderNames, RedisKeyBuilder, REDIS_KEYS, ApiScopes, ROLE_SCOPES, UserRoleType } from '../../constants/index.js';
+import { AUTH_CONSTANTS, CACHE_TTL, ErrorCodes, HeaderNames, RedisKeyBuilder, REDIS_KEYS, ApiScopes, ROLE_SCOPES } from '../../constants/index.js';
 
 export const SCOPES_KEY = 'scopes';
 export const RequireScope = (...scopes: string[]) => SetMetadata(SCOPES_KEY, scopes);

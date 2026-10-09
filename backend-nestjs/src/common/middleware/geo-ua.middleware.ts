@@ -1,5 +1,4 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
-import { FastifyRequest, FastifyReply } from 'fastify';
 import { HeaderNames, FALLBACK_IP } from '../../constants/headers.js';
 import { env } from '../../config/env.js';
 

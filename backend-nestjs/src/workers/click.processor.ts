@@ -72,11 +72,22 @@ async function resolveGeoLocation(redis: RedisService, ip: string, cfCountry?: s
   }
 
   const cacheKey = isPrivateOrLocalIp(ip) ? '__LOCAL_WAN__' : ip;
+
+  // L1 In-Memory Fast Cache lookup
+  const now = Date.now();
+  const memCached = geoCache.get(cacheKey);
+  if (memCached && memCached.expiresAt > now) {
+    return { code: memCached.code, label: memCached.label };
+  }
+
   const redisGeoKey = `geo:ip:${cacheKey}`;
   try {
     const cached = await redis.client.get(redisGeoKey);
     if (cached) {
-      return JSON.parse(cached);
+      const parsed = JSON.parse(cached);
+      if (geoCache.size > 10000) geoCache.clear();
+      geoCache.set(cacheKey, { ...parsed, expiresAt: now + 3600_000 });
+      return parsed;
     }
   } catch {}
 
@@ -102,6 +113,8 @@ async function resolveGeoLocation(redis: RedisService, ip: string, cfCountry?: s
         const label = place && data.country ? `${place}, ${data.country} (${code})` : `${data.country || code} (${code})`;
         const result = { code, label };
         await redis.client.setex(redisGeoKey, 7 * 86400, JSON.stringify(result)).catch(() => {});
+        if (geoCache.size > 10000) geoCache.clear();
+        geoCache.set(cacheKey, { ...result, expiresAt: now + 3600_000 });
         return result;
       }
     }

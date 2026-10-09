@@ -324,7 +324,7 @@ export const api = {
     return res.json();
   },
 
-  async updateLink(id: string, dto: { destinationUrl?: string; status?: string; expiresAt?: string | null; maxClicks?: number | null; tag?: string }) {
+  async updateLink(id: string, dto: { destinationUrl?: string; alias?: string | null; status?: string; expiresAt?: string | null; maxClicks?: number | null; tag?: string }) {
     clearApiCache('links');
     const res = await secureFetch(`${API_BASE_URL}/links/${id}`, {
       method: 'PATCH',

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Patch, Param, Query, Body, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Patch, Param, Query, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import * as crypto from 'node:crypto';

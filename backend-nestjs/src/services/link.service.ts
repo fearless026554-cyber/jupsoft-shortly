@@ -2,7 +2,6 @@ import * as crypto from 'node:crypto';
 import { PoolClient } from 'pg';
 import { env } from '../config/env.js';
 import {
-  BULK_CONSTANTS,
   FALLBACKS,
   LINK_CONSTANTS,
   LinkStatus,
