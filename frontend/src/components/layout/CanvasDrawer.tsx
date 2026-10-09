@@ -255,7 +255,7 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
                 <div className="text-slate-400 font-semibold text-[10px] uppercase">Branded Short URL</div>
                 <button
                   onClick={handleOpenEdit}
-                  className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
+                  className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer transition-colors"
                 >
                   <Edit2 className="w-3 h-3" />
                   Edit Link
@@ -265,16 +265,9 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
                 <span className="truncate">{shortUrl}</span>
                 <div className="flex items-center gap-1">
                   <button
-                    onClick={handleOpenEdit}
-                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-100/50 rounded shrink-0 transition cursor-pointer"
-                    title="Edit Link Configuration"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
                     onClick={handleCopy}
                     aria-label="Copy Branded Short URL"
-                    className="text-slate-500 hover:text-slate-800 p-1 cursor-pointer"
+                    className="text-slate-500 hover:text-slate-800 p-1 cursor-pointer transition-colors"
                     title="Copy"
                   >
                     {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -287,13 +280,6 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <div className="text-slate-400 font-semibold text-[10px] uppercase">Target Destination</div>
-                <button
-                  onClick={handleOpenEdit}
-                  className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1 cursor-pointer"
-                >
-                  <Edit2 className="w-3 h-3" />
-                  Edit Target
-                </button>
               </div>
 
               <div className="flex items-start justify-between gap-2 bg-slate-50 p-2.5 rounded border border-slate-200 mt-1">
@@ -301,13 +287,6 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
                   {link.destination_url}
                 </span>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={handleOpenEdit}
-                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-200/60 rounded shrink-0 transition cursor-pointer"
-                    title="Edit Target Destination"
-                  >
-                    <Edit2 className="w-3 h-3" />
-                  </button>
                   <a
                     href={link.destination_url}
                     target="_blank"
