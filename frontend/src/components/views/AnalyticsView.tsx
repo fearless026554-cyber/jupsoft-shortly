@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   BarChart3,
   TrendingUp,
@@ -299,11 +299,49 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
   const mobilePct =
     deviceData.find((d) => d.label.toLowerCase().includes('mobile') || d.label.toLowerCase().includes('phone'))?.pct || 0;
 
-  // Timeline / Daily Trend Data (Audit P1)
-  const timelineData: Array<{ date: string; clicks: number; unique_clicks: number; bot_clicks?: number }> =
-    summary?.timeline && Array.isArray(summary.timeline) && summary.timeline.length > 0
-      ? summary.timeline
-      : [];
+  // Timeline / Daily Trend Data (Audit P1: Continuous Date Sequence)
+  const timelineData: Array<{ date: string; clicks: number; unique_clicks: number; bot_clicks?: number }> = useMemo(() => {
+    const raw = summary?.timeline && Array.isArray(summary.timeline) ? summary.timeline : [];
+    if (raw.length === 0) return [];
+
+    const map = new Map<string, { date: string; clicks: number; unique_clicks: number; bot_clicks?: number }>();
+    raw.forEach((item: any) => {
+      map.set(item.date, {
+        date: item.date,
+        clicks: Number(item.clicks || 0),
+        unique_clicks: Number(item.unique_clicks || 0),
+        bot_clicks: Number(item.bot_clicks || 0),
+      });
+    });
+
+    const timestamps = raw.map((d: any) => new Date(d.date).getTime()).sort((a: number, b: number) => a - b);
+    let minDate = new Date(timestamps[0]);
+    let maxDate = new Date(timestamps[timestamps.length - 1]);
+
+    // Ensure at least a 7-day chronological window so small datasets don't stretch unnaturally
+    const diffDays = Math.round((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 6) {
+      const expandedMin = new Date(maxDate);
+      expandedMin.setDate(expandedMin.getDate() - 6);
+      minDate = expandedMin;
+    }
+
+    const list: Array<{ date: string; clicks: number; unique_clicks: number; bot_clicks?: number }> = [];
+    const curr = new Date(minDate);
+    while (curr <= maxDate) {
+      const yyyy = curr.getFullYear();
+      const mm = String(curr.getMonth() + 1).padStart(2, '0');
+      const dd = String(curr.getDate()).padStart(2, '0');
+      const key = `${yyyy}-${mm}-${dd}`;
+      if (map.has(key)) {
+        list.push(map.get(key)!);
+      } else {
+        list.push({ date: key, clicks: 0, unique_clicks: 0, bot_clicks: 0 });
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+    return list;
+  }, [summary?.timeline]);
 
   const maxTimelineClicks = Math.max(1, ...timelineData.map((d) => Number(d.clicks || 0)));
   const peakDay = timelineData.reduce(
@@ -503,180 +541,203 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
         </div>
       </div>
 
-      {/* Daily Timeline Trend Chart (Audit P1: Clicks Over Time) */}
-      <div className="bg-white p-4 rounded-lg border border-slate-200/90 shadow-2xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-              <Activity className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                  Daily Traffic Trend
-                </span>
-                {peakDay && Number(peakDay.clicks) > 0 && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                    Peak: {peakDay.clicks} clicks ({new Date(peakDay.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})
+      {/* 2-Column Responsive Trend & Quality Row (2 cols : 1 col) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Daily Timeline Trend Chart (Audit P1: Clicks Over Time) */}
+        <div className="lg:col-span-2 bg-white p-4 rounded-lg border border-slate-200/90 shadow-2xs space-y-3 flex flex-col justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-md bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+                <Activity className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                    Daily Traffic Trend
                   </span>
-                )}
-              </div>
-              <p className="text-[11px] text-slate-500">
-                Daily volume velocity showing human traffic vs unique reach over the selected period.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 text-xs font-medium">
-            <span className="inline-flex items-center gap-1.5 text-blue-700">
-              <span className="w-2.5 h-2.5 rounded-sm bg-blue-600"></span>
-              Human Clicks
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-emerald-700">
-              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>
-              Unique Reach
-            </span>
-          </div>
-        </div>
-
-        {/* Timeline Chart Visualization */}
-        {loading ? (
-          <div className="h-44 w-full flex items-end gap-2 p-2 animate-pulse bg-slate-50 rounded-lg">
-            {[40, 60, 30, 90, 75, 50, 85, 45, 65, 95].map((h, i) => (
-              <div key={i} className="flex-1 bg-slate-200 rounded-t" style={{ height: `${h}%` }}></div>
-            ))}
-          </div>
-        ) : timelineData.length === 0 ? (
-          <div className="h-36 flex flex-col items-center justify-center text-center p-4 bg-slate-50/70 rounded-lg border border-dashed border-slate-200 text-slate-400 text-xs">
-            <Calendar className="w-6 h-6 text-slate-300 mb-1.5" />
-            <p className="font-medium text-slate-600">No time-series click events in this date window</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Click activity will render daily trend bars automatically.</p>
-          </div>
-        ) : (
-          <div className="space-y-2 pt-2">
-            <div className="relative h-44 w-full flex items-end gap-1.5 sm:gap-3 px-2 pb-6 border-b border-slate-100">
-              {/* Background Grid Lines */}
-              <div className="absolute inset-0 pointer-events-none flex flex-col justify-between opacity-30 pb-6">
-                <div className="border-b border-dashed border-slate-300 w-full"></div>
-                <div className="border-b border-dashed border-slate-300 w-full"></div>
-                <div className="border-b border-dashed border-slate-300 w-full"></div>
-              </div>
-
-              {timelineData.map((day, idx) => {
-                const clicks = Number(day.clicks || 0);
-                const uniqueClicks = Number(day.unique_clicks || 0);
-                const heightPct = Math.max(6, Math.round((clicks / maxTimelineClicks) * 100));
-                const uniqueHeightPct = Math.max(4, Math.round((uniqueClicks / maxTimelineClicks) * 100));
-                const dayDate = new Date(day.date);
-                const isHovered = hoveredPoint?.date === day.date;
-
-                return (
-                  <div
-                    key={idx}
-                    className="relative flex-1 flex flex-col items-center h-full justify-end group cursor-pointer"
-                    onMouseEnter={() => setHoveredPoint(day)}
-                    onMouseLeave={() => setHoveredPoint(null)}
-                  >
-                    {/* Tooltip on hover */}
-                    {isHovered && (
-                      <div className="absolute -top-14 z-20 bg-slate-900 text-white rounded-md px-2.5 py-1.5 text-[11px] shadow-lg pointer-events-none whitespace-nowrap text-center animate-fade-in">
-                        <div className="font-semibold text-slate-200">
-                          {dayDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </div>
-                        <div className="text-[10px] text-blue-300 font-mono mt-0.5">
-                          {clicks} clicks ({uniqueClicks} unique)
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Dual Segment Bars */}
-                    <div className="w-full max-w-[28px] flex items-end justify-center gap-0.5 h-full">
-                      <div
-                        className={`w-1/2 rounded-t transition-all duration-300 ${
-                          isHovered ? 'bg-blue-700 shadow-sm' : 'bg-blue-600'
-                        }`}
-                        style={{ height: `${heightPct}%` }}
-                        title={`${clicks} clicks`}
-                      ></div>
-                      <div
-                        className={`w-1/2 rounded-t transition-all duration-300 ${
-                          isHovered ? 'bg-emerald-600 shadow-sm' : 'bg-emerald-500'
-                        }`}
-                        style={{ height: `${uniqueHeightPct}%` }}
-                        title={`${uniqueClicks} unique`}
-                      ></div>
-                    </div>
-
-                    {/* X-axis Label */}
-                    <span className="absolute -bottom-5 text-[10px] font-mono text-slate-400 group-hover:text-slate-900 transition">
-                      {dayDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                  {peakDay && Number(peakDay.clicks) > 0 && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                      Peak: {peakDay.clicks} clicks ({new Date(peakDay.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})
                     </span>
-                  </div>
-                );
-              })}
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Daily volume velocity showing human traffic vs unique reach over the selected period.
+                </p>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* Traffic Quality & Bot Defense Banner */}
-      <div className="bg-white p-4 rounded-lg border border-slate-200/90 shadow-2xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 mb-2.5 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-              <ShieldCheck className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-                Traffic Quality & Bot Protection
+            <div className="flex items-center gap-3 text-xs font-medium">
+              <span className="inline-flex items-center gap-1.5 text-blue-700">
+                <span className="w-2.5 h-2.5 rounded-sm bg-blue-600"></span>
+                Human Clicks
               </span>
-              <p className="text-[11px] text-slate-500">
-                Automated crawlers, security bots, and scrapers are segregated in real-time to preserve conversion integrity.
-              </p>
+              <span className="inline-flex items-center gap-1.5 text-emerald-700">
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>
+                Unique Reach
+              </span>
             </div>
           </div>
-          <div className="flex items-center gap-3 text-xs font-mono font-medium">
-            <span className="inline-flex items-center gap-1.5 text-blue-700">
-              <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-              Human: <strong>{formatNumber(totalClicks)}</strong>
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-emerald-700">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              Unique: <strong>{formatNumber(totalUniqueClicks)}</strong>
-            </span>
-            <span className="inline-flex items-center gap-1.5 text-amber-700">
-              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-              Bots: <strong>{formatNumber(totalBotClicks)}</strong>
-            </span>
-          </div>
+
+          {/* Timeline Chart Visualization */}
+          {loading ? (
+            <div className="h-44 w-full flex items-end gap-2 p-2 animate-pulse bg-slate-50 rounded-lg">
+              {[40, 60, 30, 90, 75, 50, 85, 45, 65, 95].map((h, i) => (
+                <div key={i} className="flex-1 bg-slate-200 rounded-t" style={{ height: `${h}%` }}></div>
+              ))}
+            </div>
+          ) : timelineData.length === 0 ? (
+            <div className="h-36 flex flex-col items-center justify-center text-center p-4 bg-slate-50/70 rounded-lg border border-dashed border-slate-200 text-slate-400 text-xs">
+              <Calendar className="w-6 h-6 text-slate-300 mb-1.5" />
+              <p className="font-medium text-slate-600">No time-series click events in this date window</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Click activity will render daily trend bars automatically.</p>
+            </div>
+          ) : (
+            <div className="space-y-2 pt-4">
+              <div className="relative h-44 w-full flex items-end gap-1.5 sm:gap-2 px-2 pb-6 border-b border-slate-100">
+                {/* Background Grid Lines */}
+                <div className="absolute inset-0 pointer-events-none flex flex-col justify-between opacity-30 pb-6">
+                  <div className="border-b border-dashed border-slate-300 w-full"></div>
+                  <div className="border-b border-dashed border-slate-300 w-full"></div>
+                  <div className="border-b border-dashed border-slate-300 w-full"></div>
+                </div>
+
+                {timelineData.map((day, idx) => {
+                  const clicks = Number(day.clicks || 0);
+                  const uniqueClicks = Number(day.unique_clicks || 0);
+                  const heightPct = clicks > 0 ? Math.max(8, Math.round((clicks / maxTimelineClicks) * 100)) : 0;
+                  const uniqueHeightPct = uniqueClicks > 0 ? Math.max(6, Math.round((uniqueClicks / maxTimelineClicks) * 100)) : 0;
+                  const dayDate = new Date(day.date);
+                  const isHovered = hoveredPoint?.date === day.date;
+
+                  return (
+                    <div
+                      key={idx}
+                      className="relative flex-1 flex flex-col items-center h-full justify-end group cursor-pointer"
+                      onMouseEnter={() => setHoveredPoint(day)}
+                      onMouseLeave={() => setHoveredPoint(null)}
+                    >
+                      {/* Tooltip on hover */}
+                      {isHovered && (
+                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-30 bg-slate-900 text-white rounded-md px-2.5 py-1 text-[11px] shadow-lg pointer-events-none whitespace-nowrap text-center animate-in fade-in zoom-in-95">
+                          <div className="font-semibold text-slate-200">
+                            {dayDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </div>
+                          <div className="text-[10px] text-blue-300 font-mono mt-0.5">
+                            {clicks} clicks ({uniqueClicks} unique)
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Dual Segment Bars */}
+                      <div className="w-full max-w-[24px] flex items-end justify-center gap-0.5 h-full">
+                        {clicks > 0 ? (
+                          <>
+                            <div
+                              className={`w-1/2 rounded-t transition-all duration-300 ${
+                                isHovered ? 'bg-blue-700 shadow-sm' : 'bg-blue-600'
+                              }`}
+                              style={{ height: `${heightPct}%` }}
+                              title={`${clicks} clicks`}
+                            ></div>
+                            <div
+                              className={`w-1/2 rounded-t transition-all duration-300 ${
+                                isHovered ? 'bg-emerald-600 shadow-sm' : 'bg-emerald-500'
+                              }`}
+                              style={{ height: `${uniqueHeightPct}%` }}
+                              title={`${uniqueClicks} unique`}
+                            ></div>
+                          </>
+                        ) : (
+                          <div className="w-full h-0.5 bg-slate-200 rounded-full my-auto" title="0 clicks"></div>
+                        )}
+                      </div>
+
+                      {/* X-axis Label */}
+                      <span className="absolute -bottom-5 text-[10px] font-mono text-slate-400 group-hover:text-slate-900 transition">
+                        {dayDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Visual Segmented Traffic Bar */}
-        <div className="space-y-1.5">
-          <div className="w-full bg-slate-100 rounded-full h-2.5 flex overflow-hidden">
-            {totalAllRequests > 0 ? (
-              <>
-                <div
-                  className="bg-blue-600 h-full transition-all duration-300"
-                  style={{ width: `${Math.round((totalClicks / totalAllRequests) * 100)}%` }}
-                  title={`Human Traffic: ${totalClicks} (${Math.round((totalClicks / totalAllRequests) * 100)}%)`}
-                ></div>
-                <div
-                  className="bg-amber-500 h-full transition-all duration-300"
-                  style={{ width: `${Math.round((totalBotClicks / totalAllRequests) * 100)}%` }}
-                  title={`Bot Traffic Filtered: ${totalBotClicks} (${Math.round((totalBotClicks / totalAllRequests) * 100)}%)`}
-                ></div>
-              </>
-            ) : (
-              <div className="bg-slate-200 h-full w-full"></div>
-            )}
+        {/* Traffic Quality & Bot Defense Card (Audit P2) */}
+        <div className="lg:col-span-1 bg-white p-4 rounded-lg border border-slate-200/90 shadow-2xs space-y-4 flex flex-col justify-between">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-md bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                    Traffic Quality
+                  </span>
+                  <p className="text-[10px] text-slate-400">Bot & Scraper Isolation</p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Active Shield
+              </span>
+            </div>
+
+            {/* Metrics Breakdown */}
+            <div className="space-y-2 pt-1 font-mono text-xs">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-blue-50/60 border border-blue-100">
+                <span className="text-blue-900 flex items-center gap-1.5 font-sans font-medium">
+                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                  Human Clicks
+                </span>
+                <strong className="text-blue-950 font-bold">{formatNumber(totalClicks)}</strong>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-emerald-50/60 border border-emerald-100">
+                <span className="text-emerald-900 flex items-center gap-1.5 font-sans font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Unique Visitors
+                </span>
+                <strong className="text-emerald-950 font-bold">{formatNumber(totalUniqueClicks)}</strong>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-amber-50/60 border border-amber-100">
+                <span className="text-amber-900 flex items-center gap-1.5 font-sans font-medium">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  Bots Filtered
+                </span>
+                <strong className="text-amber-950 font-bold">{formatNumber(totalBotClicks)}</strong>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center justify-between text-[11px] text-slate-500">
-            <span>
-              Real Human Traffic: <strong>{totalAllRequests > 0 ? `${Math.round((totalClicks / totalAllRequests) * 100)}%` : '100%'}</strong>
-            </span>
-            <span>
-              Automated Bot Traffic Filtered: <strong>{totalAllRequests > 0 ? `${botFilterPct}%` : '0%'}</strong>
-            </span>
+
+          {/* Visual Segmented Progress Bar */}
+          <div className="space-y-1.5 pt-2 border-t border-slate-100">
+            <div className="w-full bg-slate-100 rounded-full h-2.5 flex overflow-hidden">
+              {totalAllRequests > 0 ? (
+                <>
+                  <div
+                    className="bg-blue-600 h-full transition-all duration-300"
+                    style={{ width: `${Math.round((totalClicks / totalAllRequests) * 100)}%` }}
+                    title={`Human Traffic: ${totalClicks}`}
+                  ></div>
+                  <div
+                    className="bg-amber-500 h-full transition-all duration-300"
+                    style={{ width: `${Math.round((totalBotClicks / totalAllRequests) * 100)}%` }}
+                    title={`Bot Traffic Filtered: ${totalBotClicks}`}
+                  ></div>
+                </>
+              ) : (
+                <div className="bg-slate-200 h-full w-full"></div>
+              )}
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-slate-500">
+              <span>
+                Human: <strong>{totalAllRequests > 0 ? `${Math.round((totalClicks / totalAllRequests) * 100)}%` : '100%'}</strong>
+              </span>
+              <span>
+                Bots Filtered: <strong>{totalAllRequests > 0 ? `${botFilterPct}%` : '0%'}</strong>
+              </span>
+            </div>
           </div>
         </div>
       </div>
