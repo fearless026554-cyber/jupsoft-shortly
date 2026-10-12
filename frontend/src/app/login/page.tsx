@@ -32,10 +32,11 @@ export default function LoginPage() {
       const code = urlParams.get('code');
       if (code) {
         setGoogleLoading(true);
+        const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://go.jupsoft.com/dashboard';
         api
           .googleLogin({
             code,
-            redirectUri: 'https://go.jupsoft.com/dashboard',
+            redirectUri,
           })
           .then((res) => {
             if (res.success && res.data?.token) {
@@ -154,7 +155,8 @@ export default function LoginPage() {
       setError('Google login is not configured on this server.');
       return;
     }
-    const redirectUri = encodeURIComponent('https://go.jupsoft.com/dashboard');
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://go.jupsoft.com';
+    const redirectUri = encodeURIComponent(`${origin}/dashboard`);
     const scope = encodeURIComponent('openid email profile');
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}&access_type=offline&prompt=select_account`;
     window.location.href = authUrl;

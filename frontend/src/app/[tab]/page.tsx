@@ -19,10 +19,11 @@ function ConsoleTabContent() {
     const code = searchParams.get('code');
     if (code) {
       setIsExchangingGoogleCode(true);
+      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://go.jupsoft.com/dashboard';
       api
         .googleLogin({
           code,
-          redirectUri: 'https://go.jupsoft.com/dashboard',
+          redirectUri,
         })
         .then((res) => {
           if (res.success && res.data?.token) {

@@ -22,7 +22,7 @@ export class BulkProcessor extends WorkerHost {
       const total = links.length;
       let completed = 0;
       let failed = 0;
-      const results: Array<{ destinationUrl: string; shortUrl?: string; error?: string }> = [];
+      const results: Array<{ externalRef?: string; destinationUrl: string; shortUrl?: string; error?: string }> = [];
 
       const client = await this.db.pool.connect();
       try {
@@ -61,6 +61,7 @@ export class BulkProcessor extends WorkerHost {
             await client.query('RELEASE SAVEPOINT sp_bulk_item');
             completed++;
             results.push({
+              externalRef: item.externalRef,
               destinationUrl: item.destinationUrl,
               shortUrl: created.shortUrl,
             });
@@ -72,6 +73,7 @@ export class BulkProcessor extends WorkerHost {
             await client.query('ROLLBACK TO SAVEPOINT sp_bulk_item');
             failed++;
             results.push({
+              externalRef: item.externalRef,
               destinationUrl: item.destinationUrl,
               error: err.message || 'Creation failed',
             });

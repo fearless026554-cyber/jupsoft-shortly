@@ -141,6 +141,10 @@ export class RedirectController {
       referrer: (req.headers['referer'] as string) || undefined,
       countryCode: (req.headers['cf-ipcountry'] as string) || undefined,
     };
+    const queryObj = (req.query as Record<string, any>) || {};
+    const rawSource = queryObj.utm_source || queryObj.source || queryObj.ref || queryObj.channel;
+    const sourceQuery = rawSource ? String(rawSource).trim() : undefined;
+
     this.clicksQueue
       .add(
         JobNames.INGEST_CLICK,
@@ -153,6 +157,7 @@ export class RedirectController {
           userAgent: geoUa.userAgent,
           referrer: geoUa.referrer,
           countryCode: geoUa.countryCode,
+          sourceQuery,
         },
         QueueRetryOptions.CLICKS
       )
@@ -274,6 +279,10 @@ export class RedirectController {
       referrer: (req.headers['referer'] as string) || undefined,
       countryCode: (req.headers['cf-ipcountry'] as string) || undefined,
     };
+    const queryObj = (req.query as Record<string, any>) || {};
+    const rawSource = queryObj.utm_source || queryObj.source || queryObj.ref || queryObj.channel;
+    const sourceQuery = rawSource ? String(rawSource).trim() : undefined;
+
     this.clicksQueue
       .add(
         JobNames.INGEST_CLICK,
@@ -286,6 +295,7 @@ export class RedirectController {
           userAgent: geoUa.userAgent,
           referrer: geoUa.referrer,
           countryCode: geoUa.countryCode,
+          sourceQuery,
         },
         QueueRetryOptions.CLICKS
       )

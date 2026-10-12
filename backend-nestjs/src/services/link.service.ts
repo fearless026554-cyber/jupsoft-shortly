@@ -76,21 +76,54 @@ export class LinkService {
     let linkRecord: Link | null = null;
 
     if (dto.alias && dto.alias.trim()) {
-      sanitizedAlias = this.sanitizeAlias(dto.alias);
+      let rawAlias = dto.alias.trim();
+      if (rawAlias.endsWith('-') || rawAlias.endsWith('*') || rawAlias.toLowerCase() === 'fee') {
+        const prefix = rawAlias.replace(/[-*]+$/, '') || 'fee';
+        rawAlias = `${prefix}-${this.generateShortCode(5).toLowerCase()}`;
+      }
+      sanitizedAlias = this.sanitizeAlias(rawAlias);
 
       // Check if alias / short code is already taken on this domain OR for this tenant
+      let checkAlias = sanitizedAlias;
       const existing = await client.query(
         `SELECT id FROM links 
          WHERE (domain_id = $1 AND (short_code = $2 OR LOWER(alias) = LOWER($2)))
             OR (tenant_id = $3 AND (short_code = $2 OR LOWER(alias) = LOWER($2)))
          LIMIT 1`,
-        [domainId, sanitizedAlias, tenantId]
+        [domainId, checkAlias, tenantId]
       );
+
       if (existing.rowCount && existing.rowCount > 0) {
-        const conflictErr: any = new Error(`Alias '${sanitizedAlias}' is already in use (duplicate). Please choose a different alias.`);
-        conflictErr.statusCode = 409;
-        conflictErr.code = 'ALIAS_CONFLICT';
-        throw conflictErr;
+        // Auto-increment alias to prevent conflict (e.g., fee-3465 -> fee-3465-1 -> fee-3465-2)
+        let counter = 1;
+        let baseAlias = sanitizedAlias;
+        const match = sanitizedAlias.match(/^(.*?)-(\d+)$/);
+        if (match) {
+          baseAlias = match[1];
+          counter = parseInt(match[2], 10) + 1;
+        }
+
+        let available = false;
+        while (!available && counter <= 100) {
+          const candidate = `${baseAlias}-${counter}`;
+          const checkRes = await client.query(
+            `SELECT id FROM links 
+             WHERE (domain_id = $1 AND (short_code = $2 OR LOWER(alias) = LOWER($2)))
+                OR (tenant_id = $3 AND (short_code = $2 OR LOWER(alias) = LOWER($2)))
+             LIMIT 1`,
+            [domainId, candidate, tenantId]
+          );
+          if (checkRes.rowCount === 0) {
+            sanitizedAlias = candidate;
+            available = true;
+          } else {
+            counter++;
+          }
+        }
+
+        if (!available) {
+          sanitizedAlias = `${baseAlias}-${Date.now().toString(36).slice(-4)}`;
+        }
       }
 
       shortCode = sanitizedAlias;
@@ -120,12 +153,33 @@ export class LinkService {
         inserted = true;
       } catch (err: any) {
         if (err.code === '23505') {
-          const conflictErr: any = new Error(`Alias '${sanitizedAlias}' is already in use (duplicate). Please choose a different alias.`);
-          conflictErr.statusCode = 409;
-          conflictErr.code = 'ALIAS_CONFLICT';
-          throw conflictErr;
+          // Fallback auto-suffix on rare concurrency race condition
+          const fallbackAlias = `${sanitizedAlias}-${Date.now().toString(36).slice(-3)}`;
+          const fallbackRes = await client.query(
+            `INSERT INTO links (
+              tenant_id, domain_id, short_code, alias, destination_url,
+              redirect_type, status, expires_at, max_clicks, tag, external_ref
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING *`,
+            [
+              tenantId,
+              domainId,
+              fallbackAlias,
+              fallbackAlias,
+              dto.destinationUrl,
+              dto.redirectType || String(FALLBACKS.REDIRECT_TYPE),
+              LinkStatus.ACTIVE,
+              dto.expiresAt ? new Date(dto.expiresAt) : null,
+              dto.maxClicks || null,
+              dto.tag || null,
+              dto.externalRef || null,
+            ]
+          );
+          linkRecord = fallbackRes.rows[0];
+          inserted = true;
+        } else {
+          throw err;
         }
-        throw err;
       }
     } else {
       // 3. Collision-resistant code generation with enterprise retry limits

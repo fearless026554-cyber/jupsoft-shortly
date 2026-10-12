@@ -183,7 +183,16 @@ export class AnalyticsController {
         });
       }
 
-      return { ...stats.rows[0], ...agg };
+      const timelineRes = await client.query(
+        `SELECT TO_CHAR(date, 'YYYY-MM-DD') AS date, 
+                COALESCE(SUM(clicks), 0)::int AS clicks, 
+                COALESCE(SUM(unique_clicks), 0)::int AS unique_clicks,
+                COALESCE(SUM(bot_clicks), 0)::int AS bot_clicks
+         FROM click_daily ${tenantDailyFilter} ${dateConditionDaily}
+         GROUP BY date ORDER BY date ASC`
+      );
+
+      return { ...stats.rows[0], ...agg, timeline: timelineRes.rows };
     };
 
     const summary = isSuperAdmin && !targetTenantId

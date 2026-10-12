@@ -186,10 +186,40 @@ export class ClickProcessor extends WorkerHost {
         const osKey = uaInfo.os;
         const browserKey = uaInfo.browser;
         const countryKey = geo.label;
+        // Intelligent Referral / Source Attribution
         let refKey: string = FALLBACKS.REFERRER;
-        if (data.referrer) {
+        const ua = data.userAgent || '';
+
+        if (data.sourceQuery) {
+          refKey = data.sourceQuery.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 50);
+        } else if (/whatsapp/i.test(ua)) {
+          refKey = 'whatsapp';
+        } else if (/instagram/i.test(ua)) {
+          refKey = 'instagram';
+        } else if (/fb_iab|fbav|facebook/i.test(ua)) {
+          refKey = 'facebook';
+        } else if (/telegram/i.test(ua)) {
+          refKey = 'telegram';
+        } else if (/linkedin/i.test(ua)) {
+          refKey = 'linkedin';
+        } else if (/twitter|tweet/i.test(ua)) {
+          refKey = 'twitter';
+        } else if (data.referrer) {
           try {
-            refKey = new URL(data.referrer).hostname || FALLBACKS.REFERRER;
+            const host = new URL(data.referrer).hostname.toLowerCase();
+            if (host.includes('whatsapp')) refKey = 'whatsapp';
+            else if (host.includes('instagram')) refKey = 'instagram';
+            else if (host.includes('facebook') || host.includes('fb.me')) refKey = 'facebook';
+            else if (host.includes('t.co') || host.includes('twitter.com') || host.includes('x.com')) refKey = 'twitter';
+            else if (host.includes('linkedin.com') || host.includes('lnkd.in')) refKey = 'linkedin';
+            else if (host.includes('youtube.com') || host.includes('youtu.be')) refKey = 'youtube';
+            else if (host.includes('google.')) refKey = 'google';
+            else if (host.includes('bing.')) refKey = 'bing';
+            else if (host.includes('yahoo.')) refKey = 'yahoo';
+            else if (host.includes('reddit.')) refKey = 'reddit';
+            else {
+              refKey = host.replace(/^www\./, '') || FALLBACKS.REFERRER;
+            }
           } catch {
             refKey = FALLBACKS.REFERRER;
           }

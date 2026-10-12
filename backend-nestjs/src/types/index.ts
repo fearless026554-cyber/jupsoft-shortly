@@ -92,6 +92,7 @@ export interface ClickIngestJobData {
   userAgent: string;
   referrer?: string;
   countryCode?: string;
+  sourceQuery?: string;
 }
 
 export interface BulkLinkJobItem {
