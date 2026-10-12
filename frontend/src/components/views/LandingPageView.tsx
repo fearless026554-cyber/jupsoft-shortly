@@ -21,6 +21,7 @@ import {
   HelpCircle,
   Copy,
   Check,
+  XCircle,
 } from 'lucide-react';
 
 interface LandingPageViewProps {
@@ -299,19 +300,19 @@ export function LandingPageView({ onLoginClick, currentUser, onGoToDashboard }: 
               <h3 className="text-xl font-bold text-slate-900 mb-6 relative">Dead-End Vanity Links</h3>
               <ul className="space-y-4 text-xs sm:text-sm text-slate-700 relative font-medium">
                 <li className="flex items-start gap-3">
-                  <span className="text-red-500 font-bold shrink-0 mt-0.5 text-base">✕</span>
+                  <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                   <span className="leading-relaxed">Parents and students treat external links as phishing scams.</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-red-500 font-bold shrink-0 mt-0.5 text-base">✕</span>
+                  <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                   <span className="leading-relaxed">Long domains push SMS past 160 characters, doubling costs.</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-red-500 font-bold shrink-0 mt-0.5 text-base">✕</span>
+                  <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                   <span className="leading-relaxed">Cannot be whitelisted under strict TRAI DLT commercial guidelines.</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="text-red-500 font-bold shrink-0 mt-0.5 text-base">✕</span>
+                  <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                   <span className="leading-relaxed">Zero attribution: Cannot tell if a reminder produced a payment.</span>
                 </li>
               </ul>

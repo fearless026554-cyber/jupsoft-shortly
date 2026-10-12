@@ -513,7 +513,7 @@ export const HelpGuideView: React.FC = () => {
               <span>Security & Key Provisioning Notice</span>
             </div>
             <p className="text-[11px] text-amber-800 leading-relaxed">
-              API Keys are securely provisioned under <strong>Settings ➔ API Keys</strong>. Never expose or hardcode real secret keys into client-side code or public repositories. Pass your secret key via the <code>Authorization: Bearer &lt;YOUR_API_KEY&gt;</code> header.
+              API Keys are securely provisioned under <strong>Settings &rarr; API Keys</strong>. Never expose or hardcode real secret keys into client-side code or public repositories. Pass your secret key via the <code>Authorization: Bearer &lt;YOUR_API_KEY&gt;</code> header.
             </p>
           </div>
 

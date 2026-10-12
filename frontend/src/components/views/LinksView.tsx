@@ -52,6 +52,15 @@ interface LinksViewProps {
   currentUser?: any;
 }
 
+function getDomainFromUrl(urlStr: string): string {
+  try {
+    const parsed = new URL(urlStr);
+    return parsed.hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 export const LinksView: React.FC<LinksViewProps> = ({
   links,
   loading = false,
@@ -128,14 +137,6 @@ export const LinksView: React.FC<LinksViewProps> = ({
     setSelectedIds([]);
   }, [statusFilter, timeFilter, websiteFilter, tagFilter, sortOrder, searchQuery]);
 
-  const getDomainFromUrl = (urlStr: string) => {
-    try {
-      const parsed = new URL(urlStr);
-      return parsed.hostname;
-    } catch {
-      return '';
-    }
-  };
 
   const formatTimeRemaining = (expiresAt: string) => {
     const diffMs = new Date(expiresAt).getTime() - Date.now();

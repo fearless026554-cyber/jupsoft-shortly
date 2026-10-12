@@ -399,9 +399,10 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
               {search && (
                 <button
                   onClick={() => setSearch('')}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                  title="Clear search"
                 >
-                  ✕
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>

@@ -15,6 +15,7 @@ import {
   Download,
   Clock,
   Timer,
+  AlertTriangle,
 } from 'lucide-react';
 import { api, CreateLinkDto, API_BASE_URL } from '../../api';
 import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
@@ -318,8 +319,9 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                     />
                   </div>
                   {error && (error.toLowerCase().includes('alias') || error.toLowerCase().includes('duplicate')) && (
-                    <p className="text-[10px] text-red-600 font-medium mt-1">
-                      ⚠️ Duplicate: This alias is already in use.
+                    <p className="text-[10px] text-red-600 font-medium mt-1 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />
+                      <span>Duplicate: This alias is already in use.</span>
                     </p>
                   )}
                 </div>

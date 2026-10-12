@@ -16,6 +16,7 @@ import {
   Clock,
   Timer,
   Edit2,
+  AlertTriangle,
 } from 'lucide-react';
 import { api, LinkItem, API_BASE_URL } from '../../api';
 import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
@@ -420,8 +421,18 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
                 <>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-500">Live Status:</span>
-                    <span className={`font-semibold font-mono text-[11px] ${isExpired ? 'text-amber-700' : 'text-blue-700'}`}>
-                      {isExpired ? '⚠️ Expired' : `⏱️ Active (${formatRemainingTime(link.expires_at)})`}
+                    <span className={`font-semibold font-mono text-[11px] inline-flex items-center gap-1.5 ${isExpired ? 'text-amber-700' : 'text-blue-700'}`}>
+                      {isExpired ? (
+                        <>
+                          <AlertTriangle className="w-3 h-3 text-amber-600" />
+                          <span>Expired</span>
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-3 h-3 text-blue-600" />
+                          <span>Active ({formatRemainingTime(link.expires_at)})</span>
+                        </>
+                      )}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-200/60 pt-1">
