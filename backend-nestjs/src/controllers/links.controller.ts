@@ -561,13 +561,21 @@ export class LinksController {
   async updateLink(@Param('id') id: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const dto = patchLinkSchema.parse(req.body);
     const auth = (req as any).auth;
-    const tenantId = auth.tenantId;
+    const isSuperAdmin = auth?.role === 'super_admin' || auth?.scopes?.includes('*');
+    const tenantId = auth?.tenantId;
     const geoUa = getGeoUa(req);
 
     let previousAlias: string | null = null;
     let previousShortCode: string | null = null;
-    const updated = await this.db.withTenantContext(tenantId, async (client) => {
-      const currentRes = await client.query('SELECT * FROM links WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+
+    const runUpdate = async (client: any) => {
+      let currentRes;
+      if (isSuperAdmin && !tenantId) {
+        currentRes = await client.query('SELECT * FROM links WHERE id = $1', [id]);
+      } else {
+        currentRes = await client.query('SELECT * FROM links WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+      }
+
       if (currentRes.rowCount === 0) return null;
       const current = currentRes.rows[0];
       previousAlias = current.alias;
@@ -595,13 +603,14 @@ export class LinksController {
           }
 
           // Check if alias / short code is already taken on this domain OR for this tenant (excluding this link)
+          const targetTenant = tenantId || current.tenant_id;
           const existing = await client.query(
             `SELECT id FROM links 
              WHERE ((domain_id = $1 AND (short_code = $2 OR LOWER(alias) = LOWER($2)))
                 OR (tenant_id = $3 AND (short_code = $2 OR LOWER(alias) = LOWER($2))))
                AND id != $4
              LIMIT 1`,
-            [current.domain_id, sanitized, tenantId, id]
+            [current.domain_id, sanitized, targetTenant, id]
           );
           if (existing.rowCount && existing.rowCount > 0) {
             const conflictErr: any = new Error(`Alias '${sanitized}' is already in use. Please choose a different alias.`);
@@ -631,18 +640,29 @@ export class LinksController {
         );
       }
 
-      const res = await client.query(
-        `UPDATE links 
-         SET destination_url = $1, status = $2, expires_at = $3, max_clicks = $4, tag = $5, short_code = $6, alias = $7, updated_at = NOW() 
-         WHERE id = $8 AND tenant_id = $9 
-         RETURNING *`,
-        [destinationUrl, status, expiresAt, maxClicks, tag, newShortCode, newAlias, id, tenantId]
-      );
+      let res;
+      if (isSuperAdmin && !tenantId) {
+        res = await client.query(
+          `UPDATE links 
+           SET destination_url = $1, status = $2, expires_at = $3, max_clicks = $4, tag = $5, short_code = $6, alias = $7, updated_at = NOW() 
+           WHERE id = $8 
+           RETURNING *`,
+          [destinationUrl, status, expiresAt, maxClicks, tag, newShortCode, newAlias, id]
+        );
+      } else {
+        res = await client.query(
+          `UPDATE links 
+           SET destination_url = $1, status = $2, expires_at = $3, max_clicks = $4, tag = $5, short_code = $6, alias = $7, updated_at = NOW() 
+           WHERE id = $8 AND tenant_id = $9 
+           RETURNING *`,
+          [destinationUrl, status, expiresAt, maxClicks, tag, newShortCode, newAlias, id, tenantId || current.tenant_id]
+        );
+      }
 
       await AuditService.log(client, {
-        tenantId,
-        actorId: auth.keyId,
-        actorType: 'api_key',
+        tenantId: tenantId || current.tenant_id,
+        actorId: auth?.keyId || auth?.userId || 'system',
+        actorType: auth?.keyId ? 'api_key' : 'user',
         action: 'link.update',
         entity: 'links',
         entityId: id,
@@ -652,20 +672,25 @@ export class LinksController {
       });
 
       return res.rows[0];
-    });
+    };
+
+    const updated = isSuperAdmin && !tenantId
+      ? await this.db.withSuperAdminContext(runUpdate)
+      : await this.db.withTenantContext(tenantId!, runUpdate);
 
     if (!updated) {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'Link not found' } });
     }
 
+    const effectiveTenant = tenantId || updated.tenant_id || 'global';
     if (previousShortCode && previousShortCode !== updated.short_code) {
-      await this.redis.invalidateLink(updated.domain_id, previousShortCode, tenantId, previousAlias);
+      await this.redis.invalidateLink(updated.domain_id, previousShortCode, effectiveTenant, previousAlias);
     }
     if (previousAlias && previousAlias !== updated.alias) {
-      await this.redis.invalidateLink(updated.domain_id, updated.short_code, tenantId, previousAlias);
+      await this.redis.invalidateLink(updated.domain_id, updated.short_code, effectiveTenant, previousAlias);
     }
-    await this.redis.invalidateLink(updated.domain_id, updated.short_code, tenantId, updated.alias);
-    await this.redis.client.del(`link:detail:${tenantId}:${id}`).catch(() => {});
+    await this.redis.invalidateLink(updated.domain_id, updated.short_code, effectiveTenant, updated.alias);
+    await this.redis.client.del(`link:detail:${effectiveTenant}:${id}`).catch(() => {});
 
     if (dto.destinationUrl) {
       this.screeningQueue
@@ -685,44 +710,65 @@ export class LinksController {
   @UseInterceptors(IdempotencyInterceptor)
   async deleteLink(@Param('id') id: string, @Query('permanent') permanentStr: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const auth = (req as any).auth;
-    const tenantId = auth.tenantId;
+    const isSuperAdmin = auth?.role === 'super_admin' || auth?.scopes?.includes('*');
+    const tenantId = auth?.tenantId;
     const geoUa = getGeoUa(req);
     const isPermanent = permanentStr === 'true' || (req.query as any)?.permanent === 'true';
 
-    const result = await this.db.withTenantContext(tenantId, async (client) => {
+    const runDelete = async (client: any) => {
       let res;
       if (isPermanent) {
-        res = await client.query(
-          `DELETE FROM links WHERE id = $1 AND tenant_id = $2 RETURNING id, domain_id, short_code, alias`,
-          [id, tenantId]
-        );
+        if (isSuperAdmin && !tenantId) {
+          res = await client.query(
+            `DELETE FROM links WHERE id = $1 RETURNING id, domain_id, short_code, alias, tenant_id`,
+            [id]
+          );
+        } else {
+          res = await client.query(
+            `DELETE FROM links WHERE id = $1 AND tenant_id = $2 RETURNING id, domain_id, short_code, alias, tenant_id`,
+            [id, tenantId]
+          );
+        }
       } else {
-        res = await client.query(
-          `UPDATE links SET status = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3 RETURNING id, domain_id, short_code, alias`,
-          [LinkStatus.ARCHIVED, id, tenantId]
-        );
+        if (isSuperAdmin && !tenantId) {
+          res = await client.query(
+            `UPDATE links SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, domain_id, short_code, alias, tenant_id`,
+            [LinkStatus.ARCHIVED, id]
+          );
+        } else {
+          res = await client.query(
+            `UPDATE links SET status = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3 RETURNING id, domain_id, short_code, alias, tenant_id`,
+            [LinkStatus.ARCHIVED, id, tenantId]
+          );
+        }
       }
       if (res.rowCount === 0) return null;
 
+      const row = res.rows[0];
       await AuditService.log(client, {
-        tenantId,
-        actorId: auth.keyId,
-        actorType: 'api_key',
+        tenantId: tenantId || row.tenant_id,
+        actorId: auth?.keyId || auth?.userId || 'system',
+        actorType: auth?.keyId ? 'api_key' : 'user',
         action: isPermanent ? 'link.delete_permanent' : 'link.archive',
         entity: 'links',
         entityId: id,
         ipAddress: geoUa.clientIp,
       });
 
-      return res.rows[0];
-    });
+      return row;
+    };
+
+    const result = isSuperAdmin && !tenantId
+      ? await this.db.withSuperAdminContext(runDelete)
+      : await this.db.withTenantContext(tenantId!, runDelete);
 
     if (!result) {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'Link not found' } });
     }
 
-    await this.redis.invalidateLink(result.domain_id, result.short_code, tenantId, result.alias);
-    await this.redis.client.del(`link:detail:${tenantId}:${id}`).catch(() => {});
+    const effectiveTenant = tenantId || result.tenant_id || 'global';
+    await this.redis.invalidateLink(result.domain_id, result.short_code, effectiveTenant, result.alias);
+    await this.redis.client.del(`link:detail:${effectiveTenant}:${id}`).catch(() => {});
     return reply.send({ success: true, message: isPermanent ? 'Link permanently deleted' : 'Link archived successfully' });
   }
 
