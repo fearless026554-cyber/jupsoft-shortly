@@ -382,21 +382,48 @@ export const HelpGuideView: React.FC = () => {
             <div>
               <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                Bulk CSV Format
+                Bulk Link Creation & Batch Testing (#bulktest)
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Rules for generating links in bulk.
+                Generate 500 to 1,000+ links at once, group by campaign tags like #bulktest, or upload CSV files.
               </p>
             </div>
 
-            <button
-              onClick={downloadSampleTemplate}
-              aria-label="Download Sample CSV Template"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition min-h-[40px] cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download Sample CSV
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={downloadSampleTemplate}
+                aria-label="Download Sample CSV Template"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                Download Sample CSV
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Beginner Summary Callout */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 text-xs text-blue-900 space-y-2">
+            <div className="font-bold text-sm flex items-center gap-1.5 text-blue-800">
+              <Zap className="w-4 h-4 text-amber-500" />
+              <span>Beginner Walkthrough: 500 se 1,000 Links Ek Click Me Kaise Banaye?</span>
+            </div>
+            <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-blue-950 font-medium leading-relaxed pl-1">
+              <li>
+                <strong>Bulk Studio Open Karein:</strong> Left navigation rail mein <em>Bulk Studio</em> par click karein.
+              </li>
+              <li>
+                <strong>Auto-Generate Test Batch:</strong> Upar right corner par <strong>⚡ Auto-Generate Test Batch</strong> dabayein.
+              </li>
+              <li>
+                <strong>Count & Tag Chunein:</strong> <em>500 Links</em> ya <em>1,000 Links</em> select karein aur tag mein <strong>#bulktest</strong> rakhein.
+              </li>
+              <li>
+                <strong>Populate & Dispatch:</strong> <em>Populate Grid</em> dabayein aur phir <strong>Dispatch Batch</strong> click karein. 3-4 seconds mein 1,000 links live ho jayenge!
+              </li>
+              <li>
+                <strong>Links Filter:</strong> <em>Links</em> view mein jakar <strong>Tag Filter ➔ #bulktest</strong> select karke apne saare generated links dekh sakte hain.
+              </li>
+            </ol>
           </div>
 
           <div className="overflow-x-auto">
@@ -414,25 +441,25 @@ export const HelpGuideView: React.FC = () => {
                   <td className="p-3 font-mono font-bold text-blue-600">destination_url</td>
                   <td className="p-3 font-semibold text-red-600">Required</td>
                   <td className="p-3">Full URL starting with http:// or https://</td>
-                  <td className="p-3 font-mono text-slate-600">https://example.com/pay?inv=INV-101</td>
+                  <td className="p-3 font-mono text-slate-600">https://jupsoft.com/student/portal?id=STD-00001</td>
                 </tr>
                 <tr>
                   <td className="p-3 font-mono font-bold text-slate-800">alias</td>
                   <td className="p-3 text-slate-500">Optional</td>
-                  <td className="p-3">Custom slug for {defaultDomain}/&lt;alias&gt;</td>
-                  <td className="p-3 font-mono text-slate-600">pay-101</td>
+                  <td className="p-3">Custom slug (leave empty for auto 7-char Base58 code)</td>
+                  <td className="p-3 font-mono text-slate-600">std-00001</td>
                 </tr>
                 <tr>
                   <td className="p-3 font-mono font-bold text-slate-800">tag</td>
                   <td className="p-3 text-slate-500">Optional</td>
-                  <td className="p-3">Campaign grouping category</td>
-                  <td className="p-3 font-mono text-slate-600">Payment</td>
+                  <td className="p-3">Campaign grouping category (e.g. bulktest, Fees, ReportCards)</td>
+                  <td className="p-3 font-mono text-slate-600 font-bold text-indigo-600">bulktest</td>
                 </tr>
                 <tr>
                   <td className="p-3 font-mono font-bold text-slate-800">external_ref</td>
                   <td className="p-3 text-slate-500">Optional</td>
-                  <td className="p-3">Order ID or Invoice ID for outcome attribution</td>
-                  <td className="p-3 font-mono text-slate-600">INV-2026-101</td>
+                  <td className="p-3">Student Roll No, Admission No or Invoice ID</td>
+                  <td className="p-3 font-mono text-slate-600">BULK-BULKTEST-00001</td>
                 </tr>
               </tbody>
             </table>

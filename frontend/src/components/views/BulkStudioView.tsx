@@ -18,9 +18,14 @@ import {
   Tag,
   Copy,
   Check,
+  Zap,
+  X,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { api, exportToCsv } from '../../api';
 import { Permissions } from '../../utils/rbac';
+import { usePagination } from '../../hooks/usePagination';
+import { Pagination } from '../ui/Pagination';
 
 interface BatchRow {
   destinationUrl: string;
@@ -66,6 +71,14 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
   const [batchResults, setBatchResults] = useState<any[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Quick Test Generator State (Presets: 500 / 1000 links, Tag: bulktest)
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [customCount, setCustomCount] = useState<number>(500);
+  const [customTag, setCustomTag] = useState<string>('bulktest');
+  const [customBaseUrl, setCustomBaseUrl] = useState<string>('https://jupsoft.com/student/portal?id=');
+
+  const pagination = usePagination(batchRows, 50);
 
   useEffect(() => {
     return () => {
@@ -254,6 +267,41 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
     URL.revokeObjectURL(url);
   };
 
+  const handlePopulateTestBatch = (count: number, tag: string, baseUrl: string) => {
+    const cleanTag = tag.trim() || 'bulktest';
+    const cleanUrl = baseUrl.trim() || 'https://jupsoft.com/student/portal?id=';
+    const newRows: BatchRow[] = [];
+    for (let i = 1; i <= count; i++) {
+      const pad = String(i).padStart(5, '0');
+      newRows.push({
+        destinationUrl: `${cleanUrl}STD-${pad}&session=2026-27`,
+        alias: '',
+        tag: cleanTag,
+        externalRef: `BULK-${cleanTag.toUpperCase()}-${pad}`,
+      });
+    }
+    setBatchRows(newRows);
+    pagination.setCurrentPage(1);
+    setShowBatchModal(false);
+  };
+
+  const handleDownloadCustomCsv = (count: number, tag: string, baseUrl: string) => {
+    const cleanTag = tag.trim() || 'bulktest';
+    const cleanUrl = baseUrl.trim() || 'https://jupsoft.com/student/portal?id=';
+    const rows = ['destination_url,alias,tag,external_ref'];
+    for (let i = 1; i <= count; i++) {
+      const pad = String(i).padStart(5, '0');
+      rows.push(`${cleanUrl}STD-${pad}&session=2026-27,,${cleanTag},BULK-${cleanTag.toUpperCase()}-${pad}`);
+    }
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `jupsoft_bulk_${count}_${cleanTag}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportResults = () => {
     if (batchResults.length === 0) return;
     exportToCsv('jlmp_bulk_created_links', batchResults);
@@ -270,6 +318,16 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
         </div>
 
         <div className="flex items-center gap-2">
+          {Permissions.canBulkCreate(currentUser?.role) && (
+            <button
+              onClick={() => setShowBatchModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              title="Generate 500 or 1,000 links in one click"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-600" />
+              Auto-Generate Test Batch
+            </button>
+          )}
           {Permissions.canBulkCreate(currentUser?.role) && (
             <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition-colors cursor-pointer">
               <Upload className="w-3.5 h-3.5 text-blue-600" />
@@ -317,12 +375,16 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
               Quickly apply a common category tag to your batch or upload a CSV file with destination URLs, aliases, and tags:
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
-              {['General', 'Marketing', 'Payment', 'Notification', 'Support'].map((tag) => (
+              {['bulktest', 'General', 'Fees Collection', 'Report Cards', 'Payment', 'Notification'].map((tag) => (
                 <button
                   key={tag}
                   type="button"
                   onClick={() => applyPresetTag(tag)}
-                  className="px-2.5 py-1 text-xs rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium transition cursor-pointer"
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition cursor-pointer ${
+                    tag === 'bulktest'
+                      ? 'border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold'
+                      : 'border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                  }`}
                 >
                   Set all to {tag}
                 </button>
@@ -457,7 +519,10 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                 }}
               >
                 <option value="">Select category...</option>
+                <option value="bulktest">bulktest (Test Suite)</option>
                 <option value="General">General</option>
+                <option value="Fees Collection">Fees Collection</option>
+                <option value="Report Cards">Report Cards</option>
                 <option value="Marketing">Marketing</option>
                 <option value="Payment">Payment</option>
                 <option value="Notification">Notification</option>
@@ -501,7 +566,8 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-sans">
-              {batchRows.map((row, idx) => {
+              {pagination.paginatedItems.map((row, pageIdx) => {
+                const idx = (pagination.currentPage - 1) * pagination.pageSize + pageIdx;
                 const hasContent = row.destinationUrl.trim().length > 0;
                 const isUrlValid = isValidUrl(row.destinationUrl);
                 const isInvalid = hasContent && !isUrlValid;
@@ -555,7 +621,10 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                         onChange={(e) => handleUpdateRow(idx, 'tag', e.target.value)}
                         className="w-full text-xs px-2 py-1.5 rounded border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                       >
+                        <option value="bulktest">bulktest</option>
                         <option value="General">General</option>
+                        <option value="Fees Collection">Fees Collection</option>
+                        <option value="Report Cards">Report Cards</option>
                         <option value="Marketing">Marketing</option>
                         <option value="Payment">Payment</option>
                         <option value="Notification">Notification</option>
@@ -592,6 +661,20 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
             </tbody>
           </table>
         </div>
+
+        {/* Pagination when rows exceed page size */}
+        {batchRows.length > 50 && (
+          <div className="p-3 border-t border-slate-200 bg-slate-50">
+            <Pagination
+              currentPage={pagination.currentPage}
+              totalItems={pagination.totalItems}
+              pageSize={pagination.pageSize}
+              onPageChange={pagination.setCurrentPage}
+              onPageSizeChange={pagination.setPageSize}
+              itemLabel="staged links"
+            />
+          </div>
+        )}
       </div>
 
       {/* Generated Batch Results Card */}
@@ -650,6 +733,120 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Test Generator Modal (Presets: 500 / 1000 links, Tag: bulktest) */}
+      {showBatchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
+                  <Zap className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Auto-Generate Test Batch</h3>
+                  <p className="text-[11px] text-slate-500">Generate 500 to 1,000 links in one click</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBatchModal(false)}
+                className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                title="Close modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">Quick Quantity Presets:</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { count: 100, label: '100 Links' },
+                  { count: 500, label: '500 Links' },
+                  { count: 1000, label: '1,000 Links' },
+                ].map((preset) => (
+                  <button
+                    key={preset.count}
+                    type="button"
+                    onClick={() => {
+                      setCustomCount(preset.count);
+                    }}
+                    className={`py-2 px-3 text-xs font-bold rounded-lg border transition text-center cursor-pointer ${
+                      customCount === preset.count
+                        ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-xs'
+                        : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Form Fields */}
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Total Links Count:</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={5000}
+                  value={customCount}
+                  onChange={(e) => setCustomCount(Math.max(1, parseInt(e.target.value || '1', 10)))}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Campaign Tag (Default: bulktest):</label>
+                <input
+                  type="text"
+                  value={customTag}
+                  onChange={(e) => setCustomTag(e.target.value)}
+                  placeholder="bulktest"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">Base Destination URL:</label>
+                <input
+                  type="text"
+                  value={customBaseUrl}
+                  onChange={(e) => setCustomBaseUrl(e.target.value)}
+                  placeholder="https://jupsoft.com/student/portal?id="
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-900"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Format: {customBaseUrl}STD-00001&session=2026-27
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => handlePopulateTestBatch(customCount, customTag, customBaseUrl)}
+                className="w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Populate Grid with {customCount} Links
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDownloadCustomCsv(customCount, customTag, customBaseUrl)}
+                className="w-full py-2 px-4 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-xs transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                Download Ready CSV ({customCount} Pre-filled Rows)
+              </button>
+            </div>
           </div>
         </div>
       )}
