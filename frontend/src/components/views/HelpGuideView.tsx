@@ -14,7 +14,6 @@ import {
   Download,
   ArrowLeft,
   ArrowRight,
-  Sparkles,
   ShieldCheck,
   LayoutList,
   Code2,

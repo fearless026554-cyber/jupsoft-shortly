@@ -9,7 +9,6 @@ import {
   Check,
   Sliders,
   Printer,
-  Sparkles,
   Layers,
   Palette,
   Eye,

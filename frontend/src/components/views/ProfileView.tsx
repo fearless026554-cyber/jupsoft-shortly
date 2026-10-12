@@ -12,7 +12,6 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Sparkles,
   Check,
   Calendar,
   Layers,

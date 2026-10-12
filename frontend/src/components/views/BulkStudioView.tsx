@@ -11,7 +11,6 @@ import {
   RefreshCw,
   Plus,
   Trash2,
-  Sparkles,
   Layers,
   GraduationCap,
   Bus,

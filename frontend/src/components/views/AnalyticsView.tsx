@@ -19,7 +19,6 @@ import {
   Calendar,
   Activity,
   ArrowUpRight,
-  Sparkles,
 } from 'lucide-react';
 import { api, LinkItem, exportToCsv } from '../../api';
 import { formatNumber } from '../../utils/formatters';
@@ -517,8 +516,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
                   Daily Traffic Trend
                 </span>
                 {peakDay && Number(peakDay.clicks) > 0 && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                    <Sparkles className="w-3 h-3 text-blue-500" />
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                     Peak: {peakDay.clicks} clicks ({new Date(peakDay.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})
                   </span>
                 )}

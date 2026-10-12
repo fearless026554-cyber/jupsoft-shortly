@@ -14,7 +14,6 @@ import {
   Tag,
   ChevronDown,
   ArrowUpDown,
-  Sparkles,
   Eye,
   CheckCircle2,
   Clock,

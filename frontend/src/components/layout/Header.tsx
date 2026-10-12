@@ -9,7 +9,7 @@ import {
   RefreshCw,
   Bell,
   Check,
-  Sparkles,
+  Globe,
   LogOut,
   User,
   Shield,
@@ -116,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                    <Globe className="w-3.5 h-3.5 text-blue-600" />
                     <span>All Tenants</span>
                   </div>
                   {activeTenantId === 'all' && <Check className="w-3.5 h-3.5 text-blue-600" />}

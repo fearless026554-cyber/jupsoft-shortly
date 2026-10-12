@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Building2, Plus, Sparkles, CheckCircle2 } from 'lucide-react';
+import { X, Building2, Plus, CheckCircle2 } from 'lucide-react';
 import { api } from '../../api';
 
 interface CreateTenantModalProps {

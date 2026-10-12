@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, UserPlus, Mail, Shield, KeyRound, RefreshCw, Eye, EyeOff, CheckCircle2, Crown, Sparkles } from 'lucide-react';
+import { X, UserPlus, Mail, Shield, KeyRound, RefreshCw, Eye, EyeOff, CheckCircle2, Crown } from 'lucide-react';
 import { api } from '../../api';
 import { getAllowedInviteRoles, getRoleConfig, generateStrongPassword, UserRole } from '../../utils/rbac';
 
@@ -153,7 +153,7 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
                 onClick={handleGeneratePassword}
                 className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
               >
-                <Sparkles className="w-3 h-3" />
+                <RefreshCw className="w-3 h-3" />
                 <span>Auto-Generate</span>
               </button>
             </div>

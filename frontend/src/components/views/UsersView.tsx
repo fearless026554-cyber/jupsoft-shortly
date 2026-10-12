@@ -21,7 +21,6 @@ import {
   Copy,
   Check,
   X,
-  Sparkles,
   Share2,
   Lock,
   Building2,
@@ -884,7 +883,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
                     onClick={() => setNewPassword(generateStrongPassword())}
                     className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
                   >
-                    <Sparkles className="w-3 h-3" />
+                    <RefreshCw className="w-3 h-3" />
                     <span>Regenerate</span>
                   </button>
                 </div>
@@ -1058,7 +1057,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
                     ? 'bg-blue-50/70 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-300'
                     : 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
                 }`}>
-                  <Sparkles className="w-4 h-4 shrink-0 mt-0.5" />
+                  <Shield className="w-4 h-4 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold">
                       {getRoleLevel(selectedRole) > getRoleLevel(editRoleTarget.role)

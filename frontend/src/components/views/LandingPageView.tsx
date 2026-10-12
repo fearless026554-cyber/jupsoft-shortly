@@ -11,7 +11,6 @@ import {
   ArrowRight,
   Lock,
   Server,
-  Sparkles,
   Globe,
   FileText,
   BarChart3,
@@ -133,7 +132,7 @@ export function LandingPageView({ onLoginClick, currentUser, onGoToDashboard }: 
         {/* 2. Hero Section (Light Glassmorphic) */}
         <section className="relative pt-24 pb-20 px-4 sm:px-8 max-w-6xl mx-auto w-full text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 border border-slate-200/80 text-[11px] font-semibold mb-8 backdrop-blur-md shadow-sm">
-            <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+            <Shield className="w-3.5 h-3.5 text-blue-600" />
             <span className="bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">TRAI DLT Whitelisted & Click-to-Outcome Engine</span>
           </div>
 

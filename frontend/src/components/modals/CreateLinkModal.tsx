@@ -9,7 +9,6 @@ import {
   Check,
   ExternalLink,
   QrCode,
-  Sparkles,
   Calendar,
   Lock,
   Download,
