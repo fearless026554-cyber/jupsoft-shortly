@@ -73,6 +73,9 @@ export const LinksView: React.FC<LinksViewProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'expired' | 'archived'>('all');
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | '7d' | '30d' | 'has_timer' | 'expiring_soon'>('all');
+  const [websiteFilter, setWebsiteFilter] = useState<string>('all');
+  const [tagFilter, setTagFilter] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'most_clicks' | 'least_clicks' | 'expiring_soon'>('newest');
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -88,10 +91,42 @@ export const LinksView: React.FC<LinksViewProps> = ({
   const { defaultDomain } = useTenantDomains();
   const archivedCount = links.filter((l) => l.status === 'archived').length;
 
+  const websiteStats = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const l of links) {
+      if (l.status === 'archived') continue;
+      const domain = getDomainFromUrl(l.destination_url);
+      if (domain) {
+        counts[domain] = (counts[domain] || 0) + 1;
+      }
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [links]);
+
+  const tagStats = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const l of links) {
+      if (l.status === 'archived') continue;
+      const tag = l.tag?.trim();
+      if (tag) {
+        counts[tag] = (counts[tag] || 0) + 1;
+      }
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [links]);
+
+  const hasActiveFilters =
+    statusFilter !== 'all' ||
+    timeFilter !== 'all' ||
+    websiteFilter !== 'all' ||
+    tagFilter !== 'all' ||
+    sortOrder !== 'newest' ||
+    searchQuery.trim() !== '';
+
   // Clear selected links when search query or filter changes to avoid acting on hidden items
   useEffect(() => {
     setSelectedIds([]);
-  }, [statusFilter, timeFilter, searchQuery]);
+  }, [statusFilter, timeFilter, websiteFilter, tagFilter, sortOrder, searchQuery]);
 
   const getDomainFromUrl = (urlStr: string) => {
     try {
@@ -143,52 +178,81 @@ export const LinksView: React.FC<LinksViewProps> = ({
     }
   };
 
-  const filteredLinks = links.filter((l) => {
-    const q = searchQuery.toLowerCase();
-    const matchesSearch =
-      (l.short_code && l.short_code.toLowerCase().includes(q)) ||
-      (l.destination_url && l.destination_url.toLowerCase().includes(q)) ||
-      (l.alias && l.alias.toLowerCase().includes(q)) ||
-      (l.tag && l.tag.toLowerCase().includes(q)) ||
-      (l.external_ref && l.external_ref.toLowerCase().includes(q));
+  const filteredLinks = links
+    .filter((l) => {
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        (l.short_code && l.short_code.toLowerCase().includes(q)) ||
+        (l.destination_url && l.destination_url.toLowerCase().includes(q)) ||
+        (l.alias && l.alias.toLowerCase().includes(q)) ||
+        (l.tag && l.tag.toLowerCase().includes(q)) ||
+        (l.external_ref && l.external_ref.toLowerCase().includes(q));
 
-    const expired = isLinkExpired(l);
-    let matchesStatus = true;
-    if (statusFilter === 'all') {
-      matchesStatus = l.status !== 'archived';
-    } else if (statusFilter === 'active') {
-      matchesStatus = l.status === 'active' && !expired;
-    } else if (statusFilter === 'expired') {
-      matchesStatus = expired && l.status !== 'archived';
-    } else if (statusFilter === 'disabled') {
-      matchesStatus = l.status === 'disabled';
-    } else if (statusFilter === 'archived') {
-      matchesStatus = l.status === 'archived';
-    }
-
-    let matchesTime = true;
-    const now = Date.now();
-    const createdAt = new Date(l.created_at).getTime();
-    if (timeFilter === 'today') {
-      const todayMidnight = new Date().setHours(0, 0, 0, 0);
-      matchesTime = createdAt >= todayMidnight;
-    } else if (timeFilter === '7d') {
-      matchesTime = createdAt >= now - 7 * 24 * 3600 * 1000;
-    } else if (timeFilter === '30d') {
-      matchesTime = createdAt >= now - 30 * 24 * 3600 * 1000;
-    } else if (timeFilter === 'has_timer') {
-      matchesTime = Boolean(l.expires_at);
-    } else if (timeFilter === 'expiring_soon') {
-      if (!l.expires_at) {
-        matchesTime = false;
-      } else {
-        const exp = new Date(l.expires_at).getTime();
-        matchesTime = exp > now && exp <= now + 48 * 3600 * 1000;
+      const expired = isLinkExpired(l);
+      let matchesStatus = true;
+      if (statusFilter === 'all') {
+        matchesStatus = l.status !== 'archived';
+      } else if (statusFilter === 'active') {
+        matchesStatus = l.status === 'active' && !expired;
+      } else if (statusFilter === 'expired') {
+        matchesStatus = expired && l.status !== 'archived';
+      } else if (statusFilter === 'disabled') {
+        matchesStatus = l.status === 'disabled';
+      } else if (statusFilter === 'archived') {
+        matchesStatus = l.status === 'archived';
       }
-    }
 
-    return matchesSearch && matchesStatus && matchesTime;
-  });
+      let matchesTime = true;
+      const now = Date.now();
+      const createdAt = new Date(l.created_at).getTime();
+      if (timeFilter === 'today') {
+        const todayMidnight = new Date().setHours(0, 0, 0, 0);
+        matchesTime = createdAt >= todayMidnight;
+      } else if (timeFilter === '7d') {
+        matchesTime = createdAt >= now - 7 * 24 * 3600 * 1000;
+      } else if (timeFilter === '30d') {
+        matchesTime = createdAt >= now - 30 * 24 * 3600 * 1000;
+      } else if (timeFilter === 'has_timer') {
+        matchesTime = Boolean(l.expires_at);
+      } else if (timeFilter === 'expiring_soon') {
+        if (!l.expires_at) {
+          matchesTime = false;
+        } else {
+          const exp = new Date(l.expires_at).getTime();
+          matchesTime = exp > now && exp <= now + 48 * 3600 * 1000;
+        }
+      }
+
+      let matchesWebsite = true;
+      if (websiteFilter !== 'all') {
+        const d = getDomainFromUrl(l.destination_url);
+        matchesWebsite = d.toLowerCase() === websiteFilter.toLowerCase();
+      }
+
+      let matchesTag = true;
+      if (tagFilter !== 'all') {
+        matchesTag = (l.tag || '').trim().toLowerCase() === tagFilter.toLowerCase();
+      }
+
+      return matchesSearch && matchesStatus && matchesTime && matchesWebsite && matchesTag;
+    })
+    .sort((a, b) => {
+      if (sortOrder === 'most_clicks') {
+        return Number(b.click_count || 0) - Number(a.click_count || 0);
+      }
+      if (sortOrder === 'least_clicks') {
+        return Number(a.click_count || 0) - Number(b.click_count || 0);
+      }
+      if (sortOrder === 'expiring_soon') {
+        if (!a.expires_at) return 1;
+        if (!b.expires_at) return -1;
+        return new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime();
+      }
+      if (sortOrder === 'oldest') {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
   const pagination = usePagination(filteredLinks, 10);
 
@@ -275,6 +339,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
             </button>
           </div>
 
+          {/* Date / Timer Filter */}
           <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
             <Clock className="w-3 h-3 text-slate-400" />
             <select
@@ -291,6 +356,78 @@ export const LinksView: React.FC<LinksViewProps> = ({
               <option value="expiring_soon">Expiring Soon (48h)</option>
             </select>
           </div>
+
+          {/* Website / Destination Domain Filter */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
+            <Globe className="w-3 h-3 text-slate-400" />
+            <select
+              value={websiteFilter}
+              onChange={(e) => setWebsiteFilter(e.target.value)}
+              className="text-[10px] font-semibold bg-transparent text-slate-700 focus:outline-none cursor-pointer max-w-[135px] truncate"
+              title="Filter by Target Destination Website"
+            >
+              <option value="all">All Websites ({websiteStats.length})</option>
+              {websiteStats.map(([domain, count]) => (
+                <option key={domain} value={domain}>
+                  {domain} ({count})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Campaign Tag / Category Filter */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
+            <Tag className="w-3 h-3 text-slate-400" />
+            <select
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              className="text-[10px] font-semibold bg-transparent text-slate-700 focus:outline-none cursor-pointer max-w-[120px] truncate"
+              title="Filter by Campaign Tag / Category"
+            >
+              <option value="all">All Tags ({tagStats.length})</option>
+              {tagStats.map(([tag, count]) => (
+                <option key={tag} value={tag}>
+                  {tag} ({count})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Quick Sort Order */}
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
+            <ArrowUpDown className="w-3 h-3 text-slate-400" />
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as any)}
+              className="text-[10px] font-semibold bg-transparent text-slate-700 focus:outline-none cursor-pointer"
+              title="Sort Links"
+            >
+              <option value="newest">Newest First</option>
+              <option value="most_clicks">Most Clicks</option>
+              <option value="least_clicks">Least Clicks</option>
+              <option value="expiring_soon">Expiring Soonest</option>
+              <option value="oldest">Oldest First</option>
+            </select>
+          </div>
+
+          {/* Clear Filters Reset Button */}
+          {hasActiveFilters && (
+            <button
+              onClick={() => {
+                setStatusFilter('all');
+                setTimeFilter('all');
+                setWebsiteFilter('all');
+                setTagFilter('all');
+                setSortOrder('newest');
+                setSearchQuery('');
+              }}
+              className="text-[10px] font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+              title="Reset all filters to default"
+            >
+              <RotateCcw className="w-2.5 h-2.5" />
+              <span>Reset</span>
+            </button>
+          )}
         </div>
 
         {/* Right: Mass Actions or Primary Actions */}
