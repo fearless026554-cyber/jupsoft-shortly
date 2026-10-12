@@ -4,7 +4,7 @@
 
 export const PAGINATION = {
   DEFAULT_LIMIT: 50,
-  MAX_LIMIT: 100,
+  MAX_LIMIT: 1000,
 } as const;
 
 export const BULK_LIMITS = {

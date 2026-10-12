@@ -430,7 +430,7 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
 
   const handleBatchArchive = async (ids: string[]) => {
     try {
-      await Promise.all(ids.map((id) => api.archiveLink(id)));
+      await api.batchArchive(ids);
       if (drawerLink && ids.includes(drawerLink.id)) setDrawerLink(null);
       await refreshLinks();
     } catch (err) {
@@ -441,7 +441,7 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
 
   const handleBatchRestore = async (ids: string[]) => {
     try {
-      await Promise.all(ids.map((id) => api.updateLink(id, { status: 'active' })));
+      await api.batchRestore(ids);
       if (drawerLink && ids.includes(drawerLink.id)) {
         setDrawerLink((prev) => (prev ? { ...prev, status: 'active' } : null));
       }
@@ -454,7 +454,7 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
 
   const handleBatchDelete = async (ids: string[]) => {
     try {
-      await Promise.all(ids.map((id) => api.deleteLinkPermanently(id)));
+      await api.batchDeletePermanently(ids);
       if (drawerLink && ids.includes(drawerLink.id)) setDrawerLink(null);
       await refreshLinks();
     } catch (err) {

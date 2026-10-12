@@ -262,13 +262,13 @@ export const api = {
   },
 
   // Links
-  async getLinks(tenantId?: string, limit = 500): Promise<LinkItem[]> {
+  async getLinks(tenantId?: string, limit = 5000): Promise<LinkItem[]> {
     const cacheKey = `${API_BASE_URL}/links?tenantId=${tenantId || 'all'}&limit=${limit}`;
     return dedupeGet(cacheKey, async () => {
       try {
         let allItems: LinkItem[] = [];
         let cursor: string | null = null;
-        const batchSize = Math.min(limit, 100);
+        const batchSize = Math.min(limit, 1000);
 
         do {
           const params = new URLSearchParams();
@@ -332,6 +332,29 @@ export const api = {
       body: JSON.stringify(dto),
     });
     return res.json();
+  },
+
+  // High-performance atomic batch actions (Archive / Restore / Delete)
+  async batchAction(action: 'archive' | 'restore' | 'delete', ids: string[]) {
+    clearApiCache('links');
+    const res = await secureFetch(`${API_BASE_URL}/links/batch-action`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ids }),
+    });
+    return res.json();
+  },
+
+  async batchArchive(ids: string[]) {
+    return this.batchAction('archive', ids);
+  },
+
+  async batchRestore(ids: string[]) {
+    return this.batchAction('restore', ids);
+  },
+
+  async batchDeletePermanently(ids: string[]) {
+    return this.batchAction('delete', ids);
   },
 
   // Bulk

@@ -75,6 +75,11 @@ const bulkCreateSchema = z.object({
   csvContent: z.string().max(5 * 1024 * 1024, 'CSV content must not exceed 5MB').optional(),
 });
 
+const batchActionSchema = z.object({
+  action: z.enum(['archive', 'restore', 'delete']),
+  ids: z.array(z.string().min(1)).min(1).max(BULK_LIMITS.MAX_BATCH_SIZE),
+});
+
 
 
 @Controller('api/v1/links')
@@ -282,6 +287,95 @@ export class LinksController {
     });
   }
 
+  @Post('batch-action')
+  @RequireScope(ApiScopes.LINKS_WRITE)
+  @UseInterceptors(IdempotencyInterceptor)
+  async batchAction(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+    const dto = batchActionSchema.parse(req.body);
+    const auth = (req as any).auth;
+    const isSuperAdmin = auth?.role === 'super_admin' || auth?.scopes?.includes('*');
+    const tenantId = auth?.tenantId;
+    const geoUa = getGeoUa(req);
+
+    const validIds = dto.ids.filter((id) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    );
+
+    if (validIds.length === 0) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: ErrorCodes.INVALID_INPUT, message: 'No valid link UUIDs provided' },
+      });
+    }
+
+    const runBatch = async (client: any) => {
+      let query = '';
+      const params: any[] = [validIds];
+
+      if (dto.action === 'delete') {
+        if (isSuperAdmin && !tenantId) {
+          query = `DELETE FROM links WHERE id = ANY($1::uuid[]) RETURNING id, domain_id, short_code, alias, tenant_id`;
+        } else {
+          params.push(tenantId);
+          query = `DELETE FROM links WHERE id = ANY($1::uuid[]) AND tenant_id = $2 RETURNING id, domain_id, short_code, alias, tenant_id`;
+        }
+      } else {
+        const targetStatus = dto.action === 'archive' ? LinkStatus.ARCHIVED : LinkStatus.ACTIVE;
+        params.push(targetStatus);
+        if (isSuperAdmin && !tenantId) {
+          query = `UPDATE links SET status = $2, updated_at = NOW() WHERE id = ANY($1::uuid[]) RETURNING id, domain_id, short_code, alias, tenant_id`;
+        } else {
+          params.push(tenantId);
+          query = `UPDATE links SET status = $2, updated_at = NOW() WHERE id = ANY($1::uuid[]) AND tenant_id = $3 RETURNING id, domain_id, short_code, alias, tenant_id`;
+        }
+      }
+
+      const res = await client.query(query, params);
+
+      if (res.rowCount > 0) {
+        await AuditService.log(client, {
+          tenantId: tenantId || res.rows[0].tenant_id,
+          actorId: auth?.keyId || auth?.userId || 'system',
+          actorType: auth?.keyId ? 'api_key' : 'user',
+          action: `link.batch_${dto.action}`,
+          entity: 'links',
+          entityId: 'batch',
+          afterState: { count: res.rowCount, action: dto.action },
+          ipAddress: geoUa.clientIp,
+        });
+      }
+
+      return res.rows;
+    };
+
+    const affectedRows = isSuperAdmin && !tenantId
+      ? await this.db.withSuperAdminContext(runBatch)
+      : await this.db.withTenantContext(tenantId, runBatch);
+
+    if (affectedRows && affectedRows.length > 0) {
+      const pipeline = this.redis.client.pipeline();
+      for (const row of affectedRows) {
+        const rowTenant = row.tenant_id || tenantId || 'global';
+        pipeline.del(`link:detail:${rowTenant}:${row.id}`);
+        pipeline.del(`link:code:${row.domain_id}:${row.short_code}`);
+        if (row.alias) {
+          pipeline.del(`link:alias:${rowTenant}:${row.alias}`);
+        }
+      }
+      await pipeline.exec().catch(() => {});
+    }
+
+    return reply.send({
+      success: true,
+      data: {
+        action: dto.action,
+        count: affectedRows?.length || 0,
+        affectedIds: (affectedRows || []).map((r: any) => r.id),
+      },
+      message: `Successfully ${dto.action === 'archive' ? 'archived' : dto.action === 'restore' ? 'restored' : 'deleted'} ${affectedRows?.length || 0} links`,
+    });
+  }
+
   @Post(':id/clone')
   @RequireScope(ApiScopes.LINKS_WRITE)
   @UseInterceptors(IdempotencyInterceptor)
@@ -386,8 +480,17 @@ export class LinksController {
       }
 
       if (cursor) {
-        params.push(new Date(cursor));
-        conditions.push(`created_at < $${params.length}`);
+        if (cursor.includes('__')) {
+          const [curTime, curId] = cursor.split('__');
+          params.push(new Date(curTime));
+          const timeIdx = params.length;
+          params.push(curId);
+          const idIdx = params.length;
+          conditions.push(`(created_at < $${timeIdx} OR (created_at = $${timeIdx} AND id < $${idIdx}))`);
+        } else {
+          params.push(new Date(cursor));
+          conditions.push(`created_at < $${params.length}`);
+        }
       }
 
       if (conditions.length > 0) {
@@ -395,7 +498,7 @@ export class LinksController {
       }
 
       params.push(limit);
-      query += ` ORDER BY created_at DESC LIMIT $${params.length}`;
+      query += ` ORDER BY created_at DESC, id DESC LIMIT $${params.length}`;
 
       const res = await client.query(query, params);
       return res.rows;
@@ -405,11 +508,16 @@ export class LinksController {
       ? await this.db.withSuperAdminContext(runQuery)
       : await this.db.withTenantContext(targetTenantId || auth.tenantId, runQuery);
 
+    const lastItem = links.length === limit ? links[links.length - 1] : null;
+    const nextCursor = lastItem
+      ? `${lastItem.created_at instanceof Date ? lastItem.created_at.toISOString() : lastItem.created_at}__${lastItem.id}`
+      : null;
+
     return reply.send({
       success: true,
       data: {
         items: links.map((l: any) => ({ ...l, shortUrl: UrlService.buildShortUrl(l.short_code) })),
-        nextCursor: links.length === limit ? links[links.length - 1].created_at : null,
+        nextCursor,
       },
     });
   }
