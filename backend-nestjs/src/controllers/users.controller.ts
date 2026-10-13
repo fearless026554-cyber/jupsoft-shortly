@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Patch, Delete, Param, Query, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Query, Req, Res, UseGuards, UseInterceptors, Logger } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import * as crypto from 'node:crypto';
 import { DatabaseService } from '../db/database.service.js';
 import { RedisService } from '../redis/redis.service.js';
+import { EmailService } from '../services/email.service.js';
+import { env } from '../config/env.js';
 import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor.js';
 import {
@@ -43,9 +45,12 @@ const patchUserRoleSchema = z.object({
 @Controller('api/v1/users')
 @UseGuards(AuthGuard)
 export class UsersController {
+  private readonly logger = new Logger(UsersController.name);
+
   constructor(
     private readonly db: DatabaseService,
-    private readonly redis: RedisService
+    private readonly redis: RedisService,
+    private readonly emailService: EmailService,
   ) {}
 
   @Get()
@@ -141,12 +146,27 @@ export class UsersController {
       return res.rows[0];
     });
 
+    // Automated Transactional Email: Dispatch credentials to user inbox
+    this.emailService
+      .sendUserCredentialsEmail({
+        toEmail: created.email,
+        toName: created.name || created.email.split('@')[0],
+        role: created.role,
+        tempPassword: rawPassword,
+        portalUrl: env.FRONTEND_URL || 'https://go.jupsoft.com',
+        isPasswordReset: false,
+      })
+      .catch((err) => {
+        this.logger.error(`Failed to send welcome credentials email to ${created.email}: ${err.message}`);
+      });
+
     return reply.status(201).send({
       success: true,
       data: {
         ...created,
         initialPassword: rawPassword,
         mustResetPassword: isGeneratedPassword,
+        emailSent: true,
       },
     });
   }
@@ -279,7 +299,23 @@ export class UsersController {
       await this.redis.incrementUserTokenVersion(id);
     }
 
-    return reply.send({ success: true, data: updated });
+    // Automated Transactional Email: If password was reset, send new credentials to user
+    if (dto.password) {
+      this.emailService
+        .sendUserCredentialsEmail({
+          toEmail: updated.email,
+          toName: updated.name || updated.email.split('@')[0],
+          role: updated.role,
+          tempPassword: dto.password,
+          portalUrl: env.FRONTEND_URL || 'https://go.jupsoft.com',
+          isPasswordReset: true,
+        })
+        .catch((err) => {
+          this.logger.error(`Failed to send password reset email to ${updated.email}: ${err.message}`);
+        });
+    }
+
+    return reply.send({ success: true, data: { ...updated, emailSent: !!dto.password } });
   }
 
   @Delete(':id')

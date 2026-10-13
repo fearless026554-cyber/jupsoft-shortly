@@ -757,6 +757,24 @@ export const api = {
     });
     return res.json();
   },
+
+  async forgotPassword(email: string) {
+    const res = await secureFetch(`${API_BASE_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    return res.json();
+  },
+
+  async resetPasswordWithToken(payload: { token: string; newPassword: string }) {
+    const res = await secureFetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
 };
 
 // Utility to export table data to CSV file

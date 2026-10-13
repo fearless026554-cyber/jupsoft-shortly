@@ -74,6 +74,13 @@ const envSchema = z
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
 
+    // AWS SES & Email Dispatch (Transactional Emails)
+    AWS_SES_REGION: z.string().optional().default('ap-south-1'),
+    AWS_SES_ACCESS_KEY_ID: z.string().optional(),
+    AWS_SES_SECRET_ACCESS_KEY: z.string().optional(),
+    SES_FROM_EMAIL: z.string().email().optional().default('do_not_reply@jupsoft.com'),
+    FRONTEND_URL: z.string().url().optional().default('https://go.jupsoft.com'),
+
     // Server Networking & Public IP Override
     SERVER_PUBLIC_IP: z.string().optional(),
   })

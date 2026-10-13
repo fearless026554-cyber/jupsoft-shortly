@@ -216,6 +216,11 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
             </div>
           </div>
 
+          <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl flex items-center gap-2.5 text-xs text-blue-700 dark:text-blue-300">
+            <Mail className="w-4 h-4 shrink-0 text-blue-500" />
+            <span>Account credentials (Email, Password, Portal URL) will be automatically dispatched to this inbox via AWS SES.</span>
+          </div>
+
           <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2.5">
             <button
               type="button"

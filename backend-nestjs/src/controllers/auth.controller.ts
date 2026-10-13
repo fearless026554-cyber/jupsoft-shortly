@@ -7,6 +7,7 @@ import * as crypto from 'node:crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { DatabaseService } from '../db/database.service.js';
 import { RedisService } from '../redis/redis.service.js';
+import { EmailService } from '../services/email.service.js';
 import { AuthGuard, Public } from '../common/guards/auth.guard.js';
 import { env } from '../config/env.js';
 import { ROLE_SCOPES, UserRoleType, ErrorCodes, validatePasswordStrength } from '../constants/index.js';
@@ -14,6 +15,15 @@ import { ROLE_SCOPES, UserRoleType, ErrorCodes, validatePasswordStrength } from 
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1, 'Password is required'),
+});
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email('Please provide a valid email address'),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(16, 'Invalid or missing reset token'),
+  newPassword: z.string().min(8, 'Password must be at least 8 characters').max(128),
 });
 
 const googleAuthSchema = z
@@ -36,6 +46,7 @@ export class AuthController {
   constructor(
     private readonly db: DatabaseService,
     private readonly redis: RedisService,
+    private readonly emailService: EmailService,
   ) {}
 
   @Public()
@@ -597,6 +608,180 @@ export class AuthController {
     await this.redis.incrementUserTokenVersion(auth.userId);
 
     return reply.send({ success: true, message: 'Password updated successfully' });
+  }
+
+  @Public()
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: unknown, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+    const geoUa = (req as any).geoUa;
+    const clientIp = (env.TRUST_PROXY ? geoUa?.clientIp : req.ip) || req.ip || '127.0.0.1';
+
+    // Rate Limit: Prevent flooding reset emails (Max 5 requests per 10 min per IP)
+    const ipRateKey = `rate:forgot_pwd:ip:${clientIp}`;
+    const ipAttempts = await this.redis.client.incr(ipRateKey);
+    if (ipAttempts === 1) await this.redis.client.expire(ipRateKey, 600);
+    if (ipAttempts > 5) {
+      return reply.status(429).send({
+        success: false,
+        error: {
+          code: ErrorCodes.RATE_LIMIT_EXCEEDED,
+          message: 'Too many password reset requests from this IP. Please wait a few minutes before trying again.',
+        },
+      });
+    }
+
+    const parseResult = forgotPasswordSchema.safeParse(body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: 'Please provide a valid email address',
+          details: parseResult.error.issues,
+        },
+      });
+    }
+
+    const email = parseResult.data.email.toLowerCase().trim();
+
+    // Rate Limit: Max 3 requests per 15 min per target email
+    const emailRateKey = `rate:forgot_pwd:email:${email}`;
+    const emailAttempts = await this.redis.client.incr(emailRateKey);
+    if (emailAttempts === 1) await this.redis.client.expire(emailRateKey, 900);
+    if (emailAttempts > 3) {
+      return reply.send({
+        success: true,
+        message: 'If an account exists with this email address, a password reset link has been dispatched.',
+      });
+    }
+
+    // Lookup user in database
+    const userRes = await this.db.withSuperAdminContext(async (client) => {
+      return client.query(
+        `SELECT id, name, email, status FROM users WHERE LOWER(email) = LOWER($1) AND status != 'suspended'`,
+        [email]
+      );
+    });
+
+    if (userRes.rowCount && userRes.rowCount > 0) {
+      const user = userRes.rows[0];
+      const resetToken = crypto.randomBytes(32).toString('hex');
+
+      // Store in Redis with 15-minute TTL (900 seconds)
+      const tokenKey = `pwd_reset:${resetToken}`;
+      await this.redis.client.setex(
+        tokenKey,
+        900,
+        JSON.stringify({
+          userId: user.id,
+          email: user.email,
+        })
+      );
+
+      const portalBase = env.FRONTEND_URL || 'https://go.jupsoft.com';
+      const resetUrl = `${portalBase}/login?resetToken=${resetToken}`;
+
+      // Dispatch transactional email asynchronously via AWS SES
+      this.emailService
+        .sendPasswordResetLinkEmail({
+          toEmail: user.email,
+          toName: user.name || user.email.split('@')[0],
+          resetUrl,
+          expiresInMinutes: 15,
+        })
+        .catch((err) => {
+          this.logger.error(`Failed to send password reset email to ${user.email}: ${err.message}`);
+        });
+    }
+
+    return reply.send({
+      success: true,
+      message: 'If an account exists with this email address, a password reset link has been dispatched.',
+    });
+  }
+
+  @Public()
+  @Post('reset-password')
+  async resetPassword(@Body() body: unknown, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+    const parseResult = resetPasswordSchema.safeParse(body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: 'Invalid token or password requirements not met',
+          details: parseResult.error.issues,
+        },
+      });
+    }
+
+    const { token, newPassword } = parseResult.data;
+
+    // Validate password complexity
+    const strengthCheck = validatePasswordStrength(newPassword);
+    if (!strengthCheck.valid) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: strengthCheck.message || 'Password does not meet complexity requirements',
+        },
+      });
+    }
+
+    // Verify token from Redis
+    const tokenKey = `pwd_reset:${token}`;
+    const tokenDataRaw = await this.redis.client.get(tokenKey);
+    if (!tokenDataRaw) {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: 'Password reset link is invalid or has expired. Please request a new one.',
+        },
+      });
+    }
+
+    let tokenData: { userId: string; email: string };
+    try {
+      tokenData = JSON.parse(tokenDataRaw);
+    } catch {
+      return reply.status(400).send({
+        success: false,
+        error: {
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: 'Malformed reset token.',
+        },
+      });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+
+    // Update password hash and activate user if in invited status
+    await this.db.withSuperAdminContext(async (client) => {
+      await client.query(
+        `UPDATE users 
+         SET password_hash = $1, 
+             status = CASE WHEN status = 'invited' THEN 'active' ELSE status END, 
+             updated_at = NOW() 
+         WHERE id = $2`,
+        [newHash, tokenData.userId]
+      );
+    });
+
+    // Invalidate the single-use reset token
+    await this.redis.client.del(tokenKey);
+
+    // Invalidate user sessions and cached status
+    await this.redis.incrementUserTokenVersion(tokenData.userId);
+    await this.redis.invalidateUserStatus(tokenData.userId);
+
+    this.logger.log(`Password successfully reset for user ${tokenData.email} (${tokenData.userId})`);
+
+    return reply.send({
+      success: true,
+      message: 'Your password has been successfully reset. You can now sign in with your new password.',
+    });
   }
 
   @UseGuards(AuthGuard)

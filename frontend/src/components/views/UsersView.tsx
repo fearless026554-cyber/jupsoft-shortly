@@ -154,6 +154,8 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
       if (res.success) {
         setShareCredentials({ user: resetTarget, password: newPassword });
         setResetTarget(null);
+        setSuccessNotification(`Password updated! Credentials have been automatically emailed to ${resetTarget.email}.`);
+        setTimeout(() => setSuccessNotification(null), 5000);
       } else {
         setResetError(res.error?.message || 'Failed to reset password');
       }
@@ -1134,6 +1136,11 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
                   {shareCredentials.password}
                 </span>
               </div>
+            </div>
+
+            <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-xl flex items-center gap-2.5 text-xs text-blue-700 dark:text-blue-300">
+              <Mail className="w-4 h-4 shrink-0 text-blue-500" />
+              <span>An automated email with these credentials has been dispatched to <strong>{shareCredentials.user.email}</strong> via AWS SES.</span>
             </div>
 
             <div className="flex items-center justify-between pt-2">

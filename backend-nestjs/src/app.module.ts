@@ -21,6 +21,7 @@ import { HealthController } from './controllers/health.controller.js';
 import { ClickProcessor } from './workers/click.processor.js';
 import { BulkProcessor } from './workers/bulk.processor.js';
 import { ScreeningProcessor } from './workers/screening.processor.js';
+import { EmailService } from './services/email.service.js';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { ScreeningProcessor } from './workers/screening.processor.js';
     ClickProcessor,
     BulkProcessor,
     ScreeningProcessor,
+    EmailService,
   ],
 })
 export class AppModule {}
