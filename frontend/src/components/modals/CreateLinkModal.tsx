@@ -15,6 +15,7 @@ import {
   Clock,
   Timer,
   AlertTriangle,
+  Shield,
 } from 'lucide-react';
 import { api, CreateLinkDto, API_BASE_URL } from '../../api';
 import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
@@ -37,6 +38,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
   const [maxClicks, setMaxClicks] = useState<number | undefined>(undefined);
   const [expiresAt, setExpiresAt] = useState<string>('');
   const [expirationMode, setExpirationMode] = useState<'never' | '1h' | '24h' | '7d' | '30d' | '90d' | 'custom'>('never');
+  const [isPermanent, setIsPermanent] = useState(false);
   const { defaultDomain } = useTenantDomains();
 
   const [loading, setLoading] = useState(false);
@@ -136,6 +138,8 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
         externalRef: externalRef.trim() || undefined,
         maxClicks: maxClicks ? Number(maxClicks) : undefined,
         expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
+        isPermanent: isPermanent,
+        is_permanent: isPermanent,
       };
 
       const res = await api.createLink(dto);
@@ -159,6 +163,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
     setMaxClicks(undefined);
     setExpiresAt('');
     setExpirationMode('never');
+    setIsPermanent(false);
     setCreatedData(null);
     setError(null);
     onClose();
@@ -464,10 +469,55 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
                   </div>
                 ) : (
                   <div className="text-[10px] text-slate-400 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    Permanent link (Never expires).
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    No timer set (Never expires).
                   </div>
                 )}
+              </div>
+
+              {/* Enterprise Permanent Link Designation */}
+              <div
+                className={`p-3 rounded-lg border transition-all ${
+                  isPermanent
+                    ? 'bg-amber-50/90 border-amber-300 ring-1 ring-amber-400/30'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                        isPermanent
+                          ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                          : 'bg-slate-200 text-slate-500'
+                      }`}
+                    >
+                      <Shield className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        <span>Permanent Link (Protected Asset)</span>
+                        {isPermanent && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 uppercase tracking-wider">
+                            Protected
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                        Enterprise protection: Deletion requires Admin multi-step verification. Only permanent links can be restored if archived.
+                      </p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                    <input
+                      type="checkbox"
+                      checked={isPermanent}
+                      onChange={(e) => setIsPermanent(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

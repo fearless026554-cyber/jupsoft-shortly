@@ -28,8 +28,9 @@ import { CreateLinkModal } from './modals/CreateLinkModal';
 import { CreateTenantModal } from './modals/CreateTenantModal';
 import { InviteUserModal } from './modals/InviteUserModal';
 import { CreateApiKeyModal } from './modals/CreateApiKeyModal';
+import { PermanentLinkDeleteModal } from './modals/PermanentLinkDeleteModal';
 import { ConfirmDialog } from './ui/ConfirmDialog';
-import { Permissions } from '../utils/rbac';
+import { Permissions, isPermanentLink } from '../utils/rbac';
 
 // Route mapping for full semantic routing
 const MODULE_ROUTES: Record<ActiveModule, string> = {
@@ -249,6 +250,9 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
     onConfirm: () => {},
   });
 
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<LinkItem | null>(null);
+  const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string } | null>(null);
+
   // Load Tenants & Data
   const loadTenants = async () => {
     try {
@@ -388,47 +392,137 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
 
   const handleArchiveLink = async (id: string) => {
     const targetLink = links.find((l) => l.id === id);
+    if (!targetLink) return;
+
+    if (isPermanentLink(targetLink)) {
+      if (!Permissions.canManagePermanentLinks(currentUser?.role)) {
+        setAlertConfig({
+          isOpen: true,
+          title: 'Permission Denied',
+          message: 'This link is a Permanent Protected Asset. Only Super Admin and Tenant Admin can archive or delete permanent links.',
+        });
+        return;
+      }
+      setPermanentDeleteTarget(targetLink);
+      return;
+    }
+
     const domainHost =
       (targetLink as any)?.domain?.hostname ||
       process.env.NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN ||
       '';
-    const fullUrl = targetLink ? `https://${domainHost}/${targetLink.short_code}` : 'this short link';
+    const fullUrl = `https://${domainHost}/${targetLink.short_code}`;
     setConfirmConfig({
       isOpen: true,
       title: 'Archive Link',
-      message: `Are you sure you want to archive the link ${fullUrl}? It will be deactivated and moved to Archive.`,
+      message: `Are you sure you want to archive the link ${fullUrl}? It will be deactivated and moved to Archive. Note: standard links cannot be restored once archived.`,
       onConfirm: async () => {
         await api.archiveLink(id);
         if (drawerLink?.id === id) setDrawerLink(null);
         await refreshLinks();
-        setConfirmConfig(prev => ({ ...prev, isOpen: false }));
-      }
+        setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+      },
     });
   };
 
   const handleRestoreLink = async (id: string) => {
+    const targetLink = links.find((l) => l.id === id);
+    if (targetLink && !isPermanentLink(targetLink)) {
+      setAlertConfig({
+        isOpen: true,
+        title: 'Cannot Restore',
+        message: 'Only Permanent Protected links can be restored. Standard links cannot be restored once archived.',
+      });
+      return;
+    }
+
+    if (targetLink && isPermanentLink(targetLink) && !Permissions.canManagePermanentLinks(currentUser?.role)) {
+      setAlertConfig({
+        isOpen: true,
+        title: 'Permission Denied',
+        message: 'Only Super Admin and Tenant Admin can restore Permanent Protected links.',
+      });
+      return;
+    }
+
     try {
-      await api.updateLink(id, { status: 'active' });
-      if (drawerLink?.id === id) {
-        setDrawerLink((prev) => prev ? { ...prev, status: 'active' } : null);
+      const res = await api.updateLink(id, { status: 'active' });
+      if (res.success) {
+        if (drawerLink?.id === id) {
+          setDrawerLink((prev) => (prev ? { ...prev, status: 'active' } : null));
+        }
+        await refreshLinks();
+      } else {
+        setAlertConfig({
+          isOpen: true,
+          title: 'Restore Failed',
+          message: res.error?.message || 'Failed to restore link.',
+        });
       }
-      await refreshLinks();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to restore link:', err);
+      setAlertConfig({
+        isOpen: true,
+        title: 'Restore Failed',
+        message: err?.message || 'Network error while restoring link.',
+      });
     }
   };
 
   const handleDeletePermanently = async (id: string) => {
-    try {
-      await api.deleteLinkPermanently(id);
-      if (drawerLink?.id === id) setDrawerLink(null);
-      await refreshLinks();
-    } catch (err) {
-      console.error('Failed to permanently delete link:', err);
+    const targetLink = links.find((l) => l.id === id);
+    if (!targetLink) return;
+
+    if (isPermanentLink(targetLink)) {
+      if (!Permissions.canManagePermanentLinks(currentUser?.role)) {
+        setAlertConfig({
+          isOpen: true,
+          title: 'Permission Denied',
+          message: 'Only Super Admin and Tenant Admin can permanently delete Permanent Protected links.',
+        });
+        return;
+      }
+      setPermanentDeleteTarget(targetLink);
+      return;
     }
+
+    const domainHost =
+      (targetLink as any)?.domain?.hostname ||
+      process.env.NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN ||
+      '';
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Permanently Delete Link',
+      message: `Are you sure you want to permanently delete https://${domainHost}/${targetLink.short_code}? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await api.deleteLinkPermanently(id);
+          if (drawerLink?.id === id) setDrawerLink(null);
+          await refreshLinks();
+        } catch (err) {
+          console.error('Failed to permanently delete link:', err);
+        } finally {
+          setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   };
 
   const handleBatchArchive = async (ids: string[]) => {
+    const hasPermanent = ids.some((id) => {
+      const l = links.find((x) => x.id === id);
+      return l && isPermanentLink(l);
+    });
+
+    if (hasPermanent && !Permissions.canManagePermanentLinks(currentUser?.role)) {
+      setAlertConfig({
+        isOpen: true,
+        title: 'Permission Denied',
+        message: 'Selected items contain Permanent Protected links. Only Super Admin and Tenant Admin can archive permanent links.',
+      });
+      return;
+    }
+
     try {
       await api.batchArchive(ids);
       if (drawerLink && ids.includes(drawerLink.id)) setDrawerLink(null);
@@ -440,12 +534,42 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
   };
 
   const handleBatchRestore = async (ids: string[]) => {
+    if (!Permissions.canManagePermanentLinks(currentUser?.role)) {
+      setAlertConfig({
+        isOpen: true,
+        title: 'Permission Denied',
+        message: 'Only Super Admin and Tenant Admin can restore permanent links.',
+      });
+      return;
+    }
+
+    const permanentIds = ids.filter((id) => {
+      const l = links.find((x) => x.id === id);
+      return l && isPermanentLink(l);
+    });
+
+    if (permanentIds.length === 0) {
+      setAlertConfig({
+        isOpen: true,
+        title: 'Cannot Restore Selected',
+        message: 'None of the selected links are Permanent. Standard links cannot be restored once archived.',
+      });
+      return;
+    }
+
     try {
-      await api.batchRestore(ids);
-      if (drawerLink && ids.includes(drawerLink.id)) {
+      await api.batchRestore(permanentIds);
+      if (drawerLink && permanentIds.includes(drawerLink.id)) {
         setDrawerLink((prev) => (prev ? { ...prev, status: 'active' } : null));
       }
       await refreshLinks();
+      if (permanentIds.length < ids.length) {
+        setAlertConfig({
+          isOpen: true,
+          title: 'Partial Restore Completed',
+          message: `Restored ${permanentIds.length} permanent link(s). The other ${ids.length - permanentIds.length} non-permanent link(s) cannot be restored.`,
+        });
+      }
     } catch (err) {
       console.error('Batch restore failed:', err);
       await refreshLinks();
@@ -788,6 +912,7 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
           setDrawerLink(updated);
           refreshLinks();
         }}
+        currentUser={currentUser}
       />
 
       {/* 4. Global Modals */}
@@ -829,7 +954,43 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
         confirmText="Archive"
         isDestructive={true}
         onConfirm={confirmConfig.onConfirm}
-        onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+        onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {alertConfig?.isOpen && (
+        <ConfirmDialog
+          isOpen={true}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          confirmText="Dismiss"
+          isDestructive={false}
+          onConfirm={() => setAlertConfig(null)}
+          onCancel={() => setAlertConfig(null)}
+        />
+      )}
+
+      {/* 6. Multi-Step Permanent Link Protected Deletion Modal */}
+      <PermanentLinkDeleteModal
+        isOpen={Boolean(permanentDeleteTarget)}
+        link={permanentDeleteTarget}
+        defaultDomain={
+          (permanentDeleteTarget as any)?.domain?.hostname ||
+          process.env.NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN ||
+          'short.jupsoft.com'
+        }
+        onClose={() => setPermanentDeleteTarget(null)}
+        onArchive={async (id) => {
+          await api.archiveLink(id);
+          if (drawerLink?.id === id) setDrawerLink(null);
+          await refreshLinks();
+          setPermanentDeleteTarget(null);
+        }}
+        onDeletePermanently={async (id) => {
+          await api.deleteLinkPermanently(id);
+          if (drawerLink?.id === id) setDrawerLink(null);
+          await refreshLinks();
+          setPermanentDeleteTarget(null);
+        }}
       />
     </div>
   );

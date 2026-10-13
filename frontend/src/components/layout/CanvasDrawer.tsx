@@ -17,9 +17,12 @@ import {
   Timer,
   Edit2,
   AlertTriangle,
+  Shield,
+  RotateCcw,
 } from 'lucide-react';
 import { api, LinkItem, API_BASE_URL } from '../../api';
 import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
+import { isPermanentLink, Permissions } from '../../utils/rbac';
 
 interface CanvasDrawerProps {
   link: LinkItem | null;
@@ -28,9 +31,10 @@ interface CanvasDrawerProps {
   onRestore?: (id: string) => void;
   onDeletePermanently?: (id: string) => void;
   onLinkUpdated?: (updated: LinkItem) => void;
+  currentUser?: any;
 }
 
-export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArchive, onRestore, onDeletePermanently, onLinkUpdated }) => {
+export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArchive, onRestore, onDeletePermanently, onLinkUpdated, currentUser }) => {
   const [copied, setCopied] = useState(false);
   const [isEditingExpiry, setIsEditingExpiry] = useState(false);
   const [savingExpiry, setSavingExpiry] = useState(false);
@@ -38,6 +42,7 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
   const [isEditingLink, setIsEditingLink] = useState(false);
   const [destinationInput, setDestinationInput] = useState('');
   const [aliasInput, setAliasInput] = useState('');
+  const [isPermanentInput, setIsPermanentInput] = useState(false);
   const [savingLink, setSavingLink] = useState(false);
   const [linkError, setLinkError] = useState('');
   const { defaultDomain } = useTenantDomains();
@@ -48,8 +53,9 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
     setIsEditingLink(false);
     setDestinationInput(link?.destination_url || '');
     setAliasInput(link?.alias || link?.short_code || '');
+    setIsPermanentInput(isPermanentLink(link));
     setLinkError('');
-  }, [link?.id, link?.destination_url, link?.alias, link?.short_code]);
+  }, [link?.id, link?.destination_url, link?.alias, link?.short_code, link?.is_permanent, (link as any)?.isPermanent, link?.external_ref]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -125,9 +131,10 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
     }
   };
 
-    const handleOpenEdit = () => {
+  const handleOpenEdit = () => {
     setDestinationInput(link?.destination_url || '');
     setAliasInput(link?.alias || link?.short_code || '');
+    setIsPermanentInput(isPermanentLink(link));
     setLinkError('');
     setIsEditingLink(true);
   };
@@ -164,23 +171,31 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
 
     const destChanged = trimmedDest !== link.destination_url;
     const aliasChanged = trimmedAlias !== (link.alias || link.short_code);
+    const permChanged = isPermanentInput !== isPermanentLink(link);
 
-    if (!destChanged && !aliasChanged) {
+    if (!destChanged && !aliasChanged && !permChanged) {
       setIsEditingLink(false);
       return;
     }
 
     setSavingLink(true);
     try {
-      const payload: { destinationUrl?: string; alias?: string } = {};
+      const payload: { destinationUrl?: string; alias?: string; isPermanent?: boolean; externalRef?: string } = {};
       if (destChanged) payload.destinationUrl = trimmedDest;
       if (aliasChanged) payload.alias = trimmedAlias;
+      if (permChanged) {
+        payload.isPermanent = isPermanentInput;
+        if (isPermanentInput) {
+          payload.externalRef = 'PERMANENT';
+        }
+      }
 
       const res = await api.updateLink(link.id, payload);
       if (res.success && res.data) {
         setIsEditingLink(false);
         setDestinationInput(res.data.destination_url || trimmedDest);
         setAliasInput(res.data.alias || res.data.short_code || trimmedAlias);
+        setIsPermanentInput(isPermanentLink(res.data));
         onLinkUpdated?.(res.data);
       } else {
         setLinkError(res.error?.message || 'Failed to update link configuration');
@@ -206,7 +221,13 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
         <div className="h-14 px-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
         <div className="font-bold text-slate-800 text-xs uppercase tracking-wide flex items-center gap-1.5">
           <Eye className="w-3.5 h-3.5 text-blue-600" />
-          Link Details
+          <span>Link Details</span>
+          {isPermanentLink(link) && (
+            <span className="ml-1.5 inline-flex items-center gap-1 text-[9px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full uppercase tracking-wider">
+              <Shield className="w-2.5 h-2.5 text-amber-600" />
+              Permanent
+            </span>
+          )}
         </div>
         <button
           onClick={onClose}
@@ -352,6 +373,43 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
                 className="w-full bg-white border border-slate-300 focus:border-blue-500 focus:outline-hidden focus:ring-1 focus:ring-blue-500 rounded p-1.5 text-xs font-mono text-slate-800 shadow-2xs"
               />
             </div>
+
+            {/* 3. Permanent Protected Asset Designation (Admins only) */}
+            {Permissions.canManagePermanentLinks(currentUser?.role) && (
+              <div
+                className={`p-2.5 rounded-lg border transition ${
+                  isPermanentInput ? 'bg-amber-50/80 border-amber-300' : 'bg-white border-slate-200'
+                } flex items-center justify-between`}
+              >
+                <div className="flex items-center gap-2">
+                  <Shield
+                    className={`w-4 h-4 shrink-0 ${isPermanentInput ? 'text-amber-600' : 'text-slate-400'}`}
+                  />
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                      <span>Permanent Protected Asset</span>
+                      {isPermanentInput && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 uppercase">
+                          Protected
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      Deletion requires verification; restorable from Archive.
+                    </div>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer ml-2 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={isPermanentInput}
+                    onChange={(e) => setIsPermanentInput(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-4 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+            )}
 
             {linkError && (
               <div className="text-[11px] text-rose-600 font-medium bg-rose-50 p-2 rounded border border-rose-200">
@@ -575,17 +633,25 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
           </a>
           {link.status === 'archived' ? (
             <div className="space-y-2">
-              <button
-                onClick={() => onRestore && onRestore(link.id)}
-                className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded font-semibold text-center transition cursor-pointer flex items-center justify-center gap-1.5"
-              >
-                Restore Short Link
-              </button>
+              {isPermanentLink(link) ? (
+                <button
+                  onClick={() => onRestore && onRestore(link.id)}
+                  className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded font-semibold text-center transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Restore Short Link
+                </button>
+              ) : (
+                <div className="p-2.5 text-center text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg italic">
+                  Non-restorable: Standard short links cannot be restored once archived.
+                </div>
+              )}
               {onDeletePermanently && (
                 <button
                   onClick={() => onDeletePermanently(link.id)}
                   className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded font-semibold text-center transition cursor-pointer flex items-center justify-center gap-1.5"
                 >
+                  <Trash2 className="w-3.5 h-3.5" />
                   Permanently Delete
                 </button>
               )}
@@ -595,7 +661,7 @@ export const CanvasDrawer: React.FC<CanvasDrawerProps> = ({ link, onClose, onArc
               onClick={() => onArchive(link.id)}
               className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded font-semibold text-center transition cursor-pointer"
             >
-              Archive Short Link
+              {isPermanentLink(link) ? 'Archive Protected Link' : 'Archive Short Link'}
             </button>
           )}
         </div>

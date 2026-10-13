@@ -517,5 +517,24 @@ export const Permissions = {
   canBulkCreate: (role?: string): boolean => Boolean(role && role !== 'read_only'),
   canRecordOutcomes: (role?: string): boolean =>
     role === 'super_admin' || role === 'tenant_admin' || role === 'manager',
+  canManagePermanentLinks: (role?: string): boolean => role === 'super_admin' || role === 'tenant_admin',
   isReadOnly: (role?: string): boolean => role === 'read_only',
 };
+
+export function isPermanentLink(link: any): boolean {
+  if (!link) return false;
+  if (link.is_permanent === true || link.isPermanent === true) return true;
+  if (typeof link.external_ref === 'string') {
+    if (link.external_ref === 'PERMANENT' || link.external_ref.startsWith('PERMANENT')) return true;
+  }
+  if (typeof link.externalRef === 'string') {
+    if (link.externalRef === 'PERMANENT' || link.externalRef.startsWith('PERMANENT')) return true;
+  }
+  if (typeof link.tag === 'string' && link.tag.toLowerCase() === 'permanent') return true;
+  const dest = link.destination_url || link.destinationUrl;
+  if (typeof dest === 'string' && (dest.includes('play.google.com') || dest.includes('apps.apple.com'))) {
+    return true;
+  }
+  return false;
+}
+

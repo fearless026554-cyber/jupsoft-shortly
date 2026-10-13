@@ -38,6 +38,23 @@ import {
   UserRoles,
 } from '../constants/index.js';
 
+export function isLinkPermanent(link: any): boolean {
+  if (!link) return false;
+  if (link.is_permanent === true || link.isPermanent === true) return true;
+  if (typeof link.external_ref === 'string') {
+    if (link.external_ref === 'PERMANENT' || link.external_ref.startsWith('PERMANENT')) return true;
+  }
+  if (typeof link.externalRef === 'string') {
+    if (link.externalRef === 'PERMANENT' || link.externalRef.startsWith('PERMANENT')) return true;
+  }
+  if (typeof link.tag === 'string' && link.tag.toLowerCase() === 'permanent') return true;
+  const dest = link.destination_url || link.destinationUrl;
+  if (typeof dest === 'string' && (dest.includes('play.google.com') || dest.includes('apps.apple.com'))) {
+    return true;
+  }
+  return false;
+}
+
 const createLinkSchema = z.object({
   destinationUrl: z.string().url('Must be a valid URL'),
   alias: z.string().max(LINK_LIMITS.MAX_ALIAS_LEN).optional(),
@@ -47,6 +64,8 @@ const createLinkSchema = z.object({
   tag: z.string().max(LINK_LIMITS.MAX_TAG_LEN).optional(),
   externalRef: z.string().max(LINK_LIMITS.MAX_EXTERNAL_REF_LEN).optional(),
   redirectType: z.enum(REDIRECT_TYPES).default(String(FALLBACKS.REDIRECT_TYPE) as RedirectType),
+  isPermanent: z.boolean().optional(),
+  is_permanent: z.boolean().optional(),
 });
 
 const patchLinkSchema = z.object({
@@ -56,6 +75,8 @@ const patchLinkSchema = z.object({
   maxClicks: z.number().int().positive().nullable().optional(),
   tag: z.string().max(LINK_LIMITS.MAX_TAG_LEN).nullable().optional(),
   alias: z.string().max(LINK_LIMITS.MAX_ALIAS_LEN).nullable().optional(),
+  isPermanent: z.boolean().optional(),
+  is_permanent: z.boolean().optional(),
 });
 
 const bulkCreateSchema = z.object({
@@ -123,6 +144,11 @@ export class LinksController {
       }
     }
 
+    const wantsPermanent = Boolean(dto.isPermanent || (dto as any).is_permanent);
+    if (wantsPermanent) {
+      dto.externalRef = dto.externalRef ? `PERMANENT:${dto.externalRef}` : 'PERMANENT';
+    }
+
     const result = await this.db.withTenantContext(tenantId, async (client) => {
       const created = await LinkService.createLink(client, tenantId, dto, domainId);
       await AuditService.log(client, {
@@ -171,6 +197,8 @@ export class LinksController {
         status: linkRow.status,
         expiresAt: linkRow.expires_at || linkRow.expiresAt,
         externalRef: linkRow.external_ref || linkRow.externalRef,
+        isPermanent: wantsPermanent || isLinkPermanent(linkRow),
+        is_permanent: wantsPermanent || isLinkPermanent(linkRow),
         createdAt: linkRow.created_at || linkRow.createdAt,
       },
     });
@@ -308,9 +336,51 @@ export class LinksController {
       });
     }
 
+    const isSuperOrAdmin = auth?.role === UserRoles.SUPER_ADMIN || auth?.role === UserRoles.TENANT_ADMIN || auth?.scopes?.includes('*');
+
     const runBatch = async (client: any) => {
+      // Security check: inspect permanent links in the target batch
+      const inspectRes = await client.query(
+        isSuperAdmin && !tenantId
+          ? `SELECT id, short_code, alias, domain_id, destination_url, external_ref, tag, status FROM links WHERE id = ANY($1::uuid[])`
+          : `SELECT id, short_code, alias, domain_id, destination_url, external_ref, tag, status FROM links WHERE id = ANY($1::uuid[]) AND tenant_id = $2`,
+        isSuperAdmin && !tenantId ? [validIds] : [validIds, tenantId]
+      );
+      const targetRows = inspectRes.rows;
+      if (targetRows.length === 0) return [];
+
+      const permRows = targetRows.filter((r: any) => isLinkPermanent(r));
+      const hasPerm = permRows.length > 0;
+
+      if (dto.action === 'restore') {
+        // Restriction: ONLY permanent links can be restored!
+        if (permRows.length === 0) {
+          const err: any = new Error('Restoration is only allowed for Permanent links. None of the selected links are permanent.');
+          err.statusCode = 403;
+          err.code = ErrorCodes.FORBIDDEN;
+          throw err;
+        }
+        if (!isSuperOrAdmin) {
+          const err: any = new Error('Only Super Administrators and Administrators can restore permanent links.');
+          err.statusCode = 403;
+          err.code = ErrorCodes.FORBIDDEN;
+          throw err;
+        }
+      } else {
+        // Delete or archive: If any target link is permanent, only Super Admin and Admin can delete it
+        if (hasPerm && !isSuperOrAdmin) {
+          const err: any = new Error('Batch contains Permanent Links. Only Super Administrators and Administrators can delete or archive permanent links.');
+          err.statusCode = 403;
+          err.code = ErrorCodes.FORBIDDEN;
+          throw err;
+        }
+      }
+
+      // For restore, only update the permanent link IDs
+      const targetIdsToProcess = dto.action === 'restore' ? permRows.map((r: any) => r.id) : validIds;
+
       let query = '';
-      const params: any[] = [validIds];
+      const params: any[] = [targetIdsToProcess];
 
       if (dto.action === 'delete') {
         if (isSuperAdmin && !tenantId) {
@@ -516,7 +586,15 @@ export class LinksController {
     return reply.send({
       success: true,
       data: {
-        items: links.map((l: any) => ({ ...l, shortUrl: UrlService.buildShortUrl(l.short_code) })),
+        items: links.map((l: any) => {
+          const perm = isLinkPermanent(l);
+          return {
+            ...l,
+            is_permanent: perm,
+            isPermanent: perm,
+            shortUrl: UrlService.buildShortUrl(l.short_code),
+          };
+        }),
         nextCursor,
       },
     });
@@ -549,7 +627,13 @@ export class LinksController {
       return reply.status(404).send({ success: false, error: { code: ErrorCodes.NOT_FOUND, message: 'Link not found' } });
     }
 
-    const responseData = { ...link, shortUrl: UrlService.buildShortUrl(link.short_code) };
+    const perm = isLinkPermanent(link);
+    const responseData = {
+      ...link,
+      is_permanent: perm,
+      isPermanent: perm,
+      shortUrl: UrlService.buildShortUrl(link.short_code),
+    };
     await this.redis.client.setex(cacheKey, 120, JSON.stringify(responseData));
 
     return reply.send({ success: true, data: responseData });
@@ -640,22 +724,59 @@ export class LinksController {
         );
       }
 
+      const isPerm = isLinkPermanent(current);
+
+      // Restriction: Only permanent links can be restored
+      if (dto.status === 'active' && current.status === 'archived') {
+        if (!isPerm) {
+          const err: any = new Error('Restoration is only allowed for Permanent links. Standard non-permanent links cannot be restored once archived.');
+          err.statusCode = 403;
+          err.code = ErrorCodes.FORBIDDEN;
+          throw err;
+        }
+        const isSuperOrAdmin = auth?.role === UserRoles.SUPER_ADMIN || auth?.role === UserRoles.TENANT_ADMIN || auth?.scopes?.includes('*');
+        if (!isSuperOrAdmin) {
+          const err: any = new Error('Only Super Administrators and Administrators can restore permanent links.');
+          err.statusCode = 403;
+          err.code = ErrorCodes.FORBIDDEN;
+          throw err;
+        }
+      }
+
+      // Permanent protection toggle
+      let newExternalRef = current.external_ref;
+      const targetPermanent = dto.isPermanent !== undefined ? dto.isPermanent : (dto as any).is_permanent;
+      if (targetPermanent !== undefined && targetPermanent !== isPerm) {
+        const isSuperOrAdmin = auth?.role === UserRoles.SUPER_ADMIN || auth?.role === UserRoles.TENANT_ADMIN || auth?.scopes?.includes('*');
+        if (!isSuperOrAdmin) {
+          const err: any = new Error('Only Super Administrators and Administrators can modify permanent protection status.');
+          err.statusCode = 403;
+          err.code = ErrorCodes.FORBIDDEN;
+          throw err;
+        }
+        if (targetPermanent) {
+          newExternalRef = current.external_ref ? `PERMANENT:${current.external_ref.replace(/^PERMANENT:?/, '')}` : 'PERMANENT';
+        } else {
+          newExternalRef = current.external_ref ? current.external_ref.replace(/^PERMANENT:?/, '') || null : null;
+        }
+      }
+
       let res;
       if (isSuperAdmin && !tenantId) {
         res = await client.query(
           `UPDATE links 
-           SET destination_url = $1, status = $2, expires_at = $3, max_clicks = $4, tag = $5, short_code = $6, alias = $7, updated_at = NOW() 
-           WHERE id = $8 
+           SET destination_url = $1, status = $2, expires_at = $3, max_clicks = $4, tag = $5, short_code = $6, alias = $7, external_ref = $8, updated_at = NOW() 
+           WHERE id = $9 
            RETURNING *`,
-          [destinationUrl, status, expiresAt, maxClicks, tag, newShortCode, newAlias, id]
+          [destinationUrl, status, expiresAt, maxClicks, tag, newShortCode, newAlias, newExternalRef, id]
         );
       } else {
         res = await client.query(
           `UPDATE links 
-           SET destination_url = $1, status = $2, expires_at = $3, max_clicks = $4, tag = $5, short_code = $6, alias = $7, updated_at = NOW() 
-           WHERE id = $8 AND tenant_id = $9 
+           SET destination_url = $1, status = $2, expires_at = $3, max_clicks = $4, tag = $5, short_code = $6, alias = $7, external_ref = $8, updated_at = NOW() 
+           WHERE id = $9 AND tenant_id = $10 
            RETURNING *`,
-          [destinationUrl, status, expiresAt, maxClicks, tag, newShortCode, newAlias, id, tenantId || current.tenant_id]
+          [destinationUrl, status, expiresAt, maxClicks, tag, newShortCode, newAlias, newExternalRef, id, tenantId || current.tenant_id]
         );
       }
 
@@ -702,7 +823,14 @@ export class LinksController {
         .catch(() => {});
     }
 
-    return reply.send({ success: true, data: updated });
+    return reply.send({
+      success: true,
+      data: {
+        ...updated,
+        is_permanent: isLinkPermanent(updated),
+        isPermanent: isLinkPermanent(updated),
+      },
+    });
   }
 
   @Delete(':id')
@@ -715,7 +843,25 @@ export class LinksController {
     const geoUa = getGeoUa(req);
     const isPermanent = permanentStr === 'true' || (req.query as any)?.permanent === 'true';
 
+    const isSuperOrAdmin = auth?.role === UserRoles.SUPER_ADMIN || auth?.role === UserRoles.TENANT_ADMIN || auth?.scopes?.includes('*');
+
     const runDelete = async (client: any) => {
+      // Security check: inspect target link
+      const targetQuery = isSuperAdmin && !tenantId
+        ? `SELECT id, domain_id, short_code, alias, tenant_id, destination_url, external_ref, tag FROM links WHERE id = $1`
+        : `SELECT id, domain_id, short_code, alias, tenant_id, destination_url, external_ref, tag FROM links WHERE id = $1 AND tenant_id = $2`;
+      const targetParams = isSuperAdmin && !tenantId ? [id] : [id, tenantId];
+      const targetCheck = await client.query(targetQuery, targetParams);
+      if (targetCheck.rowCount === 0) return null;
+      const targetLink = targetCheck.rows[0];
+
+      if (isLinkPermanent(targetLink) && !isSuperOrAdmin) {
+        const err: any = new Error('This is a Permanent Link. Only Super Administrators and Administrators can delete or archive permanent links.');
+        err.statusCode = 403;
+        err.code = ErrorCodes.FORBIDDEN;
+        throw err;
+      }
+
       let res;
       if (isPermanent) {
         if (isSuperAdmin && !tenantId) {

@@ -15,6 +15,8 @@ export interface LinkItem {
   expires_at?: string | null;
   tag?: string | null;
   external_ref?: string | null;
+  is_permanent?: boolean;
+  isPermanent?: boolean;
   created_at: string;
 }
 
@@ -26,6 +28,8 @@ export interface CreateLinkDto {
   tag?: string;
   externalRef?: string;
   redirectType?: '302' | '307';
+  isPermanent?: boolean;
+  is_permanent?: boolean;
 }
 
 export interface OutcomeRecord {
@@ -324,7 +328,7 @@ export const api = {
     return res.json();
   },
 
-  async updateLink(id: string, dto: { destinationUrl?: string; alias?: string | null; status?: string; expiresAt?: string | null; maxClicks?: number | null; tag?: string }) {
+  async updateLink(id: string, dto: { destinationUrl?: string; alias?: string | null; status?: string; expiresAt?: string | null; maxClicks?: number | null; tag?: string; isPermanent?: boolean; is_permanent?: boolean }) {
     clearApiCache('links');
     const res = await secureFetch(`${API_BASE_URL}/links/${id}`, {
       method: 'PATCH',

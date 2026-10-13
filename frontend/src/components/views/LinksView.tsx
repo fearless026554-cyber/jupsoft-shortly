@@ -24,6 +24,7 @@ import {
   Globe,
   TrendingUp,
   Edit2,
+  Shield,
 } from 'lucide-react';
 import { LinkItem, exportToCsv } from '../../api';
 import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
@@ -31,7 +32,8 @@ import { usePagination } from '../../hooks/usePagination';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { TableSkeleton } from '../ui/Skeleton';
 import { Pagination } from '../ui/Pagination';
-import { Permissions } from '../../utils/rbac';
+import { Permissions, isPermanentLink } from '../../utils/rbac';
+import { PermanentLinkDeleteModal } from '../modals/PermanentLinkDeleteModal';
 
 interface LinksViewProps {
   links: LinkItem[];
@@ -79,11 +81,13 @@ export const LinksView: React.FC<LinksViewProps> = ({
 }) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'expired' | 'archived'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'expired' | 'archived' | 'permanent'>('all');
   const [timeFilter, setTimeFilter] = useState<'all' | 'today' | '7d' | '30d' | 'has_timer' | 'expiring_soon'>('all');
   const [websiteFilter, setWebsiteFilter] = useState<string>('all');
   const [tagFilter, setTagFilter] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest' | 'most_clicks' | 'least_clicks' | 'expiring_soon'>('newest');
+  const [permanentDeleteTarget, setPermanentDeleteTarget] = useState<LinkItem | null>(null);
+  const [alertConfig, setAlertConfig] = useState<{ isOpen: boolean; title: string; message: string } | null>(null);
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -98,6 +102,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
   
   const { defaultDomain } = useTenantDomains();
   const archivedCount = links.filter((l) => l.status === 'archived').length;
+  const permanentCount = links.filter((l) => isPermanentLink(l) && l.status !== 'archived').length;
 
   const websiteStats = React.useMemo(() => {
     const counts: Record<string, number> = {};
@@ -200,6 +205,8 @@ export const LinksView: React.FC<LinksViewProps> = ({
         matchesStatus = l.status === 'disabled';
       } else if (statusFilter === 'archived') {
         matchesStatus = l.status === 'archived';
+      } else if (statusFilter === 'permanent') {
+        matchesStatus = isPermanentLink(l) && l.status !== 'archived';
       }
 
       let matchesTime = true;
@@ -283,7 +290,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="flex items-center gap-1.5 font-bold text-slate-900">
             <h1 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-              {statusFilter === 'archived' ? 'Archived Links' : 'Short Links'}
+              {statusFilter === 'archived' ? 'Archived Links' : statusFilter === 'permanent' ? 'Permanent Links' : 'Short Links'}
             </h1>
             <span className="text-[11px] font-mono text-slate-400">({filteredLinks.length})</span>
           </div>
@@ -320,6 +327,22 @@ export const LinksView: React.FC<LinksViewProps> = ({
               }`}
             >
               Expired
+            </button>
+            <button
+              onClick={() => setStatusFilter('permanent')}
+              className={`px-2 py-1 rounded text-[10px] font-bold uppercase transition-colors flex items-center gap-1.5 ${
+                statusFilter === 'permanent'
+                  ? 'bg-white text-amber-700 shadow-2xs border border-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Shield className="w-3 h-3 text-amber-600" />
+              <span>Permanent</span>
+              {permanentCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-amber-100 text-amber-800 font-mono font-bold">
+                  {permanentCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setStatusFilter('archived')}
@@ -439,25 +462,72 @@ export const LinksView: React.FC<LinksViewProps> = ({
                 <div className="flex items-center gap-2">
                   <button
                     onClick={async () => {
+                      if (!Permissions.canManagePermanentLinks(currentUser?.role)) {
+                        setAlertConfig({
+                          isOpen: true,
+                          title: 'Permission Denied',
+                          message: 'Only Super Admin and Tenant Admin can restore permanent links.',
+                        });
+                        return;
+                      }
+
+                      const permanentIds = selectedIds.filter((id) => {
+                        const l = links.find((x) => x.id === id);
+                        return l && isPermanentLink(l);
+                      });
+
+                      if (permanentIds.length === 0) {
+                        setAlertConfig({
+                          isOpen: true,
+                          title: 'Cannot Restore Selected',
+                          message: 'None of the selected links are Permanent. Standard links cannot be restored once archived.',
+                        });
+                        return;
+                      }
+
                       if (onBatchRestore) {
-                        await onBatchRestore(selectedIds);
+                        await onBatchRestore(permanentIds);
                       } else if (onRestoreLink) {
-                        await Promise.all(selectedIds.map((id) => onRestoreLink(id)));
+                        await Promise.all(permanentIds.map((id) => onRestoreLink(id)));
                       }
                       setSelectedIds([]);
+
+                      if (permanentIds.length < selectedIds.length) {
+                        setAlertConfig({
+                          isOpen: true,
+                          title: 'Partial Restore Completed',
+                          message: `Restored ${permanentIds.length} permanent link(s). The other ${selectedIds.length - permanentIds.length} non-permanent link(s) cannot be restored.`,
+                        });
+                      }
                     }}
                     className="text-emerald-700 hover:text-emerald-900 bg-white hover:bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded text-[11px] font-bold transition cursor-pointer flex items-center gap-1 shadow-2xs"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    Restore Selected
+                    Restore Permanent Selected
                   </button>
 
                   <button
                     onClick={() => {
+                      const hasPermanent = selectedIds.some((id) => {
+                        const l = links.find((x) => x.id === id);
+                        return l && isPermanentLink(l);
+                      });
+
+                      if (hasPermanent && !Permissions.canManagePermanentLinks(currentUser?.role)) {
+                        setAlertConfig({
+                          isOpen: true,
+                          title: 'Permission Denied',
+                          message: 'Selected items contain Permanent Protected Assets. Only Super Admin and Tenant Admin can delete permanent links.',
+                        });
+                        return;
+                      }
+
                       setConfirmConfig({
                         isOpen: true,
                         title: 'Permanently Delete Selected Links',
-                        message: `Are you sure you want to permanently delete all ${selectedIds.length} selected links? This action cannot be undone.`,
+                        message: hasPermanent
+                          ? `CRITICAL: You are about to permanently delete ${selectedIds.length} link(s), which include Permanent Protected Assets. This action cannot be undone.`
+                          : `Are you sure you want to permanently delete all ${selectedIds.length} selected links? This action cannot be undone.`,
                         onConfirm: async () => {
                           if (onBatchDelete) {
                             await onBatchDelete(selectedIds);
@@ -478,10 +548,26 @@ export const LinksView: React.FC<LinksViewProps> = ({
               ) : (
                 <button
                   onClick={() => {
+                    const hasPermanent = selectedIds.some((id) => {
+                      const l = links.find((x) => x.id === id);
+                      return l && isPermanentLink(l);
+                    });
+
+                    if (hasPermanent && !Permissions.canManagePermanentLinks(currentUser?.role)) {
+                      setAlertConfig({
+                        isOpen: true,
+                        title: 'Permission Denied',
+                        message: 'Selected links include Permanent Protected Assets. Only Super Admin and Tenant Admin can archive permanent links.',
+                      });
+                      return;
+                    }
+
                     setConfirmConfig({
                       isOpen: true,
                       title: 'Archive Selected Links',
-                      message: `Archive all ${selectedIds.length} selected links? They will be moved to Archive.`,
+                      message: hasPermanent
+                        ? `Warning: Selected items include Permanent Protected links. Archiving will halt incoming live traffic. Are you sure you want to archive all ${selectedIds.length} selected links?`
+                        : `Archive all ${selectedIds.length} selected links? Standard links cannot be restored once archived.`,
                       onConfirm: async () => {
                         if (onBatchArchive) {
                           await onBatchArchive(selectedIds);
@@ -606,11 +692,22 @@ export const LinksView: React.FC<LinksViewProps> = ({
                           )}
                         </button>
                       </div>
-                      {link.alias && (
-                        <div className="text-[10px] text-slate-500 font-sans mt-0.5">
-                          Alias: <span className="font-mono text-slate-700 font-bold">{link.alias}</span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {link.alias && (
+                          <div className="text-[10px] text-slate-500 font-sans">
+                            Alias: <span className="font-mono text-slate-700 font-bold">{link.alias}</span>
+                          </div>
+                        )}
+                        {isPermanentLink(link) && (
+                          <span
+                            className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.2 rounded uppercase tracking-wider"
+                            title="Permanent Protected Link: Multi-step verification required for deletion; restorable from archive."
+                          >
+                            <Shield className="w-2.5 h-2.5 text-amber-600" />
+                            Permanent
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Destination Target (Favicon + Domain Truncated with hover copy) */}
@@ -787,25 +884,55 @@ export const LinksView: React.FC<LinksViewProps> = ({
                           <div className="ml-3 pl-2.5 border-l border-slate-200 flex items-center">
                             {link.status === 'archived' ? (
                               <div className="flex items-center gap-1.5">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (onRestoreLink) {
-                                      onRestoreLink(link.id);
-                                    }
-                                  }}
-                                  aria-label={`Restore short link https://${defaultDomain}/${link.short_code}`}
-                                  title="Restore short link to active"
-                                  className="min-w-[36px] min-h-[32px] px-2.5 py-1 border border-emerald-300 hover:border-emerald-500 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 rounded-md text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
-                                >
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                  <span className="hidden xl:inline">Restore</span>
-                                </button>
+                                {isPermanentLink(link) ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (!Permissions.canManagePermanentLinks(currentUser?.role)) {
+                                        setAlertConfig({
+                                          isOpen: true,
+                                          title: 'Permission Denied',
+                                          message: 'Only Super Admin and Tenant Admin can restore Permanent Protected links.',
+                                        });
+                                        return;
+                                      }
+                                      if (onRestoreLink) {
+                                        onRestoreLink(link.id);
+                                      }
+                                    }}
+                                    aria-label={`Restore short link https://${defaultDomain}/${link.short_code}`}
+                                    title="Restore permanent short link to active"
+                                    className="min-w-[36px] min-h-[32px] px-2.5 py-1 border border-emerald-300 hover:border-emerald-500 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 rounded-md text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    <span className="hidden xl:inline">Restore</span>
+                                  </button>
+                                ) : (
+                                  <span
+                                    className="text-[10px] text-slate-400 font-medium italic px-2 py-1 select-none"
+                                    title="Non-permanent links cannot be restored once archived."
+                                  >
+                                    Non-restorable
+                                  </span>
+                                )}
 
                                 {onDeletePermanently && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      if (isPermanentLink(link)) {
+                                        if (!Permissions.canManagePermanentLinks(currentUser?.role)) {
+                                          setAlertConfig({
+                                            isOpen: true,
+                                            title: 'Permission Denied',
+                                            message: 'Only Super Admin and Tenant Admin can permanently delete Permanent Protected links.',
+                                          });
+                                          return;
+                                        }
+                                        setPermanentDeleteTarget(link);
+                                        return;
+                                      }
+
                                       setConfirmConfig({
                                         isOpen: true,
                                         title: 'Permanently Delete Link',
@@ -829,18 +956,31 @@ export const LinksView: React.FC<LinksViewProps> = ({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (isPermanentLink(link)) {
+                                    if (!Permissions.canManagePermanentLinks(currentUser?.role)) {
+                                      setAlertConfig({
+                                        isOpen: true,
+                                        title: 'Permission Denied',
+                                        message: 'This link is a Permanent Protected Asset. Only Super Admin and Tenant Admin can archive or delete permanent links.',
+                                      });
+                                      return;
+                                    }
+                                    setPermanentDeleteTarget(link);
+                                    return;
+                                  }
+
                                   setConfirmConfig({
                                     isOpen: true,
                                     title: 'Archive Link',
-                                    message: `Are you sure you want to archive the link https://${defaultDomain}/${link.short_code}? It will be moved to Archive.`,
+                                    message: `Are you sure you want to archive the link https://${defaultDomain}/${link.short_code}? It will be moved to Archive. Note: standard links cannot be restored once archived.`,
                                     onConfirm: () => {
                                       onArchiveLink(link.id);
-                                      setConfirmConfig(prev => ({ ...prev, isOpen: false }));
-                                    }
+                                      setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
+                                    },
                                   });
                                 }}
                                 aria-label={`Archive short link https://${defaultDomain}/${link.short_code}`}
-                                title="Archive short link"
+                                title={isPermanentLink(link) ? 'Archive Permanent Link (Requires verification)' : 'Archive short link'}
                                 className="min-w-[40px] min-h-[36px] px-2.5 py-1.5 border border-red-300 hover:border-red-500 bg-red-50/60 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-md text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -895,7 +1035,38 @@ export const LinksView: React.FC<LinksViewProps> = ({
         confirmText="Archive"
         isDestructive={true}
         onConfirm={confirmConfig.onConfirm}
-        onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+        onCancel={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {alertConfig?.isOpen && (
+        <ConfirmDialog
+          isOpen={true}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          confirmText="Dismiss"
+          isDestructive={false}
+          onConfirm={() => setAlertConfig(null)}
+          onCancel={() => setAlertConfig(null)}
+        />
+      )}
+
+      <PermanentLinkDeleteModal
+        isOpen={Boolean(permanentDeleteTarget)}
+        link={permanentDeleteTarget}
+        defaultDomain={defaultDomain}
+        onClose={() => setPermanentDeleteTarget(null)}
+        onArchive={async (id) => {
+          await onArchiveLink(id);
+          setPermanentDeleteTarget(null);
+        }}
+        onDeletePermanently={
+          onDeletePermanently
+            ? async (id) => {
+                await onDeletePermanently(id);
+                setPermanentDeleteTarget(null);
+              }
+            : undefined
+        }
       />
     </div>
   );
