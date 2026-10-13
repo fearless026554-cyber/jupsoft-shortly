@@ -54,11 +54,16 @@ interface LinksViewProps {
 }
 
 function getDomainFromUrl(urlStr: string): string {
+  if (!urlStr || typeof urlStr !== 'string') return '';
+  const clean = urlStr.trim();
+  if (!clean) return '';
   try {
-    const parsed = new URL(urlStr);
-    return parsed.hostname.replace(/^www\./, '').toLowerCase();
+    const withProto = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+    const parsed = new URL(withProto);
+    return parsed.hostname.replace(/^www\./i, '').toLowerCase();
   } catch {
-    return '';
+    const match = clean.match(/^(?:https?:\/\/)?(?:www\.)?([^\/\s:?#]+)/i);
+    return match ? match[1].toLowerCase() : '';
   }
 }
 
@@ -104,29 +109,73 @@ export const LinksView: React.FC<LinksViewProps> = ({
   const archivedCount = links.filter((l) => l.status === 'archived').length;
   const permanentCount = links.filter((l) => isPermanentLink(l) && l.status !== 'archived').length;
 
+  const isLinkExpired = (link: LinkItem) => {
+    if (link.status === 'expired') return true;
+    if (link.expires_at && new Date(link.expires_at).getTime() < Date.now()) return true;
+    return false;
+  };
+
+  // Context-aware link pool: calculates stats based on current status filter tab
+  const poolForFilterStats = React.useMemo(() => {
+    return links.filter((l) => {
+      const expired = isLinkExpired(l);
+      if (statusFilter === 'all') return l.status !== 'archived';
+      if (statusFilter === 'active') return l.status === 'active' && !expired;
+      if (statusFilter === 'expired') return expired && l.status !== 'archived';
+      if (statusFilter === 'disabled') return l.status === 'disabled';
+      if (statusFilter === 'archived') return l.status === 'archived';
+      if (statusFilter === 'permanent') return isPermanentLink(l) && l.status !== 'archived';
+      return true;
+    });
+  }, [links, statusFilter]);
+
   const websiteStats = React.useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const l of links) {
-      if (l.status === 'archived') continue;
+    for (const l of poolForFilterStats) {
       const domain = getDomainFromUrl(l.destination_url);
       if (domain) {
         counts[domain] = (counts[domain] || 0) + 1;
       }
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [links]);
+  }, [poolForFilterStats]);
 
   const tagStats = React.useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const l of links) {
-      if (l.status === 'archived') continue;
-      const tag = l.tag?.trim();
-      if (tag) {
-        counts[tag] = (counts[tag] || 0) + 1;
+    const counts: Record<string, { display: string; count: number }> = {};
+    for (const l of poolForFilterStats) {
+      const raw = l.tag?.trim();
+      if (raw) {
+        const key = raw.toLowerCase();
+        if (!counts[key]) {
+          counts[key] = { display: raw, count: 0 };
+        }
+        counts[key].count += 1;
       }
     }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [links]);
+    return Object.values(counts)
+      .sort((a, b) => b.count - a.count)
+      .map((item) => [item.display, item.count] as [string, number]);
+  }, [poolForFilterStats]);
+
+  // Auto-reconcile destination filter if switched to a tab where that domain doesn't exist
+  useEffect(() => {
+    if (websiteFilter !== 'all') {
+      const exists = websiteStats.some(([d]) => d.toLowerCase() === websiteFilter.toLowerCase());
+      if (!exists) {
+        setWebsiteFilter('all');
+      }
+    }
+  }, [websiteStats, websiteFilter]);
+
+  // Auto-reconcile tag filter if switched to a tab where that tag doesn't exist
+  useEffect(() => {
+    if (tagFilter !== 'all') {
+      const exists = tagStats.some(([t]) => t.toLowerCase() === tagFilter.toLowerCase());
+      if (!exists) {
+        setTagFilter('all');
+      }
+    }
+  }, [tagStats, tagFilter]);
 
   const hasActiveFilters =
     statusFilter !== 'all' ||
@@ -155,12 +204,6 @@ export const LinksView: React.FC<LinksViewProps> = ({
     if (diffDays < 30) return `in ${diffDays}d ${remHours > 0 ? `${remHours}h` : ''}`.trim();
     const diffMonths = Math.floor(diffDays / 30);
     return `in ${diffMonths}mo ${diffDays % 30 > 0 ? `${diffDays % 30}d` : ''}`.trim();
-  };
-
-  const isLinkExpired = (link: LinkItem) => {
-    if (link.status === 'expired') return true;
-    if (link.expires_at && new Date(link.expires_at).getTime() < Date.now()) return true;
-    return false;
   };
 
   const handleCopy = (shortCode: string, id: string) => {
@@ -233,12 +276,13 @@ export const LinksView: React.FC<LinksViewProps> = ({
       let matchesWebsite = true;
       if (websiteFilter !== 'all') {
         const d = getDomainFromUrl(l.destination_url);
-        matchesWebsite = d.toLowerCase() === websiteFilter.toLowerCase();
+        const target = websiteFilter.trim().toLowerCase();
+        matchesWebsite = d === target || d.endsWith(`.${target}`) || (l.destination_url || '').toLowerCase().includes(target);
       }
 
       let matchesTag = true;
       if (tagFilter !== 'all') {
-        matchesTag = (l.tag || '').trim().toLowerCase() === tagFilter.toLowerCase();
+        matchesTag = (l.tag || '').trim().toLowerCase() === tagFilter.trim().toLowerCase();
       }
 
       return matchesSearch && matchesStatus && matchesTime && matchesWebsite && matchesTag;
@@ -363,12 +407,18 @@ export const LinksView: React.FC<LinksViewProps> = ({
           </div>
 
           {/* Date / Timer Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
-            <Clock className="w-3 h-3 text-slate-400" />
+          <div
+            className={`flex items-center gap-1 rounded-lg px-2 py-0.5 border transition-colors ${
+              timeFilter !== 'all'
+                ? 'bg-blue-50/90 border-blue-300 text-blue-700 shadow-2xs font-bold'
+                : 'bg-slate-50 border-slate-200 text-slate-700'
+            }`}
+          >
+            <Clock className={`w-3 h-3 ${timeFilter !== 'all' ? 'text-blue-600' : 'text-slate-400'}`} />
             <select
               value={timeFilter}
               onChange={(e) => setTimeFilter(e.target.value as any)}
-              className="text-[10px] font-semibold bg-transparent text-slate-700 focus:outline-none cursor-pointer"
+              className="text-[10px] font-semibold bg-transparent focus:outline-none cursor-pointer"
               title="Filter by Creation Date or Timer status"
             >
               <option value="all">All Dates</option>
@@ -380,16 +430,22 @@ export const LinksView: React.FC<LinksViewProps> = ({
             </select>
           </div>
 
-          {/* Website / Destination Domain Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
-            <Globe className="w-3 h-3 text-slate-400" />
+          {/* Target Destination Filter */}
+          <div
+            className={`flex items-center gap-1 rounded-lg px-2 py-0.5 border transition-colors ${
+              websiteFilter !== 'all'
+                ? 'bg-blue-50/90 border-blue-300 text-blue-700 shadow-2xs font-bold'
+                : 'bg-slate-50 border-slate-200 text-slate-700'
+            }`}
+          >
+            <Globe className={`w-3 h-3 ${websiteFilter !== 'all' ? 'text-blue-600' : 'text-slate-400'}`} />
             <select
               value={websiteFilter}
               onChange={(e) => setWebsiteFilter(e.target.value)}
-              className="text-[10px] font-semibold bg-transparent text-slate-700 focus:outline-none cursor-pointer max-w-[135px] truncate"
-              title="Filter by Target Destination Website"
+              className="text-[10px] font-semibold bg-transparent focus:outline-none cursor-pointer max-w-[150px] sm:max-w-[200px] truncate"
+              title="Filter by Target Destination"
             >
-              <option value="all">All Websites ({websiteStats.length})</option>
+              <option value="all">All Destinations ({websiteStats.length})</option>
               {websiteStats.map(([domain, count]) => (
                 <option key={domain} value={domain}>
                   {domain} ({count})
@@ -399,12 +455,18 @@ export const LinksView: React.FC<LinksViewProps> = ({
           </div>
 
           {/* Campaign Tag / Category Filter */}
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5">
-            <Tag className="w-3 h-3 text-slate-400" />
+          <div
+            className={`flex items-center gap-1 rounded-lg px-2 py-0.5 border transition-colors ${
+              tagFilter !== 'all'
+                ? 'bg-blue-50/90 border-blue-300 text-blue-700 shadow-2xs font-bold'
+                : 'bg-slate-50 border-slate-200 text-slate-700'
+            }`}
+          >
+            <Tag className={`w-3 h-3 ${tagFilter !== 'all' ? 'text-blue-600' : 'text-slate-400'}`} />
             <select
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
-              className="text-[10px] font-semibold bg-transparent text-slate-700 focus:outline-none cursor-pointer max-w-[120px] truncate"
+              className="text-[10px] font-semibold bg-transparent focus:outline-none cursor-pointer max-w-[130px] sm:max-w-[170px] truncate"
               title="Filter by Campaign Tag / Category"
             >
               <option value="all">All Tags ({tagStats.length})</option>
@@ -728,8 +790,13 @@ export const LinksView: React.FC<LinksViewProps> = ({
                           <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         )}
                         <span
-                          className="truncate text-slate-600 font-mono text-[10px] block flex-1 hover:text-slate-900 transition-colors"
-                          title={link.destination_url}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const dom = getDomainFromUrl(link.destination_url);
+                            if (dom) setWebsiteFilter(dom);
+                          }}
+                          className="truncate text-slate-600 font-mono text-[10px] block flex-1 hover:text-blue-600 cursor-pointer transition-colors"
+                          title={`Click to filter by destination: ${link.destination_url}`}
                         >
                           {link.destination_url}
                         </span>
@@ -754,7 +821,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSearchQuery(link.tag || '');
+                              setTagFilter(link.tag || 'all');
                             }}
                             title={`Filter by tag: ${link.tag}`}
                             className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/60 px-1.5 py-0.5 rounded transition-colors cursor-pointer"
