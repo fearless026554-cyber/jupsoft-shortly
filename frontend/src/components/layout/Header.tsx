@@ -13,6 +13,7 @@ import {
   LogOut,
   User,
   Shield,
+  Code2,
 } from 'lucide-react';
 import { TenantItem, api } from '../../api';
 import { useTenantDomains } from '../../hooks/useTenantDomains';
@@ -292,6 +293,16 @@ export const Header: React.FC<HeaderProps> = ({
                     >
                       <User className="w-3.5 h-3.5 text-slate-400" />
                       <span>My Account &amp; Profile</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setUserDropdownOpen(false);
+                        onNavigate?.('docs');
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 transition cursor-pointer font-medium"
+                    >
+                      <Code2 className="w-3.5 h-3.5 text-blue-500" />
+                      <span>API Reference &amp; Docs</span>
                     </button>
                   </div>
 

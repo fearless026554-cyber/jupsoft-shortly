@@ -519,17 +519,26 @@ export const HelpGuideView: React.FC = () => {
                 Integrate Shortly with your School ERP, WhatsApp bot, SMS gateway, or custom backend.
               </p>
             </div>
-            <a
-              href="/apikeys"
-              onClick={(e) => {
-                e.preventDefault();
-                window.location.hash = 'apikeys';
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition"
-            >
-              <span>Manage API Keys</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
+            <div className="flex items-center gap-2">
+              <a
+                href="/docs"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 shadow-xs transition cursor-pointer"
+              >
+                <Code2 className="w-3.5 h-3.5" />
+                <span>Open Full API Docs</span>
+              </a>
+              <a
+                href="/apikeys"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.location.pathname = '/apikeys';
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition"
+              >
+                <span>Manage API Keys</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
           </div>
 
           {/* Security & Key Generation Notice */}

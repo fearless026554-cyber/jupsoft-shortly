@@ -20,6 +20,7 @@ import { UsersView } from './views/UsersView';
 import { DomainsView } from './views/DomainsView';
 import { AbuseView } from './views/AbuseView';
 import { ApiKeysView } from './views/ApiKeysView';
+import { ApiDocsView } from './views/ApiDocsView';
 import { HelpGuideView } from './views/HelpGuideView';
 import { ProfileView } from './views/ProfileView';
 
@@ -45,6 +46,7 @@ const MODULE_ROUTES: Record<ActiveModule, string> = {
   domains: '/domains',
   abuse: '/abuse',
   apikeys: '/apikeys',
+  docs: '/docs',
   profile: '/profile',
   help: '/help',
 };
@@ -63,6 +65,10 @@ const ROUTE_TO_MODULE: Record<string, ActiveModule> = {
   '/domains': 'domains',
   '/abuse': 'abuse',
   '/apikeys': 'apikeys',
+  '/docs': 'docs',
+  '/apidocs': 'docs',
+  '/api-docs': 'docs',
+  '/developers': 'docs',
   '/profile': 'profile',
   '/help': 'help',
 };
@@ -706,7 +712,7 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
           )}
 
           {/* Contextual Sub-Tab Bar for Settings Modules */}
-          {(activeTab === 'tenants' || activeTab === 'users' || activeTab === 'domains' || activeTab === 'abuse' || activeTab === 'apikeys') && (
+          {(activeTab === 'tenants' || activeTab === 'users' || activeTab === 'domains' || activeTab === 'abuse' || activeTab === 'apikeys' || activeTab === 'docs') && (
             <div className="mb-3.5 flex items-center gap-1 border-b border-slate-200 pb-2 overflow-x-auto">
               {Permissions.canManageTenants(currentUser?.role) && (
                 <button
@@ -778,6 +784,17 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
                   API Keys
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => handleNavigate('docs')}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer whitespace-nowrap ${
+                  activeTab === 'docs'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
+                }`}
+              >
+                API Reference
+              </button>
             </div>
           )}
 
@@ -876,6 +893,7 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
           {activeTab === 'apikeys' && (
             <ApiKeysView
               onOpenCreateKeyModal={() => setIsCreateApiKeyModalOpen(true)}
+              onNavigateToDocs={() => handleNavigate('docs')}
               currentUser={currentUser}
             />
           )}
@@ -883,7 +901,15 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
           {/* Module 12: Help & TRAI Knowledge Base */}
           {activeTab === 'help' && <HelpGuideView />}
 
-          {/* Module 13: Operator Account & Security Profile */}
+          {/* Module 13: Dedicated Developer API Documentation */}
+          {activeTab === 'docs' && (
+            <ApiDocsView
+              onNavigateToApiKeys={() => handleNavigate('apikeys')}
+              currentUser={currentUser}
+            />
+          )}
+
+          {/* Module 14: Operator Account & Security Profile */}
           {activeTab === 'profile' && (
             <ProfileView
               currentUser={currentUser}

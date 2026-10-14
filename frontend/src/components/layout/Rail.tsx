@@ -7,6 +7,7 @@ import {
   BarChart3,
   Settings,
   HelpCircle,
+  Code2,
 } from 'lucide-react';
 
 import { Permissions } from '../../utils/rbac';
@@ -23,6 +24,7 @@ export type ActiveModule =
   | 'domains'
   | 'abuse'
   | 'apikeys'
+  | 'docs'
   | 'profile'
   | 'help';
 
@@ -200,8 +202,25 @@ export const Rail: React.FC<RailProps> = ({
         })}
       </nav>
 
-      {/* Bottom Help Semantic Link */}
-      <div className="w-full flex flex-col items-center pt-1.5 border-t border-slate-800/80 shrink-0 mt-auto">
+      {/* Bottom Semantic Links: API Docs & Help */}
+      <div className="w-full flex flex-col items-center pt-1.5 border-t border-slate-800/80 shrink-0 mt-auto space-y-0.5">
+        <a
+          href="/docs"
+          onClick={(e) => handleNavClick(e, 'docs')}
+          aria-label="API Documentation"
+          title="API Documentation"
+          className={`w-full h-[48px] flex flex-col items-center justify-center transition-colors group ${
+            activeTab === 'docs'
+              ? 'bg-slate-800/90 text-blue-400 font-bold'
+              : 'text-[#CBD5E1] hover:text-white hover:bg-slate-800/40'
+          }`}
+        >
+          <Code2 className="w-4 h-4 transition-transform group-hover:scale-110 text-[#CBD5E1] group-hover:text-blue-400" />
+          <span className="text-[10px] tracking-tight mt-1 font-medium text-[#CBD5E1] group-hover:text-blue-400">
+            API Docs
+          </span>
+        </a>
+
         <a
           href="/help"
           onClick={(e) => handleNavClick(e, 'help')}

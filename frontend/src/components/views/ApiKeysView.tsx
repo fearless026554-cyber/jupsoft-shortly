@@ -11,6 +11,7 @@ import {
   User,
   ShieldCheck,
   ShieldAlert,
+  Code2,
 } from 'lucide-react';
 import { api } from '../../api';
 import { usePagination } from '../../hooks/usePagination';
@@ -21,10 +22,11 @@ import { Permissions } from '../../utils/rbac';
 
 interface ApiKeysViewProps {
   onOpenCreateKeyModal: () => void;
+  onNavigateToDocs?: () => void;
   currentUser?: any;
 }
 
-export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, currentUser }) => {
+export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, onNavigateToDocs, currentUser }) => {
   const [keys, setKeys] = useState<any[]>([]);
   const pagination = usePagination(keys, 10);
   const [loading, setLoading] = useState(true);
@@ -159,6 +161,17 @@ export const ApiKeysView: React.FC<ApiKeysViewProps> = ({ onOpenCreateKeyModal, 
         </div>
 
         <div className="flex items-center gap-2">
+          {onNavigateToDocs && (
+            <button
+              onClick={onNavigateToDocs}
+              aria-label="View API Documentation"
+              title="View API Documentation"
+              className="min-h-[36px] flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-semibold shadow-2xs transition cursor-pointer"
+            >
+              <Code2 className="w-3.5 h-3.5 text-blue-600" />
+              API Reference
+            </button>
+          )}
           <button
             onClick={loadKeys}
             aria-label="Refresh API Keys"
