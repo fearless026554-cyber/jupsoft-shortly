@@ -49,6 +49,8 @@ export class BulkProcessor extends WorkerHost {
       const concurrency = Math.min(10, Math.max(2, Math.floor(maxPool / 2)));
       let isCancelled = false;
       let nextIndex = 0;
+      let lastCancelCheck = 0;
+      const BATCH_COMMIT_SIZE = 15; // Commit every 15 items to prevent PostgreSQL subtransaction SLRU cache overflow
 
       const workerTask = async (workerId: number) => {
         let client;
@@ -57,10 +59,14 @@ export class BulkProcessor extends WorkerHost {
           await client.query('BEGIN');
           await client.query(`SELECT set_config('${DB_CONTEXT_KEYS.TENANT_ID}', $1, true)`, [tenantId]);
 
+          let uncommittedCount = 0;
+
           while (true) {
             if (isCancelled) break;
 
-            if (nextIndex % 5 === 0) {
+            const now = Date.now();
+            if (now - lastCancelCheck > 1000) {
+              lastCancelCheck = now;
               const cancelSignal = await this.redis.client.get(`bulk:cancel:${job.id || job.data.jobId}`).catch(() => null);
               if (cancelSignal) {
                 isCancelled = true;
@@ -120,13 +126,27 @@ export class BulkProcessor extends WorkerHost {
               failed++;
             }
 
+            uncommittedCount++;
             processedCount++;
-            if (processedCount % 25 === 0 || processedCount === total) {
+
+            // Commit every BATCH_COMMIT_SIZE items to keep subtransactions < 16, preventing SLRU lock degradation
+            if (uncommittedCount >= BATCH_COMMIT_SIZE) {
+              await client.query('COMMIT');
+              await client.query('BEGIN');
+              await client.query(`SELECT set_config('${DB_CONTEXT_KEYS.TENANT_ID}', $1, true)`, [tenantId]);
+              uncommittedCount = 0;
+            }
+
+            if (processedCount % 20 === 0 || processedCount === total) {
               await job.updateProgress(Math.round((processedCount / total) * 100)).catch(() => {});
             }
           }
 
-          await client.query('COMMIT');
+          if (uncommittedCount > 0) {
+            await client.query('COMMIT');
+          } else {
+            await client.query('ROLLBACK').catch(() => {});
+          }
         } catch (workerFatalErr: any) {
           if (client) {
             await client.query('ROLLBACK').catch(() => {});
@@ -168,7 +188,7 @@ export class BulkProcessor extends WorkerHost {
           action: 'bulk.process',
           entity: 'bulk_jobs',
           entityId: job.id || job.data.jobId,
-          afterState: { total, completed, failed, durationMs: Date.now() - startTime },
+          afterState: { total, completed, failed, durationMs: Date.now() - startTime, cancelled: isCancelled },
         });
         await auditClient.query('COMMIT');
       } catch (auditErr: any) {
@@ -180,16 +200,28 @@ export class BulkProcessor extends WorkerHost {
 
       const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(2);
       this.logger.log(
-        `[BulkProcessor] Completed ${completed}/${total} links in ${elapsedSec}s with concurrency ${concurrency} (failed: ${failed})`
+        `[BulkProcessor] Completed ${completed}/${total} links in ${elapsedSec}s with concurrency ${concurrency} (failed: ${failed}, cancelled: ${isCancelled})`
       );
 
-      return {
+      const finalPayload = {
         total,
         completed,
         failed,
         results: results.filter(Boolean),
         cancelled: isCancelled,
       };
+
+      // Persist results directly to Redis so status endpoint can immediately retrieve them
+      try {
+        await this.redis.client.set(
+          `bulk:results:${job.id || job.data.jobId}`,
+          JSON.stringify(finalPayload),
+          'EX',
+          86400
+        );
+      } catch {}
+
+      return finalPayload;
     }
   }
 }

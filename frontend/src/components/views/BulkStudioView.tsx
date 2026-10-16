@@ -84,6 +84,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
   ]);
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [jobInfo, setJobInfo] = useState<JobInfo | null>(null);
   const [batchResults, setBatchResults] = useState<any[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -361,12 +362,36 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
     }
   };
 
-  // Stop / Cancel active bulk batch
+  // Stop / Cancel active bulk batch with graceful results preservation
   const handleStopBulk = async () => {
-    if (!jobInfo?.jobId || !isProcessing) return;
+    if (!jobInfo?.jobId || !isProcessing || isStopping) return;
 
     try {
-      // 1. Immediately halt polling
+      setIsStopping(true);
+
+      // 1. Transmit cancellation signal to backend
+      await api.cancelBulkJob(jobInfo.jobId);
+
+      // 2. Poll for the workers to commit their in-flight mini-batch and yield partial results (up to 4s)
+      let partialResults: any[] = [];
+      let finalCompleted = 0;
+      let finalFailed = 0;
+
+      for (let attempt = 0; attempt < 8; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const res = await api.getBulkStatus(jobInfo.jobId).catch(() => null);
+        if (res?.success && res.data) {
+          const resResult = res.data.result;
+          if (resResult?.results && resResult.results.length > 0) {
+            partialResults = resResult.results;
+            finalCompleted = resResult.completed ?? partialResults.filter((r: any) => r.shortUrl).length;
+            finalFailed = resResult.failed ?? 0;
+            break;
+          }
+        }
+      }
+
+      // 3. Halt polling & timer
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
@@ -377,19 +402,30 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
       }
 
       setIsProcessing(false);
-      setJobInfo((prev) => (prev ? { ...prev, status: 'cancelled' } : null));
+      setIsStopping(false);
 
-      // 2. Transmit cancellation signal to backend
-      await api.cancelBulkJob(jobInfo.jobId);
-
-      // 3. Obtain partial results already minted
-      const res = await api.getBulkStatus(jobInfo.jobId);
-      if (res?.success && res.data?.result?.results) {
-        setBatchResults(res.data.result.results);
+      if (partialResults.length > 0) {
+        setBatchResults(partialResults);
+        setJobInfo((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: 'cancelled',
+                completedCount: finalCompleted,
+                failedCount: finalFailed,
+              }
+            : null
+        );
+        setSuccessMsg(
+          `Batch stopped by user. ${finalCompleted} links created successfully before cancellation and are listed below.`
+        );
+      } else {
+        setJobInfo((prev) => (prev ? { ...prev, status: 'cancelled' } : null));
+        setSuccessMsg('Bulk batch processing stopped by user.');
       }
-
-      setSuccessMsg('Bulk batch processing stopped by user. Minted links so far have been preserved.');
     } catch (err: any) {
+      setIsStopping(false);
+      setIsProcessing(false);
       setErrorMsg('Error sending cancellation signal: ' + err.message);
     }
   };
@@ -855,19 +891,33 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
               <div className="flex items-center gap-2 w-full">
                 <div className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded text-xs font-bold bg-blue-50 border border-blue-200 text-blue-800 shadow-xs">
                   <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                  <span>Minting Links ({jobInfo?.progress || 0}%)...</span>
+                  <span>
+                    {isStopping
+                      ? 'Stopping & Preserving Minted Links...'
+                      : `Minting Links (${jobInfo?.progress || 0}%)...`}
+                  </span>
                 </div>
 
                 {/* STOP / CANCEL BUTTON */}
                 <button
                   type="button"
                   onClick={handleStopBulk}
+                  disabled={isStopping}
                   aria-label="Stop Bulk Processing"
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 rounded text-xs font-bold shadow-xs transition bg-red-600 hover:bg-red-700 active:bg-red-800 text-white cursor-pointer shrink-0"
-                  title="Immediately abort the bulk creation job"
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 rounded text-xs font-bold shadow-xs transition bg-red-600 hover:bg-red-700 active:bg-red-800 text-white disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                  title="Immediately abort the bulk creation job and preserve minted links"
                 >
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                  Stop Batch
+                  {isStopping ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Stopping...
+                    </>
+                  ) : (
+                    <>
+                      <Square className="w-3.5 h-3.5 fill-current" />
+                      Stop Batch
+                    </>
+                  )}
                 </button>
               </div>
             ) : Permissions.canBulkCreate(currentUser?.role) ? (

@@ -311,15 +311,25 @@ export class LinksController {
 
     const state = await job.getState();
     const progress = job.progress;
-    const result = job.returnvalue;
+    let result = job.returnvalue;
     const isCancelled = await this.redis.client.get(`bulk:cancel:${jobId}`).catch(() => null);
+
+    // Fallback to Redis cached results if job was cancelled or completed
+    if (!result) {
+      const cachedRaw = await this.redis.client.get(`bulk:results:${jobId}`).catch(() => null);
+      if (cachedRaw) {
+        try {
+          result = JSON.parse(cachedRaw);
+        } catch {}
+      }
+    }
 
     return reply.send({
       success: true,
       data: {
         jobId,
         status: isCancelled ? 'cancelled' : state,
-        progress: progress || 0,
+        progress: progress || (result?.completed ? Math.round((result.completed / (result.total || 1)) * 100) : 0),
         result: result || null,
       },
     });
@@ -354,13 +364,8 @@ export class LinksController {
       });
     }
 
-    // Set cancellation token in Redis for active workers to break immediately
+    // Set cancellation token in Redis for active workers to break gracefully and commit minted links
     await this.redis.client.set(`bulk:cancel:${jobId}`, '1', 'EX', 3600);
-
-    try {
-      await (job as any).discard?.();
-      await (job as any).remove?.();
-    } catch {}
 
     return reply.send({
       success: true,
