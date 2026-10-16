@@ -159,9 +159,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   // Security C3: Token Session Versioning
   async getUserTokenVersion(userId: string): Promise<number> {
-    const key = `user:tokenver:${userId}`;
-    const ver = await this.client.get(key);
-    return ver ? parseInt(ver, 10) : 0;
+    try {
+      const key = `user:tokenver:${userId}`;
+      const ver = await this.client.get(key);
+      return ver ? parseInt(ver, 10) : 0;
+    } catch {
+      return 0;
+    }
   }
 
   async incrementUserTokenVersion(userId: string): Promise<number> {

@@ -126,7 +126,11 @@ export class RateLimiterGuard implements CanActivate {
       if (auth) {
         const { scopes } = auth;
         const isInternal = scopes?.includes(ApiScopes.WILDCARD) || scopes?.includes(ApiScopes.ADMIN) || auth.role === 'super_admin';
-        limit = isInternal ? Math.max(env.RATE_LIMIT_INTERNAL_RPM, 1000) : env.RATE_LIMIT_STANDARD_RPM;
+        limit = isInternal
+          ? Math.max(env.RATE_LIMIT_INTERNAL_RPM, 1000)
+          : (env.NODE_ENV === 'development' || isLoopback)
+            ? 1000
+            : Math.max(env.RATE_LIMIT_STANDARD_RPM, 300);
         keyIdentifier = auth.userId ? `user:${auth.userId}` : `ip:${clientIp}`;
       } else {
         keyIdentifier = `ip:${clientIp}`;

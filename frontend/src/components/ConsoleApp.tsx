@@ -219,19 +219,19 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
       if (res && res.success && res.data?.user) {
         setCurrentUser(res.data.user);
         setStoredUser(res.data.user);
-      } else {
+      } else if (res && (res._status === 401 || res.status === 401 || res.error?.code === 'UNAUTHORIZED')) {
+        // Explicit session expiration or invalidation from backend
         setAuthToken(null);
         setStoredUser(null);
         setCurrentUser(null);
         if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+          window.location.href = '/login?expired=1';
         }
       }
+      // For any transient failures (res is null, rate limit 429, proxy 502, network offline):
+      // DO NOT LOG OUT! The user's valid session in localStorage and cookies remains active.
     }).catch(() => {
-      const existing = getStoredUser();
-      if (!existing && typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
+      // Network drop: do not log out
     });
   }, []);
 

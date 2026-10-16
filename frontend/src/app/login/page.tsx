@@ -103,7 +103,7 @@ export default function LoginPage() {
       api.getMe().then((res) => {
         if (res && res.success) {
           router.replace('/dashboard');
-        } else {
+        } else if (res && (res._status === 401 || res.status === 401 || res.error?.code === 'UNAUTHORIZED')) {
           setAuthToken(null);
           setStoredUser(null);
         }

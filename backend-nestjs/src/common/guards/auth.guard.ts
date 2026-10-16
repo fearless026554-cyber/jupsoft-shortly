@@ -48,48 +48,27 @@ export class AuthGuard implements CanActivate {
 
     // 1. Try JWT verification if bearer token resembles a JWT (three period-separated segments)
     if (bearerToken && bearerToken.split('.').length === 3) {
+      const tokenHash = crypto.createHash('sha256').update(bearerToken).digest('hex');
+      let isRevoked: string | null = null;
       try {
-        const tokenHash = crypto.createHash('sha256').update(bearerToken).digest('hex');
-        const isRevoked = await this.redis.client.get(`auth:revoked:${tokenHash}`);
-        if (isRevoked) {
-          reply.status(401).send({
-            success: false,
-            error: {
-              code: ErrorCodes.UNAUTHORIZED,
-              message: 'Session has been revoked or logged out',
-            },
-          });
-          return false;
-        }
+        isRevoked = await this.redis.client.get(`auth:revoked:${tokenHash}`);
+      } catch {
+        // Redis transient error should not fail auth
+      }
+      if (isRevoked) {
+        reply.status(401).send({
+          success: false,
+          error: {
+            code: ErrorCodes.UNAUTHORIZED,
+            message: 'Session has been revoked or logged out',
+          },
+        });
+        return false;
+      }
 
-        const decoded = jwt.verify(bearerToken, env.JWT_SECRET) as any;
-
-        // Security C3: Session Versioning Check (invalidates all sessions upon password reset)
-        if (decoded && decoded.userId) {
-          const currentVer = await this.redis.getUserTokenVersion(decoded.userId);
-          const tokenVer = typeof decoded.ver === 'number' ? decoded.ver : 0;
-          if (tokenVer < currentVer) {
-            reply.status(401).send({
-              success: false,
-              error: {
-                code: ErrorCodes.UNAUTHORIZED,
-                message: 'Session has expired or was invalidated due to a security update. Please log in again.',
-              },
-            });
-            return false;
-          }
-        }
-
-        const scopes = decoded.scopes || (decoded.role ? (ROLE_SCOPES as any)[decoded.role] : []) || [];
-        authData = {
-          userId: decoded.userId,
-          tenantId: decoded.tenantId,
-          email: decoded.email,
-          role: decoded.role,
-          name: decoded.name,
-          scopes: Array.isArray(scopes) ? scopes : [],
-          isJwt: true,
-        };
+      let decoded: any;
+      try {
+        decoded = jwt.verify(bearerToken, env.JWT_SECRET);
       } catch (jwtErr: any) {
         reply.status(401).send({
           success: false,
@@ -100,6 +79,38 @@ export class AuthGuard implements CanActivate {
         });
         return false;
       }
+
+      // Security C3: Session Versioning Check (invalidates all sessions upon password reset)
+      if (decoded && decoded.userId) {
+        let currentVer = 0;
+        try {
+          currentVer = await this.redis.getUserTokenVersion(decoded.userId);
+        } catch {
+          currentVer = 0;
+        }
+        const tokenVer = typeof decoded.ver === 'number' ? decoded.ver : 0;
+        if (tokenVer < currentVer) {
+          reply.status(401).send({
+            success: false,
+            error: {
+              code: ErrorCodes.UNAUTHORIZED,
+              message: 'Session has expired or was invalidated due to a security update. Please log in again.',
+            },
+          });
+          return false;
+        }
+      }
+
+      const scopes = decoded.scopes || (decoded.role ? (ROLE_SCOPES as any)[decoded.role] : []) || [];
+      authData = {
+        userId: decoded.userId,
+        tenantId: decoded.tenantId,
+        email: decoded.email,
+        role: decoded.role,
+        name: decoded.name,
+        scopes: Array.isArray(scopes) ? scopes : [],
+        isJwt: true,
+      };
     }
 
     // 2. Fallback to API Key verification (Security H3: Only accept via X-API-Key header or Bearer token, never query string)

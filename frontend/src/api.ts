@@ -92,7 +92,19 @@ const USER_STORAGE_KEY = 'jlmp_auth_user';
 
 export function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (token) return token;
+  try {
+    const match = document.cookie.match(new RegExp('(^|; )' + TOKEN_STORAGE_KEY + '=([^;]+)'));
+    if (match && match[2]) {
+      const cookieToken = decodeURIComponent(match[2]);
+      if (cookieToken) {
+        localStorage.setItem(TOKEN_STORAGE_KEY, cookieToken);
+        return cookieToken;
+      }
+    }
+  } catch {}
+  return null;
 }
 
 export function setAuthToken(token: string | null) {
@@ -109,6 +121,10 @@ export function setAuthToken(token: string | null) {
 
 function handleAuthExpired() {
   if (typeof window === 'undefined') return;
+  const search = window.location.search || '';
+  if (search.includes('code=') || search.includes('token=') || search.includes('credential=')) {
+    return;
+  }
   setAuthToken(null);
   setStoredUser(null);
   clearApiCache();
@@ -219,7 +235,15 @@ export function clearApiCache(prefix?: string) {
 }
 
 export async function secureFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const res = await fetch(input, init);
+  const options: RequestInit = { ...init };
+  const headers = new Headers(options.headers || {});
+  const token = getAuthToken();
+  if (token && !headers.has('Authorization') && !headers.has('authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  options.headers = headers;
+
+  const res = await fetch(input, options);
   if (res.status === 401) {
     const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
     if (!urlStr.includes('/auth/login') && !urlStr.includes('/auth/google')) {
@@ -738,11 +762,14 @@ export const api = {
     return dedupeGet(`${API_BASE_URL}/auth/me`, async () => {
       try {
         const res = await secureFetch(`${API_BASE_URL}/auth/me`, { headers: getHeaders() });
-        const json = await res.json();
-        if (json.success && json.data?.user) {
+        const json = await res.json().catch(() => null);
+        if (json && json.success && json.data?.user) {
           setStoredUser(json.data.user);
         }
-        return json;
+        if (json) {
+          return { ...json, _status: res.status };
+        }
+        return { success: false, _status: res.status, error: { code: 'HTTP_' + res.status, message: 'Request failed' } };
       } catch {
         return null;
       }
