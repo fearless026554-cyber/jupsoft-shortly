@@ -348,61 +348,95 @@ export class AuthController {
     const googleId = String(googlePayload.sub);
     const avatarUrl = googlePayload.picture ? String(googlePayload.picture) : null;
 
-    // 6. Strict Multi-Tenant isolation & system user check (No stranger auto-provisioning)
+    // 6. Strict Multi-Tenant isolation & system user check with auto-provisioning
     const authResult = await this.db.withSuperAdminContext(async (client) => {
       const userRes = await client.query(
         `SELECT id, tenant_id, name, email, role, status, google_id, avatar_url FROM users WHERE LOWER(email) = LOWER($1)`,
         [email]
       );
 
-      if (userRes.rowCount === 0) {
-        return { notFound: true };
-      }
-
-      const existingUser = userRes.rows[0];
-
-      if (existingUser.status === 'suspended') {
-        return { suspended: true };
-      }
-
-      // Activate invited user, update last_login_at and Google metadata
-      const updatedRes = await client.query(
-        `UPDATE users 
-         SET last_login_at = NOW(), 
-             status = CASE WHEN status = 'invited' THEN 'active' ELSE status END,
-             google_id = COALESCE(google_id, $2), 
-             avatar_url = COALESCE($3, avatar_url) 
-         WHERE id = $1 
-         RETURNING id, tenant_id, name, email, role, status, avatar_url`,
-        [existingUser.id, googleId, avatarUrl]
-      );
-
+      let user: any;
       let tenantName: string | null = null;
       let tenantCode: string | null = null;
-      if (existingUser.tenant_id) {
-        const tenantRes = await client.query(
-          `SELECT name, code FROM tenants WHERE id = $1`,
-          [existingUser.tenant_id]
+
+      if (userRes.rowCount === 0) {
+        // Auto-provision user into default tenant
+        let defaultTenantRes = await client.query(
+          `SELECT id, name, code, status FROM tenants WHERE code = 'jupsoft' OR status = 'active' ORDER BY created_at ASC LIMIT 1`
         );
-        if (tenantRes.rowCount && tenantRes.rowCount > 0) {
-          tenantName = tenantRes.rows[0].name;
-          tenantCode = tenantRes.rows[0].code;
+
+        if (defaultTenantRes.rowCount === 0) {
+          defaultTenantRes = await client.query(
+            `INSERT INTO tenants (id, code, name, status, plan_id)
+             VALUES ('11111111-1111-1111-1111-111111111111', 'jupsoft', 'Jupsoft Technologies', 'active', 'internal_unlimited')
+             ON CONFLICT (code) DO UPDATE SET status = 'active'
+             RETURNING id, name, code, status`
+          );
+        }
+
+        const defaultTenant = defaultTenantRes.rows[0];
+        tenantName = defaultTenant.name;
+        tenantCode = defaultTenant.code;
+
+        // Ensure default domain exists
+        await client.query(
+          `INSERT INTO domains (id, tenant_id, hostname, type, verification_status, ssl_active)
+           VALUES ('0bb05033-f0ae-4779-b747-d386b8d67be1', $1, 'go.jupsoft.com', 'internal', 'verified', true)
+           ON CONFLICT (hostname) DO NOTHING`,
+          [defaultTenant.id]
+        );
+
+        // Assign role: super_admin if first user or jupsoft corporate email; otherwise tenant_admin
+        const countRes = await client.query(`SELECT count(*) as count FROM users`);
+        const totalUsers = parseInt(countRes.rows[0].count, 10);
+        const assignedRole: UserRoleType = (totalUsers === 0 || email.endsWith('@jupsoft.com')) ? 'super_admin' : 'tenant_admin';
+
+        const userName = (googlePayload.name && String(googlePayload.name).trim()) || email.split('@')[0] || 'User';
+
+        const insertUserRes = await client.query(
+          `INSERT INTO users (tenant_id, name, email, role, status, google_id, avatar_url, last_login_at)
+           VALUES ($1, $2, $3, $4, 'active', $5, $6, NOW())
+           RETURNING id, tenant_id, name, email, role, status, avatar_url`,
+          [defaultTenant.id, userName, email, assignedRole, googleId, avatarUrl]
+        );
+
+        user = insertUserRes.rows[0];
+        this.logger.log(`[Google Auth] Auto-provisioned user ${email} (${userName}) with role ${assignedRole} in tenant ${defaultTenant.code}`);
+      } else {
+        const existingUser = userRes.rows[0];
+
+        if (existingUser.status === 'suspended') {
+          return { suspended: true };
+        }
+
+        // Activate invited user, update last_login_at and Google metadata
+        const updatedRes = await client.query(
+          `UPDATE users 
+           SET last_login_at = NOW(), 
+               status = CASE WHEN status = 'invited' THEN 'active' ELSE status END,
+               google_id = COALESCE(google_id, $2), 
+               avatar_url = COALESCE($3, avatar_url) 
+           WHERE id = $1 
+           RETURNING id, tenant_id, name, email, role, status, avatar_url`,
+          [existingUser.id, googleId, avatarUrl]
+        );
+
+        user = updatedRes.rows[0];
+
+        if (user.tenant_id) {
+          const tenantRes = await client.query(
+            `SELECT name, code FROM tenants WHERE id = $1`,
+            [user.tenant_id]
+          );
+          if (tenantRes.rowCount && tenantRes.rowCount > 0) {
+            tenantName = tenantRes.rows[0].name;
+            tenantCode = tenantRes.rows[0].code;
+          }
         }
       }
 
-      return { user: updatedRes.rows[0], tenantName, tenantCode };
+      return { user, tenantName, tenantCode };
     });
-
-    // Security H2: Prevent email enumeration via generic refusal message
-    if (authResult.notFound) {
-      return reply.status(403).send({
-        success: false,
-        error: {
-          code: ErrorCodes.FORBIDDEN,
-          message: 'This Google account cannot access Shortly. Please contact your organization administrator for an invitation.',
-        },
-      });
-    }
 
     if (authResult.suspended) {
       return reply.status(403).send({

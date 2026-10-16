@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -24,10 +24,12 @@ export const Pagination: React.FC<PaginationProps> = ({
   pageSize,
   onPageChange,
   onPageSizeChange,
-  pageSizeOptions = [10, 25, 50, 100],
+  pageSizeOptions = [10, 25, 50, 100, 200, 500],
   itemLabel = 'records',
 }) => {
+  const [jumpInput, setJumpInput] = useState('');
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
   if (totalPages <= 1 && totalItems <= pageSize) {
     return null;
   }
@@ -36,7 +38,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   const startItem = totalItems === 0 ? 0 : (validCurrentPage - 1) * pageSize + 1;
   const endItem = Math.min(validCurrentPage * pageSize, totalItems);
 
-  // Calculate visible page buttons (window of 5 pages)
+  // Calculate visible page buttons (sliding window)
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];
     if (totalPages <= 7) {
@@ -57,10 +59,20 @@ export const Pagination: React.FC<PaginationProps> = ({
     return pages;
   };
 
+  const handleJumpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pageNum = parseInt(jumpInput.trim(), 10);
+    if (!isNaN(pageNum)) {
+      const bounded = Math.min(Math.max(1, pageNum), totalPages);
+      onPageChange(bounded);
+      setJumpInput('');
+    }
+  };
+
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3.5 py-2.5 bg-white border-t border-slate-200 text-xs text-slate-600 select-none">
-      {/* Left: Summary text */}
-      <div className="flex items-center gap-3">
+      {/* Left: Summary text & page size selector */}
+      <div className="flex items-center flex-wrap gap-2.5">
         <span>
           Showing{' '}
           <span className="font-semibold text-slate-900 font-mono">
@@ -73,7 +85,6 @@ export const Pagination: React.FC<PaginationProps> = ({
           {itemLabel}
         </span>
 
-        {/* Page size selector */}
         {onPageSizeChange && (
           <div className="flex items-center gap-1.5 ml-2 border-l border-slate-200 pl-3">
             <span className="text-slate-400">Rows:</span>
@@ -96,14 +107,14 @@ export const Pagination: React.FC<PaginationProps> = ({
         )}
       </div>
 
-      {/* Right: Navigation controls */}
-      <div className="flex items-center gap-1 self-end sm:self-auto">
+      {/* Right: Navigation controls & Quick Jump */}
+      <div className="flex items-center flex-wrap gap-1 self-end sm:self-auto">
         {/* First page */}
         <button
           onClick={() => onPageChange(1)}
           disabled={validCurrentPage === 1}
           title="First Page"
-          className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
+          className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
         >
           <ChevronsLeft className="w-3.5 h-3.5" />
         </button>
@@ -113,7 +124,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={() => onPageChange(validCurrentPage - 1)}
           disabled={validCurrentPage === 1}
           title="Previous Page"
-          className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
+          className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
         </button>
@@ -146,7 +157,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={() => onPageChange(validCurrentPage + 1)}
           disabled={validCurrentPage === totalPages}
           title="Next Page"
-          className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
+          className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
         >
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
@@ -156,10 +167,33 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={() => onPageChange(totalPages)}
           disabled={validCurrentPage === totalPages}
           title="Last Page"
-          className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition"
+          className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
         >
           <ChevronsRight className="w-3.5 h-3.5" />
         </button>
+
+        {/* Jump to Page Input */}
+        {totalPages > 3 && (
+          <form onSubmit={handleJumpSubmit} className="flex items-center gap-1 ml-2 border-l border-slate-200 pl-2">
+            <span className="text-[11px] text-slate-400">Go to:</span>
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={jumpInput}
+              placeholder={String(validCurrentPage)}
+              onChange={(e) => setJumpInput(e.target.value)}
+              className="w-12 h-6 px-1.5 text-center bg-slate-50 border border-slate-200 text-slate-800 rounded text-xs font-mono focus:outline-none focus:border-blue-500"
+            />
+            <button
+              type="submit"
+              disabled={!jumpInput.trim()}
+              className="px-2 h-6 bg-slate-100 hover:bg-blue-600 hover:text-white border border-slate-200 hover:border-blue-600 text-[11px] font-medium rounded transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Go
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

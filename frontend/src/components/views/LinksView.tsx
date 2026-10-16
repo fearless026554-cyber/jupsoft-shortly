@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Filter,
@@ -306,6 +306,17 @@ export const LinksView: React.FC<LinksViewProps> = ({
     });
 
   const pagination = usePagination(filteredLinks, 10);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  const handlePageChangeWithScroll = (page: number) => {
+    pagination.setCurrentPage(page);
+    if (tableContainerRef.current) {
+      const top = tableContainerRef.current.getBoundingClientRect().top + window.scrollY - 80;
+      if (window.scrollY > top) {
+        window.scrollTo({ top, behavior: 'smooth' });
+      }
+    }
+  };
 
   const handleExport = () => {
     exportToCsv(
@@ -682,7 +693,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
       </div>
 
       {/* Jupsoft High-Density Data Grid */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
+      <div ref={tableContainerRef} className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           {loading ? (
             <div className="p-4">
@@ -1087,7 +1098,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
               currentPage={pagination.currentPage}
               totalItems={filteredLinks.length}
               pageSize={pagination.pageSize}
-              onPageChange={pagination.setCurrentPage}
+              onPageChange={handlePageChangeWithScroll}
               onPageSizeChange={pagination.setPageSize}
               itemLabel="links"
             />

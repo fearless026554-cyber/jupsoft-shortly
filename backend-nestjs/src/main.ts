@@ -155,4 +155,4 @@ async function bootstrap() {
     startLocalDomainGateways(Number(env.PORT), Number(process.env.FRONTEND_PORT || 5001));
   }
 }
-bootstrap();
+void bootstrap();

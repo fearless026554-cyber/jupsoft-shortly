@@ -60,7 +60,11 @@ export class LinkService {
     client: PoolClient,
     tenantId: string,
     dto: CreateLinkDto,
-    domainId = env.DEFAULT_DOMAIN_ID
+    domainId = env.DEFAULT_DOMAIN_ID,
+    options?: {
+      skipQr?: boolean;
+      tenantCode?: string;
+    }
   ): Promise<{ link: Link; shortUrl: string; aliasUrl?: string; qrSvg: string }> {
     // 1. Destination URL validation & anti-chaining screening (FR-08)
     const screening = ScreeningService.validateDestinationUrl(dto.destinationUrl);
@@ -228,13 +232,22 @@ export class LinkService {
 
     // 4. Generate Short URL & Dynamic QR code (FR-10)
     const shortUrl = UrlService.buildShortUrl(shortCode);
-    const qrSvg = await QrService.generateSvg(shortUrl);
-
-    await client.query(
-      `INSERT INTO qr_codes (link_id, is_dynamic, qr_svg_data)
-       VALUES ($1, true, $2)`,
-      [linkRecord.id, qrSvg]
-    );
+    let qrSvg = '';
+    if (options?.skipQr) {
+      // Lightweight placeholder for high-speed bulk ingestion
+      await client.query(
+        `INSERT INTO qr_codes (link_id, is_dynamic, qr_svg_data)
+         VALUES ($1, true, NULL)`,
+        [linkRecord.id]
+      );
+    } else {
+      qrSvg = await QrService.generateSvg(shortUrl);
+      await client.query(
+        `INSERT INTO qr_codes (link_id, is_dynamic, qr_svg_data)
+         VALUES ($1, true, $2)`,
+        [linkRecord.id, qrSvg]
+      );
+    }
 
     // 5. Persist Screening Audit Trail (PRD Page 11 screening_results table)
     await client.query(
@@ -246,8 +259,11 @@ export class LinkService {
     // 6. Query tenant code for human-readable alias URL (FR-05)
     let aliasUrl: string | undefined;
     if (sanitizedAlias) {
-      const tRes = await client.query('SELECT code FROM tenants WHERE id = $1', [tenantId]);
-      const tCode = tRes.rows[0]?.code;
+      let tCode = options?.tenantCode;
+      if (!tCode) {
+        const tRes = await client.query('SELECT code FROM tenants WHERE id = $1', [tenantId]);
+        tCode = tRes.rows[0]?.code;
+      }
       if (tCode) {
         aliasUrl = UrlService.buildAliasUrl(tCode, sanitizedAlias);
       } else {

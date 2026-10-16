@@ -16,21 +16,13 @@ export function usePagination<T>(items: T[], initialPageSize = 10) {
 
   const handlePageChange = (newPage: number) => {
     if (newPage === currentPage) return;
-    setIsLazyLoading(true);
-    setCurrentPage(newPage);
-    // Smooth micro-task lazy load animation to avoid jarring layout shifts
-    setTimeout(() => {
-      setIsLazyLoading(false);
-    }, 150);
+    const boundedPage = Math.min(Math.max(1, newPage), totalPages);
+    setCurrentPage(boundedPage);
   };
 
   const handlePageSizeChange = (newPageSize: number) => {
-    setIsLazyLoading(true);
     setPageSize(newPageSize);
     setCurrentPage(1);
-    setTimeout(() => {
-      setIsLazyLoading(false);
-    }, 150);
   };
 
   const paginatedItems = useMemo(() => {
