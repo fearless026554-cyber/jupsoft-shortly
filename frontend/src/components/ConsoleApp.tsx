@@ -323,11 +323,12 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
         setAbuseCount(typeof a === 'number' ? a : 0);
       }
 
-      // Reconcile selectedQrLink (R5)
-      if (safeLinks.length > 0) {
+      // Reconcile selectedQrLink (R5) - filter out archived links
+      const activeQrCandidates = safeLinks.filter((l) => l.status !== 'archived');
+      if (activeQrCandidates.length > 0) {
         setSelectedQrLink((prev) => {
-          if (!prev || !safeLinks.some((x) => x.id === prev.id)) {
-            return safeLinks[0];
+          if (!prev || prev.status === 'archived' || !activeQrCandidates.some((x) => x.id === prev.id)) {
+            return activeQrCandidates[0];
           }
           return prev;
         });
@@ -349,12 +350,39 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
       const l = await api.getLinks(activeTenantId !== 'all' ? activeTenantId : undefined);
       const safeLinks = Array.isArray(l) ? l : [];
       setLinks(safeLinks);
-      if (safeLinks.length > 0 && !selectedQrLink) {
-        setSelectedQrLink(safeLinks[0]);
+      const activeQrCandidates = safeLinks.filter((l) => l.status !== 'archived');
+      if (activeQrCandidates.length > 0 && (!selectedQrLink || selectedQrLink.status === 'archived')) {
+        setSelectedQrLink(activeQrCandidates[0]);
       }
     } catch (err) {
       console.error('Failed to refresh links:', err);
     }
+  };
+
+  const handleLinkCreated = (newLinkData?: any) => {
+    if (newLinkData && newLinkData.id) {
+      const formattedLink: LinkItem = {
+        id: newLinkData.id,
+        tenant_id: newLinkData.tenantId || (activeTenantId !== 'all' ? activeTenantId : (tenants[0]?.id || '')),
+        short_code: newLinkData.shortCode || newLinkData.short_code,
+        destination_url: newLinkData.destinationUrl || newLinkData.destination_url,
+        alias: newLinkData.alias || null,
+        tag: newLinkData.tag || 'General',
+        redirect_type: newLinkData.redirectType || newLinkData.redirect_type || '307',
+        status: newLinkData.status || 'active',
+        click_count: 0,
+        created_at: newLinkData.createdAt || newLinkData.created_at || new Date().toISOString(),
+        expires_at: newLinkData.expiresAt || newLinkData.expires_at || null,
+        max_clicks: newLinkData.maxClicks || newLinkData.max_clicks || null,
+        external_ref: newLinkData.externalRef || newLinkData.external_ref || null,
+        is_permanent: Boolean(newLinkData.isPermanent || newLinkData.is_permanent),
+      };
+      // Optimistic prepend: instant UI feedback (0ms)
+      setLinks((prev) => [formattedLink, ...prev.filter((l) => l.id !== formattedLink.id)]);
+      setSelectedQrLink(formattedLink);
+    }
+    // Background refresh silently without blocking UI
+    refreshLinks().catch(() => {});
   };
 
   const handleManualRefresh = async () => {
@@ -945,7 +973,7 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
       <CreateLinkModal
         isOpen={isCreateLinkModalOpen}
         onClose={() => setIsCreateLinkModalOpen(false)}
-        onLinkCreated={refreshLinks}
+        onLinkCreated={handleLinkCreated}
       />
 
       <CreateTenantModal

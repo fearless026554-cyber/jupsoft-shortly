@@ -233,27 +233,25 @@ export class LinkService {
     // 4. Generate Short URL & Dynamic QR code (FR-10)
     const shortUrl = UrlService.buildShortUrl(shortCode);
     let qrSvg = '';
-    if (options?.skipQr) {
-      // Lightweight placeholder for high-speed bulk ingestion
-      await client.query(
-        `INSERT INTO qr_codes (link_id, is_dynamic, qr_svg_data)
-         VALUES ($1, true, NULL)`,
-        [linkRecord.id]
-      );
-    } else {
+    if (!options?.skipQr) {
       qrSvg = await QrService.generateSvg(shortUrl);
-      await client.query(
-        `INSERT INTO qr_codes (link_id, is_dynamic, qr_svg_data)
-         VALUES ($1, true, $2)`,
-        [linkRecord.id, qrSvg]
-      );
     }
 
-    // 5. Persist Screening Audit Trail (PRD Page 11 screening_results table)
+    // 5. Persist QR Code & Screening Audit Trail in a single CTE query to eliminate network roundtrips
     await client.query(
-      `INSERT INTO screening_results (link_id, provider, verdict, checked_at)
-       VALUES ($1, $2, $3, NOW())`,
-      [linkRecord.id, ScreeningProvider.HEURISTICS_SAFE_BROWSING, ScreeningVerdict.PENDING]
+      `WITH ins_qr AS (
+         INSERT INTO qr_codes (link_id, is_dynamic, qr_svg_data)
+         VALUES ($1, true, $2)
+         RETURNING id
+       )
+       INSERT INTO screening_results (link_id, provider, verdict, checked_at)
+       VALUES ($1, $3, $4, NOW())`,
+      [
+        linkRecord.id,
+        qrSvg || null,
+        ScreeningProvider.HEURISTICS_SAFE_BROWSING,
+        ScreeningVerdict.PENDING,
+      ]
     );
 
     // 6. Query tenant code for human-readable alias URL (FR-05)

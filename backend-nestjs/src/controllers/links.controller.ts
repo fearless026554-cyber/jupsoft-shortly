@@ -123,14 +123,7 @@ export class LinksController {
     const tenantId = auth.tenantId;
     let domainId: string = dto.domainId || env.DEFAULT_DOMAIN_ID;
     if (!dto.domainId) {
-      const tenantDomRes = await this.db.pool.query(
-        `SELECT id FROM domains
-         WHERE tenant_id = $1 OR tenant_id IS NULL
-         ORDER BY (verification_status = 'verified') DESC, (tenant_id IS NOT NULL) DESC, created_at ASC
-         LIMIT 1`,
-        [tenantId]
-      );
-      domainId = tenantDomRes.rows[0]?.id || env.DEFAULT_DOMAIN_ID;
+      domainId = await this.redis.getTenantPrimaryDomainId(tenantId);
     } else if (dto.domainId !== env.DEFAULT_DOMAIN_ID) {
       const domRes = await this.db.pool.query(
         'SELECT id FROM domains WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)',
@@ -149,8 +142,11 @@ export class LinksController {
       dto.externalRef = dto.externalRef ? `PERMANENT:${dto.externalRef}` : 'PERMANENT';
     }
 
+    const tenantCode = await this.redis.getTenantCode(tenantId);
     const result = await this.db.withTenantContext(tenantId, async (client) => {
-      const created = await LinkService.createLink(client, tenantId, dto, domainId);
+      const created = await LinkService.createLink(client, tenantId, dto, domainId, {
+        tenantCode: tenantCode || undefined,
+      });
       await AuditService.log(client, {
         tenantId,
         actorId: auth.keyId,
@@ -194,12 +190,20 @@ export class LinksController {
           svg: result.qrSvg,
           pngUrl: UrlService.buildQrUrl(linkRow.id, 'png'),
         },
-        status: linkRow.status,
-        expiresAt: linkRow.expires_at || linkRow.expiresAt,
-        externalRef: linkRow.external_ref || linkRow.externalRef,
+        status: linkRow.status || 'active',
+        tag: linkRow.tag || dto.tag || 'General',
+        alias: linkRow.alias || dto.alias || null,
+        click_count: 0,
+        expiresAt: linkRow.expires_at || linkRow.expiresAt || null,
+        expires_at: linkRow.expires_at || linkRow.expiresAt || null,
+        maxClicks: linkRow.max_clicks || dto.maxClicks || null,
+        max_clicks: linkRow.max_clicks || dto.maxClicks || null,
+        externalRef: linkRow.external_ref || linkRow.externalRef || null,
+        external_ref: linkRow.external_ref || linkRow.externalRef || null,
         isPermanent: wantsPermanent || isLinkPermanent(linkRow),
         is_permanent: wantsPermanent || isLinkPermanent(linkRow),
-        createdAt: linkRow.created_at || linkRow.createdAt,
+        createdAt: linkRow.created_at || linkRow.createdAt || new Date().toISOString(),
+        created_at: linkRow.created_at || linkRow.createdAt || new Date().toISOString(),
       },
     });
   }

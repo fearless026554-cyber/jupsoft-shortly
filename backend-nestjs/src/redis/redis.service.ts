@@ -178,5 +178,33 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const existing = await this.client.get(key);
     return existing || newSalt;
   }
+
+  async getTenantPrimaryDomainId(tenantId: string): Promise<string> {
+    const key = `tenant:primary_domain:${tenantId}`;
+    const cached = await this.client.get(key);
+    if (cached) return cached;
+
+    const res = await this.db.pool.query(
+      `SELECT id FROM domains
+       WHERE tenant_id = $1 OR tenant_id IS NULL
+       ORDER BY (verification_status = 'verified') DESC, (tenant_id IS NOT NULL) DESC, created_at ASC
+       LIMIT 1`,
+      [tenantId]
+    );
+    const domainId = res.rows[0]?.id || env.DEFAULT_DOMAIN_ID;
+    await this.client.setex(key, 600, domainId);
+    return domainId;
+  }
+
+  async getTenantCode(tenantId: string): Promise<string | null> {
+    const key = `tenant:code:${tenantId}`;
+    const cached = await this.client.get(key);
+    if (cached !== null) return cached;
+
+    const res = await this.db.pool.query('SELECT code FROM tenants WHERE id = $1', [tenantId]);
+    const code = res.rows[0]?.code || '';
+    await this.client.setex(key, 1800, code);
+    return code || null;
+  }
 }
 

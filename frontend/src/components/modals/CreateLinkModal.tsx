@@ -23,7 +23,7 @@ import { useTenantDomains, buildShortUrl } from '../../hooks/useTenantDomains';
 interface CreateLinkModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLinkCreated: () => void;
+  onLinkCreated: (createdLink?: any) => void;
 }
 
 export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
@@ -145,7 +145,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
       const res = await api.createLink(dto);
       if (res.success && res.data) {
         setCreatedData(res.data);
-        onLinkCreated();
+        onLinkCreated(res.data);
       } else {
         setError(res.error?.message || 'Failed to create link');
       }

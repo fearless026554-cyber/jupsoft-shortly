@@ -34,8 +34,16 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
 
   const { defaultDomain } = useTenantDomains();
 
-  // Fallback to first link if none selected
-  const activeLink = selectedLink || (links.length > 0 ? links[0] : null);
+  // Filter out archived links so they cannot be selected or downloaded as active QR codes
+  const activeLinks = React.useMemo(() => {
+    return links.filter((l) => l.status !== 'archived');
+  }, [links]);
+
+  // Fallback to first active link if none selected or if selected link is archived
+  const activeLink = (selectedLink && selectedLink.status !== 'archived')
+    ? selectedLink
+    : (activeLinks.length > 0 ? activeLinks[0] : null);
+
   const shortUrl = activeLink ? buildShortUrl(defaultDomain, activeLink.short_code) : '';
 
   const handleCopy = () => {
@@ -99,16 +107,19 @@ export const QrStudioView: React.FC<QrStudioViewProps> = ({
             <select
               value={activeLink?.id || ''}
               onChange={(e) => {
-                const found = links.find((l) => l.id === e.target.value);
+                const found = activeLinks.find((l) => l.id === e.target.value);
                 if (found) onSelectLink(found);
               }}
               className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
             >
-              {links.map((link) => (
+              {activeLinks.map((link) => (
                 <option key={link.id} value={link.id}>
                   {defaultDomain}/{link.short_code} ({link.tag || 'Notice'})
                 </option>
               ))}
+              {activeLinks.length === 0 && (
+                <option value="" disabled>No active links available</option>
+              )}
             </select>
           </div>
 

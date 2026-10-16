@@ -5,6 +5,8 @@ export const DEFAULT_PAGE_LIMIT = process.env.NEXT_PUBLIC_DEFAULT_PAGE_LIMIT ? N
 
 export interface LinkItem {
   id: string;
+  tenant_id?: string;
+  tenantId?: string;
   short_code: string;
   alias?: string | null;
   destination_url: string;

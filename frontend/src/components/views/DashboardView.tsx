@@ -75,8 +75,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .catch(() => {});
   }, [timeRange]);
 
+  const isLinkExpired = (link: LinkItem) => {
+    if (link.status === 'expired') return true;
+    if (link.expires_at && new Date(link.expires_at).getTime() < Date.now()) return true;
+    return false;
+  };
+
+  // Only consider active, non-archived, and non-expired links for dashboard display
+  const activeLinks = React.useMemo(() => {
+    return links.filter((l) => l.status === 'active' && !isLinkExpired(l));
+  }, [links]);
+
+  const topActiveLinks = React.useMemo(() => {
+    return [...activeLinks]
+      .sort((a, b) => Number(b.click_count || 0) - Number(a.click_count || 0))
+      .slice(0, 5);
+  }, [activeLinks]);
+
+  const recentActiveLinks = React.useMemo(() => {
+    return links
+      .filter((l) => l.status === 'active' && !isLinkExpired(l))
+      .slice(0, 4);
+  }, [links]);
+
   const totalClicks = Number(
-    summary?.total_clicks ?? links.reduce((sum, l) => sum + Number(l.click_count || 0), 0)
+    summary?.total_clicks ?? links.filter((l) => l.status !== 'archived').reduce((sum, l) => sum + Number(l.click_count || 0), 0)
   );
   const totalRevenue = Number(summary?.total_revenue_attributed || 0);
   const totalConversions = Number(summary?.total_outcomes || 0);
@@ -142,7 +165,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
               <div className="mt-2 flex items-baseline justify-between">
                 <span className="text-xl font-bold text-slate-900 tracking-tight">
-                  {formatNumber(links.length)}
+                  {formatNumber(activeLinks.length)}
                 </span>
               </div>
             </div>
@@ -222,7 +245,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 onClick={onNavigateToLinks}
                 className="text-[10px] text-[#0F6CBD] hover:text-blue-800 font-bold uppercase tracking-wide flex items-center gap-1 transition"
               >
-                <span>View All ({links.length})</span>
+                <span>View All ({activeLinks.length})</span>
                 <ArrowRight className="w-3 h-3" />
               </button>
             </div>
@@ -243,7 +266,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {links.slice(0, 5).map((l) => (
+                    {topActiveLinks.map((l) => (
                       <tr key={l.id} className="hover:bg-slate-50/70 transition group">
                         <td className="px-3 py-2">
                           <div className="font-mono font-bold text-[#0F6CBD] flex items-center gap-1.5 text-[11px]">
@@ -282,7 +305,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         </td>
                       </tr>
                     ))}
-                    {links.length === 0 && (
+                    {topActiveLinks.length === 0 && (
                       <tr>
                         <td colSpan={4} className="px-3 py-10 text-center">
                           <div className="flex flex-col items-center justify-center space-y-2">
@@ -322,13 +345,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           <div className="space-y-2 overflow-y-auto flex-1">
-            {links.length === 0 ? (
+            {recentActiveLinks.length === 0 ? (
               <div className="p-3 text-center text-slate-400 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
                 <p className="font-medium text-slate-500 text-xs">No activity yet</p>
                 <p className="text-xs text-slate-400 mt-1">Traffic and link events will appear here.</p>
               </div>
             ) : (
-              links.slice(0, 4).map((l) => (
+              recentActiveLinks.map((l) => (
                 <div key={l.id} className="p-2.5 rounded bg-slate-50 border border-slate-100 space-y-1.5 group hover:border-slate-200 transition">
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-slate-700 text-xs truncate mr-2">
