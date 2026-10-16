@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import * as dotenv from 'dotenv';
-import { CACHE_TTL, RATE_LIMITS } from './constants.js';
+import { CACHE_TTL, RATE_LIMITS } from '../constants/index.js';
 
 if (process.env.BASE_URL === '/') {
   delete process.env.BASE_URL;

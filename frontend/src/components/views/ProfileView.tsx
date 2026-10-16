@@ -26,10 +26,10 @@ import {
   UserRole,
   ROLE_DEFINITIONS,
   ROLE_HIERARCHY,
-  ALL_ENTITLEMENTS,
-  getRoleDefinition,
+  PERMISSIONS_MATRIX,
+  getRoleConfig,
   getRolePermissions,
-  isRootSuperAdmin,
+  isRootSuperAdminAccount,
 } from '../../utils/rbac';
 
 interface ProfileViewProps {
@@ -70,9 +70,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   }, [currentUser]);
 
   const userRole: UserRole = (currentUser?.role as UserRole) || 'user';
-  const roleDef = getRoleDefinition(userRole);
+  const roleDef = getRoleConfig(userRole);
   const roleLevel = ROLE_HIERARCHY[userRole] || 40;
-  const isRoot = isRootSuperAdmin(currentUser || {});
+  const isRoot = isRootSuperAdminAccount(currentUser || {});
   const userPermissions = getRolePermissions(userRole);
 
   const tenant = tenants.find((t) => t.id === currentUser?.tenant_id) || {
@@ -627,14 +627,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 </div>
 
                 <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200">
-                  {userPermissions.length} / {ALL_ENTITLEMENTS.length} Granted
+                  {userPermissions.length} / {PERMISSIONS_MATRIX.length} Granted
                 </span>
               </div>
 
               {/* Entitlements Categorized Grid */}
               <div className="space-y-4">
-                {(Array.from(new Set(ALL_ENTITLEMENTS.map((e) => e.category))) as string[]).map((category: string) => {
-                  const categoryEntitlements = ALL_ENTITLEMENTS.filter((e) => e.category === category);
+                {(Array.from(new Set(PERMISSIONS_MATRIX.map((e) => e.category))) as string[]).map((category: string) => {
+                  const categoryEntitlements = PERMISSIONS_MATRIX.filter((e) => e.category === category);
                   return (
                     <div
                       key={category}

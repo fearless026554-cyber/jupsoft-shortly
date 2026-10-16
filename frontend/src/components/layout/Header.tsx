@@ -333,6 +333,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-
-// Backward-compatibility export
-export const ZohoHeader = Header;

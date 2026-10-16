@@ -1,7 +1,6 @@
 // JLMP Enterprise API Client connecting to NestJS Backend on Port 3000
 
 export const API_BASE_URL = '/api/proxy';
-export const DEFAULT_PAGE_LIMIT = process.env.NEXT_PUBLIC_DEFAULT_PAGE_LIMIT ? Number(process.env.NEXT_PUBLIC_DEFAULT_PAGE_LIMIT) : 100;
 
 export interface LinkItem {
   id: string;
@@ -88,8 +87,8 @@ export interface AbuseReportItem {
   created_at: string;
 }
 
-export const TOKEN_STORAGE_KEY = 'jlmp_auth_token';
-export const USER_STORAGE_KEY = 'jlmp_auth_user';
+const TOKEN_STORAGE_KEY = 'jlmp_auth_token';
+const USER_STORAGE_KEY = 'jlmp_auth_user';
 
 export function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -108,7 +107,7 @@ export function setAuthToken(token: string | null) {
   }
 }
 
-export function handleAuthExpired() {
+function handleAuthExpired() {
   if (typeof window === 'undefined') return;
   setAuthToken(null);
   setStoredUser(null);
@@ -173,7 +172,7 @@ export function setStoredUser(user: any | null) {
   }
 }
 
-export function getHeaders(): Record<string, string> {
+function getHeaders(): Record<string, string> {
   const h: Record<string, string> = {
     'Content-Type': 'application/json',
   };

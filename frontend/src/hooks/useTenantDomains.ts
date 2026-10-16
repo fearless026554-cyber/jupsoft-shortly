@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 
-export const DEFAULT_SHORT_DOMAIN =
+const DEFAULT_SHORT_DOMAIN =
   process.env.NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN || '';
-export const DEFAULT_CNAME_DOMAIN =
+const DEFAULT_CNAME_DOMAIN =
   process.env.NEXT_PUBLIC_CNAME_DOMAIN || '';
 
 export function buildShortUrl(domain: string, shortCode: string): string {
@@ -23,7 +23,7 @@ function getInitialCachedDomain(): string {
 let cachedDefaultDomain: string | null = null;
 let inFlightConfigPromise: Promise<string> | null = null;
 
-export function resetCachedTenantDomain() {
+function resetCachedTenantDomain() {
   cachedDefaultDomain = null;
   inFlightConfigPromise = null;
   if (typeof window !== 'undefined') {

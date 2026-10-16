@@ -14,9 +14,6 @@ export const JobNames = {
   SCREEN_URL: 'screen-url',
 } as const;
 
-export const QUEUE_NAMES = QueueNames;
-export const JOB_NAMES = JobNames;
-
 export const QueueRetryOptions = {
   CLICKS: {
     attempts: 3,

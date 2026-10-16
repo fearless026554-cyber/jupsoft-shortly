@@ -18,7 +18,4 @@ export const HeaderNames = {
   CONTENT_TYPE: 'content-type',
 } as const;
 
-export const HTTP_HEADERS = HeaderNames;
-
 export const FALLBACK_IP = '127.0.0.1';
-export const UNKNOWN_IP = 'UNKNOWN';

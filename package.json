@@ -15,8 +15,5 @@
     "start:frontend": "pnpm --filter frontend start",
     "test": "pnpm --filter backend-nestjs test",
     "lint": "pnpm --filter backend-nestjs lint"
-  },
-  "dependencies": {
-    "rxjs": "^7.8.2"
   }
 }

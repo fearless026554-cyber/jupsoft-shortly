@@ -2,7 +2,7 @@
  * CSV Parsing Utilities for Bulk Link Creation
  */
 
-export function parseCsvLine(line: string): string[] {
+function parseCsvLine(line: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;

@@ -38,7 +38,7 @@ import {
   UserRoles,
 } from '../constants/index.js';
 
-export function isLinkPermanent(link: any): boolean {
+function isLinkPermanent(link: any): boolean {
   if (!link) return false;
   if (link.is_permanent === true || link.isPermanent === true) return true;
   if (typeof link.external_ref === 'string') {

@@ -404,10 +404,6 @@ export function isRootSuperAdminAccount(user?: { email?: string; name?: string; 
   );
 }
 
-export const isRootSuperAdmin = isRootSuperAdminAccount;
-export const ALL_ENTITLEMENTS = PERMISSIONS_MATRIX;
-export const getRoleDefinition = getRoleConfig;
-
 export function getRolePermissions(role?: string): RBACPermission[] {
   if (!role) return [];
   if (role === 'super_admin') return PERMISSIONS_MATRIX;

@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { RETENTION_POLICY } from '../config/constants.js';
+import { RETENTION_POLICY } from '../constants/index.js';
 
 export class RetentionService {
   /**
