@@ -201,6 +201,10 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
     const token = getAuthToken();
     if (!token) {
       if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('code') || urlParams.get('token') || urlParams.get('credential')) {
+          return;
+        }
         window.location.href = '/login';
       }
       return;

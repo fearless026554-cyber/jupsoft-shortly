@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, useRef, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ConsoleApp } from '../../components/ConsoleApp';
 import { api } from '../../api';
@@ -12,14 +12,22 @@ function ConsoleTabContent() {
   const router = useRouter();
   const rawTab = (params?.tab as string) || 'dashboard';
 
-  const [isExchangingGoogleCode, setIsExchangingGoogleCode] = useState(false);
+  const code = searchParams.get('code');
+  // Immediately set to true if an OAuth code is present so ConsoleApp does NOT mount prematurely and redirect to /login
+  const [isExchangingGoogleCode, setIsExchangingGoogleCode] = useState(() => Boolean(code));
   const [googleError, setGoogleError] = useState<string | null>(null);
+  const codeExchangedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const code = searchParams.get('code');
-    if (code) {
+    if (code && codeExchangedRef.current !== code) {
+      codeExchangedRef.current = code;
       setIsExchangingGoogleCode(true);
-      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : 'https://go.jupsoft.com/dashboard';
+
+      const redirectUri =
+        typeof window !== 'undefined'
+          ? `${window.location.origin}/dashboard`
+          : 'https://go.jupsoft.com/dashboard';
+
       api
         .googleLogin({
           code,
@@ -27,9 +35,8 @@ function ConsoleTabContent() {
         })
         .then((res) => {
           if (res.success && res.data?.token) {
-            // Clean up code from browser URL bar without page refresh
-            window.history.replaceState({}, '', '/dashboard');
-            setIsExchangingGoogleCode(false);
+            // Cleanly transition to /dashboard with session stored in localStorage and cookie
+            window.location.replace('/dashboard');
           } else {
             setGoogleError(res.error?.message || 'Google authorization failed');
             setIsExchangingGoogleCode(false);
@@ -40,7 +47,7 @@ function ConsoleTabContent() {
           setIsExchangingGoogleCode(false);
         });
     }
-  }, [searchParams]);
+  }, [code]);
 
   if (isExchangingGoogleCode) {
     return (

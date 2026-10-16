@@ -279,6 +279,7 @@ export class AuthController {
         });
         tokenToVerify = tokenResponse.tokens.id_token || undefined;
       } catch (err: any) {
+        this.logger.error(`[Google Auth] Failed to exchange code: ${err.message} (redirectUri: ${redirectUri})`);
         return reply.status(401).send({
           success: false,
           error: {

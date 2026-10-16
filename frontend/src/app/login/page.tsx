@@ -38,6 +38,7 @@ export default function LoginPage() {
   const [forgotSent, setForgotSent] = useState(false);
 
   const googleBtnContainerRef = useRef<HTMLDivElement>(null);
+  const googleCodeExchangedRef = useRef<string | null>(null);
 
   // Check query parameters (session expired, OAuth code, or resetToken)
   useEffect(() => {
@@ -57,7 +58,8 @@ export default function LoginPage() {
 
       // Check if redirected with Google OAuth authorization code in query
       const code = urlParams.get('code');
-      if (code) {
+      if (code && googleCodeExchangedRef.current !== code) {
+        googleCodeExchangedRef.current = code;
         setGoogleLoading(true);
         const redirectUri =
           typeof window !== 'undefined'
@@ -70,7 +72,7 @@ export default function LoginPage() {
           })
           .then((res) => {
             if (res.success && res.data?.token) {
-              router.replace('/dashboard');
+              window.location.replace('/dashboard');
             } else {
               setError(res.error?.message || 'Failed to authenticate with Google code.');
             }
@@ -166,17 +168,7 @@ export default function LoginPage() {
 
     setGoogleLoading(true);
     setError(null);
-
-    const google = (window as any).google;
-    if (google?.accounts?.id) {
-      google.accounts.id.prompt((notification: any) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          redirectToOAuth();
-        }
-      });
-    } else {
-      redirectToOAuth();
-    }
+    redirectToOAuth();
   };
 
   const redirectToOAuth = () => {
