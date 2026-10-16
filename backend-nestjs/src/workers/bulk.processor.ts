@@ -47,6 +47,7 @@ export class BulkProcessor extends WorkerHost {
       // 2. High-performance concurrent worker pool (scaled to pool capacity)
       const maxPool = env.PG_POOL_MAX || 20;
       const concurrency = Math.min(10, Math.max(2, Math.floor(maxPool / 2)));
+      let isCancelled = false;
       let nextIndex = 0;
 
       const workerTask = async (workerId: number) => {
@@ -57,6 +58,17 @@ export class BulkProcessor extends WorkerHost {
           await client.query(`SELECT set_config('${DB_CONTEXT_KEYS.TENANT_ID}', $1, true)`, [tenantId]);
 
           while (true) {
+            if (isCancelled) break;
+
+            if (nextIndex % 5 === 0) {
+              const cancelSignal = await this.redis.client.get(`bulk:cancel:${job.id || job.data.jobId}`).catch(() => null);
+              if (cancelSignal) {
+                isCancelled = true;
+                this.logger.warn(`Bulk job ${job.id} cancelled by user signal`);
+                break;
+              }
+            }
+
             const i = nextIndex++;
             if (i >= total) break;
 
@@ -175,7 +187,8 @@ export class BulkProcessor extends WorkerHost {
         total,
         completed,
         failed,
-        results,
+        results: results.filter(Boolean),
+        cancelled: isCancelled,
       };
     }
   }

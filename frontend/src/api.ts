@@ -381,6 +381,18 @@ export const api = {
     }
   },
 
+  async cancelBulkJob(jobId: string) {
+    try {
+      const res = await secureFetch(`${API_BASE_URL}/links/bulk/${jobId}/cancel`, {
+        method: 'POST',
+        headers,
+      });
+      return res.json();
+    } catch {
+      return { success: false, error: { message: 'Network error while attempting cancellation' } };
+    }
+  },
+
   async cloneLink(id: string) {
     clearApiCache('links');
     const res = await secureFetch(`${API_BASE_URL}/links/${id}/clone`, {

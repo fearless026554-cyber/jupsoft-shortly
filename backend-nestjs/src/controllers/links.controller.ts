@@ -308,10 +308,59 @@ export class LinksController {
     const state = await job.getState();
     const progress = job.progress;
     const result = job.returnvalue;
+    const isCancelled = await this.redis.client.get(`bulk:cancel:${jobId}`).catch(() => null);
 
     return reply.send({
       success: true,
-      data: { jobId, status: state, progress: progress || 0, result: result || null },
+      data: {
+        jobId,
+        status: isCancelled ? 'cancelled' : state,
+        progress: progress || 0,
+        result: result || null,
+      },
+    });
+  }
+
+  @Post('bulk/:jobId/cancel')
+  @RequireScope(ApiScopes.LINKS_WRITE)
+  async cancelBulkJob(
+    @Param('jobId') jobId: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
+    const auth = (req as any).auth;
+    const isSuperAdmin =
+      auth?.role === UserRoles.SUPER_ADMIN ||
+      auth?.scopes?.includes(ApiScopes.SUPER_ADMIN) ||
+      auth?.scopes?.includes(ApiScopes.WILDCARD);
+    const tenantId = auth?.tenantId;
+
+    const job = await this.bulkQueue.getJob(jobId);
+    if (!job) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: ErrorCodes.NOT_FOUND, message: 'Bulk job not found' },
+      });
+    }
+
+    if (!isSuperAdmin && job.data?.tenantId && job.data.tenantId !== tenantId) {
+      return reply.status(404).send({
+        success: false,
+        error: { code: ErrorCodes.NOT_FOUND, message: 'Bulk job not found' },
+      });
+    }
+
+    // Set cancellation token in Redis for active workers to break immediately
+    await this.redis.client.set(`bulk:cancel:${jobId}`, '1', 'EX', 3600);
+
+    try {
+      await (job as any).discard?.();
+      await (job as any).remove?.();
+    } catch {}
+
+    return reply.send({
+      success: true,
+      data: { jobId, status: 'cancelled', message: 'Bulk job cancellation signal sent successfully' },
     });
   }
 

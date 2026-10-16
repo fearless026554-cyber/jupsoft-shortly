@@ -1,26 +1,30 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   FileSpreadsheet,
   Upload,
   Download,
   Play,
+  Square,
   CheckCircle2,
   AlertCircle,
   RefreshCw,
   Plus,
   Trash2,
   Layers,
-  GraduationCap,
-  Bus,
-  FileCheck,
   Tag,
   Copy,
   Check,
   Zap,
   X,
   SlidersHorizontal,
+  Clock,
+  Sparkles,
+  Wand2,
+  FileText,
+  ArrowRight,
+  Search,
 } from 'lucide-react';
 import { api, exportToCsv } from '../../api';
 import { Permissions } from '../../utils/rbac';
@@ -32,6 +36,18 @@ interface BatchRow {
   alias: string;
   tag: string;
   externalRef: string;
+}
+
+interface JobInfo {
+  jobId: string;
+  totalCount: number;
+  status: 'queued' | 'active' | 'processing' | 'completed' | 'cancelled' | 'failed';
+  progress: number;
+  completedCount: number;
+  failedCount: number;
+  startTime: number;
+  speed: number;
+  elapsedSeconds: number;
 }
 
 interface BulkStudioViewProps {
@@ -66,33 +82,57 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
       externalRef: '',
     },
   ]);
+
   const [isProcessing, setIsProcessing] = useState(false);
-  const [jobInfo, setJobInfo] = useState<{ jobId: string; totalCount: number; status: string } | null>(null);
+  const [jobInfo, setJobInfo] = useState<JobInfo | null>(null);
   const [batchResults, setBatchResults] = useState<any[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Quick Test Generator State (Presets: 500 / 1000 links, Tag: bulktest)
+  // Modals state
   const [showBatchModal, setShowBatchModal] = useState(false);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pastedText, setPastedText] = useState('');
   const [customCount, setCustomCount] = useState<number>(500);
   const [customTag, setCustomTag] = useState<string>('bulktest');
   const [customBaseUrl, setCustomBaseUrl] = useState<string>('https://jupsoft.com/student/portal?id=');
 
+  // Search within generated results
+  const [resultFilter, setResultFilter] = useState<'all' | 'created' | 'failed'>('all');
+  const [resultSearch, setResultSearch] = useState('');
+
   const pagination = usePagination(batchRows, 50);
 
+  // Clean up polling & timer on unmount
   useEffect(() => {
     return () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
     };
   }, []);
 
-  const validRowsCount = batchRows.filter((r) => isValidUrl(r.destinationUrl)).length;
-  const hasInvalidRows = batchRows.some(
-    (r) => r.destinationUrl.trim().length > 0 && !isValidUrl(r.destinationUrl)
-  );
+  // Compute live dynamic batch metrics
+  const validRowsCount = useMemo(() => {
+    return batchRows.filter((r) => isValidUrl(r.destinationUrl)).length;
+  }, [batchRows]);
+
+  const invalidRowsCount = useMemo(() => {
+    return batchRows.filter((r) => r.destinationUrl.trim().length > 0 && !isValidUrl(r.destinationUrl)).length;
+  }, [batchRows]);
+
+  const withAliasCount = useMemo(() => {
+    return batchRows.filter((r) => r.alias.trim().length > 0).length;
+  }, [batchRows]);
+
+  const hasInvalidRows = invalidRowsCount > 0;
   const canDispatch =
     validRowsCount > 0 &&
     !hasInvalidRows &&
@@ -113,7 +153,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
   };
 
   const handleRemoveRow = (index: number) => {
-    setBatchRows((prev) => prev.filter((_, i) => i !== index));
+    setBatchRows((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
   };
 
   const handleUpdateRow = (index: number, field: keyof BatchRow, val: string) => {
@@ -122,7 +162,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
     );
   };
 
-  // Quick preset category tag applicator (sets category tag without injecting mock URLs or dummy invoices)
+  // Quick preset category tag applicator
   const applyPresetTag = (tag: string) => {
     setBatchRows((prev) => {
       if (prev.length === 0) {
@@ -130,6 +170,92 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
       }
       return prev.map((r) => ({ ...r, tag }));
     });
+  };
+
+  // Dynamic Auto-Fix: Adds https:// to all protocol-less URLs and trims spaces
+  const handleAutoFixProtocols = () => {
+    let fixedCount = 0;
+    setBatchRows((prev) =>
+      prev.map((r) => {
+        const trimmed = r.destinationUrl.trim();
+        if (trimmed && !/^https?:\/\//i.test(trimmed)) {
+          fixedCount++;
+          return { ...r, destinationUrl: `https://${trimmed}` };
+        }
+        return { ...r, destinationUrl: trimmed };
+      })
+    );
+    if (fixedCount > 0) {
+      setSuccessMsg(`Auto-fixed protocols for ${fixedCount} ${fixedCount === 1 ? 'URL' : 'URLs'}.`);
+      setTimeout(() => setSuccessMsg(null), 3500);
+    }
+  };
+
+  // Remove all invalid rows in one click
+  const handleRemoveInvalidRows = () => {
+    const valid = batchRows.filter((r) => r.destinationUrl.trim().length === 0 || isValidUrl(r.destinationUrl));
+    setBatchRows(valid.length > 0 ? valid : [{ destinationUrl: '', alias: '', tag: 'General', externalRef: '' }]);
+    setSuccessMsg('Removed all invalid rows.');
+    setTimeout(() => setSuccessMsg(null), 3000);
+  };
+
+  // Clear all staged rows back to clean initial state
+  const handleClearGrid = () => {
+    setBatchRows([
+      {
+        destinationUrl: '',
+        alias: '',
+        tag: 'General',
+        externalRef: '',
+      },
+    ]);
+    pagination.setCurrentPage(1);
+    setSuccessMsg('Staging grid reset to 1 clean row.');
+    setTimeout(() => setSuccessMsg(null), 2500);
+  };
+
+  // Handle Raw URLs Paste Import
+  const handleProcessPastedUrls = () => {
+    if (!pastedText.trim()) return;
+    const lines = pastedText
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (lines.length === 0) return;
+
+    const newRows: BatchRow[] = lines.map((line, idx) => {
+      // Split on comma or tab if CSV-like, otherwise treat entire line as URL
+      let dest = line;
+      let alias = '';
+      let tag = 'General';
+      let externalRef = '';
+
+      if (line.includes(',') || line.includes('\t')) {
+        const delimiter = line.includes('\t') ? '\t' : ',';
+        const parts = line.split(delimiter).map((p) => p.trim().replace(/^"|"$/g, ''));
+        dest = parts[0] || '';
+        alias = parts[1] || '';
+        tag = parts[2] || 'General';
+        externalRef = parts[3] || '';
+      }
+
+      dest = normalizeUrl(dest);
+
+      return {
+        destinationUrl: dest,
+        alias,
+        tag,
+        externalRef: externalRef || `PASTE-${String(idx + 1).padStart(4, '0')}`,
+      };
+    });
+
+    setBatchRows(newRows);
+    pagination.setCurrentPage(1);
+    setShowPasteModal(false);
+    setPastedText('');
+    setSuccessMsg(`Imported ${newRows.length} links from pasted text.`);
+    setTimeout(() => setSuccessMsg(null), 3500);
   };
 
   // Handle CSV file upload directly into visual grid
@@ -141,7 +267,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
     reader.onload = (event) => {
       try {
         const text = event.target?.result as string;
-        const lines = text.trim().split('\n');
+        const lines = text.trim().split(/\r?\n/);
         if (lines.length < 2) return;
 
         const newRows: BatchRow[] = [];
@@ -151,19 +277,25 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
           const cols = line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
           if (cols[0]) {
             newRows.push({
-              destinationUrl: cols[0],
+              destinationUrl: normalizeUrl(cols[0]),
               alias: cols[1] || '',
               tag: cols[2] || 'General',
               externalRef: cols[3] || '',
             });
           }
         }
-        if (newRows.length > 0) setBatchRows(newRows);
+        if (newRows.length > 0) {
+          setBatchRows(newRows);
+          pagination.setCurrentPage(1);
+          setSuccessMsg(`Successfully imported ${newRows.length} links from CSV file.`);
+          setTimeout(() => setSuccessMsg(null), 3500);
+        }
       } catch (err: any) {
         setErrorMsg('Error reading uploaded CSV file: ' + err.message);
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   // Dispatch Batch Creation
@@ -174,12 +306,17 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
       return;
     }
     if (hasInvalidRows) {
-      setErrorMsg('Please correct the invalid URL highlighted in red before dispatching.');
+      setErrorMsg('Please correct the invalid URL highlighted in red or click "Auto-Fix URLs" before dispatching.');
       return;
     }
 
     setIsProcessing(true);
     setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const startTime = Date.now();
+    const totalCount = validItems.length;
+
     try {
       const items = validItems.map((r) => ({
         destinationUrl: r.destinationUrl.trim(),
@@ -191,15 +328,28 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
       const res = await api.bulkCreate(items);
       if (res.success && res.data) {
         const jobId = res.data.jobId;
-        const totalCount = res.data.totalCount || items.length;
-        const status = res.data.status || 'queued';
-        setJobInfo({ jobId, totalCount, status });
+        const status = (res.data.status as any) || 'queued';
 
-        if (res.data.results) {
+        const initialJobInfo: JobInfo = {
+          jobId,
+          totalCount,
+          status,
+          progress: 5,
+          completedCount: 0,
+          failedCount: 0,
+          startTime,
+          speed: 0,
+          elapsedSeconds: 0,
+        };
+
+        setJobInfo(initialJobInfo);
+
+        if (res.data.results && Array.isArray(res.data.results)) {
           setBatchResults(res.data.results);
           setIsProcessing(false);
+          setJobInfo((prev) => (prev ? { ...prev, progress: 100, status: 'completed', completedCount: res.data.results.length } : null));
         } else {
-          pollStatus(jobId, totalCount);
+          startPollingAndTimer(jobId, totalCount, startTime);
         }
       } else {
         setErrorMsg(res.error?.message || 'Failed to trigger bulk processing.');
@@ -211,27 +361,99 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
     }
   };
 
-  const pollStatus = (jobId: string, totalCount: number) => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
+  // Stop / Cancel active bulk batch
+  const handleStopBulk = async () => {
+    if (!jobInfo?.jobId || !isProcessing) return;
 
+    try {
+      // 1. Immediately halt polling
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+
+      setIsProcessing(false);
+      setJobInfo((prev) => (prev ? { ...prev, status: 'cancelled' } : null));
+
+      // 2. Transmit cancellation signal to backend
+      await api.cancelBulkJob(jobInfo.jobId);
+
+      // 3. Obtain partial results already minted
+      const res = await api.getBulkStatus(jobInfo.jobId);
+      if (res?.success && res.data?.result?.results) {
+        setBatchResults(res.data.result.results);
+      }
+
+      setSuccessMsg('Bulk batch processing stopped by user. Minted links so far have been preserved.');
+    } catch (err: any) {
+      setErrorMsg('Error sending cancellation signal: ' + err.message);
+    }
+  };
+
+  // Polling with real-time speed & progress calculations
+  const startPollingAndTimer = (jobId: string, totalCount: number, startTime: number) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+
+    // Live Stopwatch Timer
+    timerIntervalRef.current = setInterval(() => {
+      const elapsed = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+      setJobInfo((prev) => {
+        if (!prev) return null;
+        const currentProgress = prev.progress;
+        const estProcessed = Math.round((currentProgress / 100) * totalCount);
+        const speed = Math.round((estProcessed / elapsed) * 10) / 10;
+        return {
+          ...prev,
+          elapsedSeconds: elapsed,
+          speed,
+        };
+      });
+    }, 500);
+
+    // Fast-poll worker progress every 750ms
     let attempts = 0;
     pollIntervalRef.current = setInterval(async () => {
       attempts++;
       try {
         const res = await api.getBulkStatus(jobId);
         if (res && res.success && res.data) {
-          const status = res.data.status;
+          const rawStatus = res.data.status;
+          const rawProgress = typeof res.data.progress === 'number' ? res.data.progress : 0;
           const result = res.data.result;
 
-          setJobInfo({ jobId, totalCount, status: status || 'processing' });
+          const elapsed = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+          const completedCount = result?.completed ?? Math.round((rawProgress / 100) * totalCount);
+          const failedCount = result?.failed ?? 0;
+          const speed = Math.round((completedCount / elapsed) * 10) / 10;
 
-          if (status === 'completed' || status === 'failed' || result) {
+          // Clamp progress
+          const progress = rawStatus === 'completed' ? 100 : Math.max(5, Math.min(rawProgress, 99));
+
+          setJobInfo({
+            jobId,
+            totalCount,
+            status: rawStatus === 'completed' ? 'completed' : rawStatus === 'cancelled' ? 'cancelled' : 'processing',
+            progress,
+            completedCount,
+            failedCount,
+            startTime,
+            speed,
+            elapsedSeconds: elapsed,
+          });
+
+          if (rawStatus === 'completed' || rawStatus === 'cancelled' || rawStatus === 'failed' || result) {
             if (pollIntervalRef.current) {
               clearInterval(pollIntervalRef.current);
               pollIntervalRef.current = null;
+            }
+            if (timerIntervalRef.current) {
+              clearInterval(timerIntervalRef.current);
+              timerIntervalRef.current = null;
             }
             setIsProcessing(false);
 
@@ -239,21 +461,26 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
             if (Array.isArray(created) && created.length > 0) {
               setBatchResults(created);
             }
+
+            if (rawStatus === 'completed') {
+              setSuccessMsg(`Batch completed successfully! ${completedCount} links created in ${elapsed}s.`);
+            } else if (rawStatus === 'cancelled') {
+              setSuccessMsg(`Batch stopped by user. ${completedCount} links created before cancellation.`);
+            }
           }
         }
       } catch {
-        // keep polling
+        // Continue polling
       }
 
-      if (attempts >= 40) {
-        if (pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-        }
+      if (attempts >= 150) {
+        // Max 2 minutes polling
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
         setIsProcessing(false);
-        setErrorMsg('Bulk processing is taking longer than expected. Please check back later.');
+        setErrorMsg('Batch processing took longer than expected. Please check back later or refresh.');
       }
-    }, 1500);
+    }, 750);
   };
 
   const downloadSampleTemplate = () => {
@@ -283,6 +510,8 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
     setBatchRows(newRows);
     pagination.setCurrentPage(1);
     setShowBatchModal(false);
+    setSuccessMsg(`Generated ${count} test links staged for dispatch.`);
+    setTimeout(() => setSuccessMsg(null), 3000);
   };
 
   const handleDownloadCustomCsv = (count: number, tag: string, baseUrl: string) => {
@@ -307,31 +536,73 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
     exportToCsv('jlmp_bulk_created_links', batchResults);
   };
 
+  // Filter batch results
+  const filteredResults = useMemo(() => {
+    return batchResults.filter((r) => {
+      if (resultFilter === 'created' && !r.shortUrl) return false;
+      if (resultFilter === 'failed' && r.shortUrl) return false;
+      if (resultSearch.trim()) {
+        const query = resultSearch.toLowerCase().trim();
+        const matchesDest = (r.destinationUrl || '').toLowerCase().includes(query);
+        const matchesShort = (r.shortUrl || '').toLowerCase().includes(query);
+        const matchesRef = (r.externalRef || '').toLowerCase().includes(query);
+        return matchesDest || matchesShort || matchesRef;
+      }
+      return true;
+    });
+  }, [batchResults, resultFilter, resultSearch]);
+
+  const resultsPagination = usePagination(filteredResults, 25);
+
+  const formatSeconds = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}s`;
+  };
+
   return (
     <div className="space-y-4 w-full">
       {/* Top Action & Context Strip */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs shadow-2xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs shadow-2xs">
         <div className="flex items-center gap-2 min-w-0">
-          <h1 className="text-sm font-semibold text-slate-900">
-            Bulk Link Creation
-          </h1>
+          <div className="w-7 h-7 rounded-md bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shrink-0">
+            <Layers className="w-4 h-4" />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-slate-900 leading-tight">
+              Bulk Link Studio
+            </h1>
+            <p className="text-[11px] text-slate-400">
+              High-throughput multi-threaded link minting engine
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
           {Permissions.canBulkCreate(currentUser?.role) && (
             <button
               onClick={() => setShowBatchModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-              title="Generate 500 or 1,000 links in one click"
+              title="Generate 100, 500, or 1,000 links in one click"
             >
-              <Zap className="w-3.5 h-3.5 text-amber-600" />
+              <Zap className="w-3.5 h-3.5 text-amber-600 fill-amber-500/20" />
               Auto-Generate Test Batch
             </button>
           )}
+
+          <button
+            onClick={() => setShowPasteModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition-colors cursor-pointer"
+            title="Paste multiple URLs from clipboard"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            Paste URLs
+          </button>
+
           {Permissions.canBulkCreate(currentUser?.role) && (
             <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition-colors cursor-pointer">
               <Upload className="w-3.5 h-3.5 text-blue-600" />
-              Upload CSV File
+              Upload CSV
               <input
                 type="file"
                 accept=".csv"
@@ -340,41 +611,99 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
               />
             </label>
           )}
+
           <button
             onClick={downloadSampleTemplate}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 text-xs font-medium shadow-2xs transition-colors cursor-pointer"
+            title="Download CSV format template"
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />
-            Download Template
+            Template
           </button>
         </div>
       </div>
 
+      {/* Notifications */}
       {errorMsg && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
-          <span>{errorMsg}</span>
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+            <span>{errorMsg}</span>
+          </div>
+          <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-600 p-1">
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
-      {/* Overview & Queue Progress */}
+      {successMsg && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+            <span>{successMsg}</span>
+          </div>
+          <button onClick={() => setSuccessMsg(null)} className="text-emerald-500 hover:text-emerald-700 p-1">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Overview & Live Real-Time Progress Deck */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left: Quick Instructions & Quick Category Tags */}
-        <div className="lg:col-span-8 bg-white p-4 rounded-lg border border-slate-200 shadow-2xs space-y-3">
+        {/* Left: Dynamic Batch Staging Summary & Tags */}
+        <div className="lg:col-span-7 bg-white p-4 rounded-lg border border-slate-200 shadow-2xs space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-            <span className="text-xs font-semibold text-slate-900">
-              Batch Staging ({batchRows.length} {batchRows.length === 1 ? 'row' : 'rows'})
-            </span>
-            <span className="text-xs text-slate-500">
-              {validRowsCount} valid for dispatch
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-900">
+                Batch Staging
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-mono bg-slate-100 text-slate-700 font-semibold">
+                {batchRows.length} {batchRows.length === 1 ? 'row' : 'rows'}
+              </span>
+            </div>
+
+            {/* Dynamic Metric Pills */}
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md ${
+                validRowsCount > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-400'
+              }`}>
+                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                {validRowsCount} Valid
+              </span>
+
+              {invalidRowsCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200 animate-pulse">
+                  <AlertCircle className="w-3 h-3 text-red-500" />
+                  {invalidRowsCount} Invalid
+                </span>
+              )}
+
+              {withAliasCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                  <Tag className="w-3 h-3 text-purple-500" />
+                  {withAliasCount} Custom
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Quickly apply a common category tag to your batch or upload a CSV file with destination URLs, aliases, and tags:
-            </p>
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-600 font-medium">
+                Quick Category Tag Applicator:
+              </p>
+              {invalidRowsCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleAutoFixProtocols}
+                  className="text-[11px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  <Wand2 className="w-3 h-3" /> Auto-Fix URLs (Add https://)
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
               {['bulktest', 'General', 'Fees Collection', 'Report Cards', 'Payment', 'Notification'].map((tag) => (
                 <button
                   key={tag}
@@ -386,74 +715,177 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                       : 'border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
                   }`}
                 >
-                  Set all to {tag}
+                  Set to {tag}
                 </button>
               ))}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-400">
+              <span>Paste URLs or upload CSV to quickly populate this staging queue.</span>
+              <div className="flex items-center gap-3">
+                {invalidRowsCount > 0 && (
+                  <button
+                    onClick={handleRemoveInvalidRows}
+                    className="text-red-600 hover:text-red-800 font-semibold cursor-pointer"
+                  >
+                    Remove Invalid
+                  </button>
+                )}
+                <button
+                  onClick={handleClearGrid}
+                  className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+                >
+                  Clear All
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right: Dispatch Action & Queue Monitor */}
-        <div className="lg:col-span-4 bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-between space-y-3">
+        {/* Right: Dynamic Batch Processing Card with REAL-TIME Progress & STOP Button */}
+        <div className="lg:col-span-5 bg-white p-4 rounded-lg border border-slate-200 shadow-2xs flex flex-col justify-between space-y-3">
           <div>
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-emerald-600" />
-                Batch Processing
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-blue-600" />
+                Live Dispatch Monitor
               </span>
-              <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold">
-                Ready to Process
-              </span>
+
+              {/* Dynamic Status Badge */}
+              {isProcessing ? (
+                <span className="text-[11px] text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-bold flex items-center gap-1.5 animate-pulse">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  Processing ({jobInfo?.progress || 0}%)
+                </span>
+              ) : jobInfo?.status === 'completed' ? (
+                <span className="text-[11px] text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  Completed
+                </span>
+              ) : jobInfo?.status === 'cancelled' ? (
+                <span className="text-[11px] text-amber-800 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded font-bold flex items-center gap-1">
+                  <Square className="w-3 h-3 text-amber-600 fill-amber-600" />
+                  Stopped
+                </span>
+              ) : hasInvalidRows ? (
+                <span className="text-[11px] text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded font-semibold flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Fix URLs
+                </span>
+              ) : validRowsCount > 0 ? (
+                <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  Ready ({validRowsCount} links)
+                </span>
+              ) : (
+                <span className="text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-medium">
+                  Awaiting Input
+                </span>
+              )}
             </div>
 
+            {/* REAL-TIME PROGRESS MONITOR */}
             {jobInfo ? (
-              <div className="mt-2 p-3 rounded-lg bg-emerald-50/70 border border-emerald-200 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-emerald-900">Job Status</span>
-                  <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-200 text-emerald-800">
-                    {jobInfo.status}
-                  </span>
+              <div className="mt-2.5 p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2.5">
+                {/* Metric Header */}
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <div className="flex items-center gap-1.5 text-slate-700 font-bold">
+                    <span>{jobInfo.completedCount} / {jobInfo.totalCount} Minted</span>
+                    {jobInfo.failedCount > 0 && (
+                      <span className="text-red-600">({jobInfo.failedCount} failed)</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isProcessing && jobInfo.speed > 0 && (
+                      <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded text-[11px] font-bold">
+                        ~{jobInfo.speed} links/s
+                      </span>
+                    )}
+                    <span className="font-bold text-slate-900">{jobInfo.progress}%</span>
+                  </div>
                 </div>
-                <div className="w-full bg-emerald-200/60 rounded-full h-1.5 overflow-hidden">
+
+                {/* Animated Dynamic Progress Bar */}
+                <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden p-0.5 shadow-inner">
                   <div
-                    className={`h-full bg-emerald-600 rounded-full ${
-                      isProcessing ? 'animate-pulse w-3/4' : 'w-full'
+                    className={`h-full rounded-full transition-all duration-300 ease-out ${
+                      isProcessing
+                        ? 'bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-600 shadow-sm animate-pulse'
+                        : jobInfo.status === 'completed'
+                        ? 'bg-emerald-600'
+                        : 'bg-amber-500'
                     }`}
+                    style={{ width: `${Math.max(jobInfo.progress, isProcessing ? 5 : 0)}%` }}
                   ></div>
                 </div>
-                <div className="text-[10px] text-emerald-800 font-mono">
-                  {jobInfo.totalCount} Links Submitted to Queue
+
+                {/* Live Timing & Status Footer */}
+                <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono pt-0.5">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-slate-400" />
+                    Elapsed: {formatSeconds(jobInfo.elapsedSeconds || 1)}
+                  </span>
+                  <span>
+                    {isProcessing ? (
+                      <span className="text-blue-600 font-semibold animate-pulse">Parallel Workers Active</span>
+                    ) : jobInfo.status === 'completed' ? (
+                      <span className="text-emerald-700 font-bold">All Links Generated</span>
+                    ) : (
+                      <span className="text-amber-700 font-medium">Processing Cancelled</span>
+                    )}
+                  </span>
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                Review the {batchRows.length} {batchRows.length === 1 ? 'link' : 'links'} in the spreadsheet below and click Dispatch to mint short codes in parallel.
-              </p>
+              <div className="mt-2.5 p-3 rounded-lg bg-slate-50 border border-slate-100 text-xs text-slate-500 leading-relaxed space-y-1">
+                <p>
+                  Review the {batchRows.length} {batchRows.length === 1 ? 'link' : 'links'} staged below. When ready, click Dispatch to mint short codes concurrently.
+                </p>
+                <div className="text-[11px] text-blue-600 font-medium flex items-center gap-1 pt-1">
+                  <Zap className="w-3 h-3" />
+                  Processes 500 links in under 20 seconds with live concurrency.
+                </div>
+              </div>
             )}
           </div>
 
+          {/* Action Button Strip with STOP / CANCEL control */}
           <div className="pt-2 flex items-center gap-2">
-            {Permissions.canBulkCreate(currentUser?.role) ? (
+            {isProcessing ? (
+              <div className="flex items-center gap-2 w-full">
+                <div className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded text-xs font-bold bg-blue-50 border border-blue-200 text-blue-800 shadow-xs">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                  <span>Minting Links ({jobInfo?.progress || 0}%)...</span>
+                </div>
+
+                {/* STOP / CANCEL BUTTON */}
+                <button
+                  type="button"
+                  onClick={handleStopBulk}
+                  aria-label="Stop Bulk Processing"
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 rounded text-xs font-bold shadow-xs transition bg-red-600 hover:bg-red-700 active:bg-red-800 text-white cursor-pointer shrink-0"
+                  title="Immediately abort the bulk creation job"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  Stop Batch
+                </button>
+              </div>
+            ) : Permissions.canBulkCreate(currentUser?.role) ? (
               <button
                 onClick={handleStartBulk}
                 disabled={!canDispatch}
                 aria-label="Dispatch Batch Creation"
-                className="w-full flex items-center justify-center gap-1.5 px-4 py-2 rounded text-xs font-bold shadow-xs transition bg-[#0F6CBD] hover:bg-[#0c599b] text-white disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded text-xs font-bold shadow-xs transition bg-[#0F6CBD] hover:bg-[#0c599b] text-white disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none disabled:cursor-not-allowed cursor-pointer"
               >
-                {isProcessing ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Processing In Background...
-                  </>
-                ) : validRowsCount === 0 ? (
+                {validRowsCount === 0 ? (
                   <>
                     <Play className="w-3.5 h-3.5 fill-current opacity-60" />
                     Enter Valid URL To Dispatch
                   </>
                 ) : hasInvalidRows ? (
                   <>
-                    <AlertCircle className="w-3.5 h-3.5 opacity-60" />
-                    Fix Invalid URLs in Table
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-300" />
+                    Fix Invalid URLs in Table ({invalidRowsCount})
                   </>
                 ) : (
                   <>
@@ -471,50 +903,35 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
         </div>
       </div>
 
-      {/* Visual Interactive Spreadsheet Table (REPLACED RAW TEXTAREA) */}
+      {/* Visual Interactive Spreadsheet Table */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
         <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-              Links ({batchRows.length} Rows)
+              Staged Links ({batchRows.length} Rows)
             </span>
             <span className="text-[11px] text-slate-400">
-              Paste or edit rows directly
+              Edit in-place or apply bulk tags
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* 1. Apply to all rows category dropdown above the grid */}
+            {/* Category Bulk Applicator Dropdown */}
             <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-md border border-slate-300 shadow-2xs">
               <label htmlFor="bulk-apply-all-category" className="text-[11px] font-semibold text-slate-700 whitespace-nowrap">
-                Apply to all rows:
+                Apply Category to All:
               </label>
               <select
                 id="bulk-apply-all-category"
-                aria-label="Apply to all rows category"
-                className="text-xs px-2 py-1 rounded border border-slate-200 bg-slate-50 text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer min-h-[36px] sm:min-h-0"
+                aria-label="Apply category to all rows"
+                className="text-xs px-2 py-1 rounded border border-slate-200 bg-slate-50 text-slate-800 font-medium focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                 onChange={(e) => {
                   const val = e.target.value;
                   if (val) {
-                    setBatchRows((prev) => {
-                      const hasNonEmpty = prev.some(
-                        (r) =>
-                          r.destinationUrl.trim().length > 0 ||
-                          r.alias.trim().length > 0 ||
-                          r.externalRef.trim().length > 0
-                      );
-                      if (!hasNonEmpty) {
-                        return prev.map((r) => ({ ...r, tag: val }));
-                      }
-                      return prev.map((r) => {
-                        const isNonEmpty =
-                          r.destinationUrl.trim().length > 0 ||
-                          r.alias.trim().length > 0 ||
-                          r.externalRef.trim().length > 0;
-                        return isNonEmpty ? { ...r, tag: val } : r;
-                      });
-                    });
+                    setBatchRows((prev) => prev.map((r) => ({ ...r, tag: val })));
                     e.target.value = '';
+                    setSuccessMsg(`Applied category "${val}" to all ${batchRows.length} rows.`);
+                    setTimeout(() => setSuccessMsg(null), 2500);
                   }
                 }}
               >
@@ -534,18 +951,19 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
               <button
                 onClick={handleAddRow}
                 aria-label="Add Link Row"
-                className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-300 shadow-2xs transition min-h-[40px] sm:min-h-0"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-300 shadow-2xs transition cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5 text-blue-600" /> Add Link Row
+                <Plus className="w-3.5 h-3.5 text-blue-600" /> Add Row
               </button>
             )}
+
             {batchResults.length > 0 && (
               <button
                 onClick={handleExportResults}
                 aria-label="Export Results"
-                className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-2xs transition min-h-[40px] sm:min-h-0"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-2xs transition cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5" /> Export Results
+                <Download className="w-3.5 h-3.5" /> Export Results ({batchResults.length})
               </button>
             )}
           </div>
@@ -557,10 +975,8 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
               <tr>
                 <th className="px-3.5 py-2.5 w-12 text-center">#</th>
                 <th className="px-3.5 py-2.5">Destination URL</th>
-                <th className="px-3.5 py-2.5 w-44">Alias</th>
-                <th className="px-3.5 py-2.5 w-48 whitespace-nowrap">
-                  Campaign Category
-                </th>
+                <th className="px-3.5 py-2.5 w-44">Alias (Optional)</th>
+                <th className="px-3.5 py-2.5 w-44">Campaign Category</th>
                 <th className="px-3.5 py-2.5 w-40">External Ref</th>
                 <th className="px-3.5 py-2.5 w-16 text-center">Action</th>
               </tr>
@@ -592,9 +1008,18 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                         }`}
                       />
                       {isInvalid && (
-                        <span className="text-[10px] text-red-600 block mt-0.5 font-medium">
-                          Invalid URL: must begin with http:// or https://
-                        </span>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] text-red-600 font-medium">
+                            Invalid URL: Must include domain (e.g. https://domain.com)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateRow(idx, 'destinationUrl', normalizeUrl(row.destinationUrl))}
+                            className="text-[10px] text-blue-600 font-bold hover:underline cursor-pointer"
+                          >
+                            Add https://
+                          </button>
+                        </div>
                       )}
                     </td>
 
@@ -619,7 +1044,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                       <select
                         value={row.tag}
                         onChange={(e) => handleUpdateRow(idx, 'tag', e.target.value)}
-                        className="w-full text-xs px-2 py-1.5 rounded border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                        className="w-full text-xs px-2 py-1.5 rounded border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white cursor-pointer"
                       >
                         <option value="bulktest">bulktest</option>
                         <option value="General">General</option>
@@ -650,7 +1075,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                         disabled={batchRows.length === 1}
                         aria-label={`Remove Row ${idx + 1}`}
                         title="Remove Row"
-                        className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded transition disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed min-w-[40px] min-h-[40px] flex items-center justify-center mx-auto"
+                        className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded transition disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed flex items-center justify-center mx-auto"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -680,23 +1105,55 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
       {/* Generated Batch Results Card */}
       {batchResults.length > 0 && (
         <div className="bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
-          <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-200 flex items-center justify-between">
+          <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-200 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
-                Batch Results ({batchResults.filter((r) => r.shortUrl).length} Created, {batchResults.filter((r) => r.error).length} Failed)
+                Generated Links ({batchResults.filter((r) => r.shortUrl).length} Created, {batchResults.filter((r) => r.error).length} Failed)
               </span>
             </div>
-            <button
-              onClick={handleExportResults}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-2xs transition"
-            >
-              <Download className="w-3.5 h-3.5" /> Export CSV
-            </button>
+
+            {/* Filter and Search Bar */}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center bg-white border border-emerald-300 rounded px-2 py-1 gap-1.5 shadow-2xs">
+                <Search className="w-3 h-3 text-slate-400" />
+                <input
+                  type="text"
+                  value={resultSearch}
+                  onChange={(e) => {
+                    setResultSearch(e.target.value);
+                    resultsPagination.setCurrentPage(1);
+                  }}
+                  placeholder="Filter results..."
+                  className="text-xs bg-transparent focus:outline-none w-28 sm:w-36 text-slate-700"
+                />
+              </div>
+
+              <select
+                value={resultFilter}
+                onChange={(e) => {
+                  setResultFilter(e.target.value as any);
+                  resultsPagination.setCurrentPage(1);
+                }}
+                className="text-xs px-2 py-1 rounded border border-emerald-300 bg-white text-slate-700 font-medium focus:outline-none cursor-pointer"
+              >
+                <option value="all">All ({batchResults.length})</option>
+                <option value="created">Created ({batchResults.filter((r) => r.shortUrl).length})</option>
+                <option value="failed">Failed ({batchResults.filter((r) => r.error).length})</option>
+              </select>
+
+              <button
+                onClick={handleExportResults}
+                className="flex items-center gap-1 px-3 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-2xs transition cursor-pointer"
+              >
+                <Download className="w-3 h-3" /> Export CSV
+              </button>
+            </div>
           </div>
-          <div className="overflow-x-auto max-h-72">
+
+          <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase text-[10px] sticky top-0">
+              <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 uppercase text-[10px]">
                 <tr>
                   <th className="px-3.5 py-2 w-12 text-center">#</th>
                   <th className="px-3.5 py-2">Destination URL</th>
@@ -705,55 +1162,72 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-sans">
-                {batchResults.map((resItem, i) => (
-                  <tr key={i} className="hover:bg-slate-50/80">
-                    <td className="px-3.5 py-2 text-center font-mono text-slate-400 text-[11px]">{i + 1}</td>
-                    <td className="px-3.5 py-2 truncate max-w-xs text-slate-600 font-mono text-[11px]">{resItem.destinationUrl}</td>
-                    <td className="px-3.5 py-2 font-mono text-xs">
-                      {resItem.shortUrl ? (
-                        <a href={resItem.shortUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline font-semibold">
-                          {resItem.shortUrl}
-                        </a>
-                      ) : (
-                        <span className="text-red-600 italic">{resItem.error || 'Failed'}</span>
-                      )}
-                    </td>
-                    <td className="px-3.5 py-2 text-center">
-                      {resItem.shortUrl ? (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold text-[10px]">
-                          Created
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-semibold text-[10px]">
-                          Error
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {resultsPagination.paginatedItems.map((resItem, i) => {
+                  const globalIdx = (resultsPagination.currentPage - 1) * resultsPagination.pageSize + i;
+                  return (
+                    <tr key={globalIdx} className="hover:bg-slate-50/80">
+                      <td className="px-3.5 py-2 text-center font-mono text-slate-400 text-[11px]">{globalIdx + 1}</td>
+                      <td className="px-3.5 py-2 truncate max-w-xs text-slate-600 font-mono text-[11px]">{resItem.destinationUrl}</td>
+                      <td className="px-3.5 py-2 font-mono text-xs">
+                        {resItem.shortUrl ? (
+                          <a href={resItem.shortUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                            <span>{resItem.shortUrl}</span>
+                            <ArrowRight className="w-2.5 h-2.5 opacity-60" />
+                          </a>
+                        ) : (
+                          <span className="text-red-600 italic">{resItem.error || 'Failed'}</span>
+                        )}
+                      </td>
+                      <td className="px-3.5 py-2 text-center">
+                        {resItem.shortUrl ? (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold text-[10px]">
+                            Created
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-semibold text-[10px]">
+                            Error
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+
+          {filteredResults.length > 25 && (
+            <div className="p-3 border-t border-slate-200 bg-slate-50">
+              <Pagination
+                currentPage={resultsPagination.currentPage}
+                totalItems={resultsPagination.totalItems}
+                pageSize={resultsPagination.pageSize}
+                onPageChange={resultsPagination.setCurrentPage}
+                onPageSizeChange={resultsPagination.setPageSize}
+                itemLabel="created links"
+              />
+            </div>
+          )}
         </div>
       )}
 
-      {/* Quick Test Generator Modal (Presets: 500 / 1000 links, Tag: bulktest) */}
+      {/* Quick Test Generator Modal */}
       {showBatchModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
-                  <Zap className="w-4 h-4" />
+                  <Zap className="w-4 h-4 fill-amber-500/20" />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">Auto-Generate Test Batch</h3>
-                  <p className="text-[11px] text-slate-500">Generate 500 to 1,000 links in one click</p>
+                  <p className="text-[11px] text-slate-500">Benchmark speed with 100, 500 or 1,000 links</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowBatchModal(false)}
-                className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
                 title="Close modal"
               >
                 <X className="w-4 h-4" />
@@ -772,9 +1246,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                   <button
                     key={preset.count}
                     type="button"
-                    onClick={() => {
-                      setCustomCount(preset.count);
-                    }}
+                    onClick={() => setCustomCount(preset.count)}
                     className={`py-2 px-3 text-xs font-bold rounded-lg border transition text-center cursor-pointer ${
                       customCount === preset.count
                         ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-xs'
@@ -802,7 +1274,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
               </div>
 
               <div>
-                <label className="font-semibold text-slate-700 block mb-1">Campaign Tag (Default: bulktest):</label>
+                <label className="font-semibold text-slate-700 block mb-1">Campaign Tag:</label>
                 <input
                   type="text"
                   value={customTag}
@@ -834,7 +1306,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                 onClick={() => handlePopulateTestBatch(customCount, customTag, customBaseUrl)}
                 className="w-full py-2.5 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
               >
-                <Zap className="w-3.5 h-3.5" />
+                <Zap className="w-3.5 h-3.5 fill-current" />
                 Populate Grid with {customCount} Links
               </button>
 
@@ -845,6 +1317,66 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
               >
                 <Download className="w-3.5 h-3.5 text-slate-500" />
                 Download Ready CSV ({customCount} Pre-filled Rows)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Paste Raw URLs Modal */}
+      {showPasteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Paste Multiple URLs</h3>
+                  <p className="text-[11px] text-slate-500">Paste raw lines of URLs or CSV text directly</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPasteModal(false)}
+                className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                title="Close modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <label className="font-semibold text-slate-700 block">
+                Paste URLs (One URL per line or comma-separated CSV):
+              </label>
+              <textarea
+                rows={10}
+                value={pastedText}
+                onChange={(e) => setPastedText(e.target.value)}
+                placeholder={"https://example.com/page-1\nhttps://example.com/page-2\nhttps://example.com/page-3,my-alias,Marketing,INV-001"}
+                className="w-full p-3 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs text-slate-800 placeholder:text-slate-400"
+              />
+              <p className="text-[11px] text-slate-400">
+                Protocols (http/https) will be automatically formatted if omitted.
+              </p>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPasteModal(false)}
+                className="px-4 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!pastedText.trim()}
+                onClick={handleProcessPastedUrls}
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold shadow-xs cursor-pointer"
+              >
+                Import to Grid
               </button>
             </div>
           </div>
