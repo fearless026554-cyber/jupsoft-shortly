@@ -38,11 +38,17 @@ function ConsoleTabContent() {
             // Cleanly transition to /dashboard with session stored in localStorage and cookie
             window.location.replace('/dashboard');
           } else {
+            if (typeof window !== 'undefined') {
+              window.history.replaceState({}, '', window.location.pathname);
+            }
             setGoogleError(res.error?.message || 'Google authorization failed');
             setIsExchangingGoogleCode(false);
           }
         })
         .catch((err) => {
+          if (typeof window !== 'undefined') {
+            window.history.replaceState({}, '', window.location.pathname);
+          }
           setGoogleError(err.message || 'Google login error');
           setIsExchangingGoogleCode(false);
         });

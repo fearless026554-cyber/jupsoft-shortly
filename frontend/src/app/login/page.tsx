@@ -74,10 +74,16 @@ export default function LoginPage() {
             if (res.success && res.data?.token) {
               window.location.replace('/dashboard');
             } else {
+              if (typeof window !== 'undefined') {
+                window.history.replaceState({}, '', window.location.pathname);
+              }
               setError(res.error?.message || 'Failed to authenticate with Google code.');
             }
           })
           .catch((err) => {
+            if (typeof window !== 'undefined') {
+              window.history.replaceState({}, '', window.location.pathname);
+            }
             setError(err.message || 'Google OAuth callback error.');
           })
           .finally(() => {
