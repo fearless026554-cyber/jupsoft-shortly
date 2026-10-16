@@ -372,22 +372,12 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
       // 1. Transmit cancellation signal to backend
       await api.cancelBulkJob(jobInfo.jobId);
 
-      // 2. Poll for the workers to commit their in-flight mini-batch and yield partial results (up to 4s)
-      let partialResults: any[] = [];
-      let finalCompleted = 0;
-      let finalFailed = 0;
-
+      // 2. Poll for the workers to acknowledge cancellation and rollback (up to 4s)
       for (let attempt = 0; attempt < 8; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, 500));
         const res = await api.getBulkStatus(jobInfo.jobId).catch(() => null);
-        if (res?.success && res.data) {
-          const resResult = res.data.result;
-          if (resResult?.results && resResult.results.length > 0) {
-            partialResults = resResult.results;
-            finalCompleted = resResult.completed ?? partialResults.filter((r: any) => r.shortUrl).length;
-            finalFailed = resResult.failed ?? 0;
-            break;
-          }
+        if (res?.success && (res.data?.status === 'cancelled' || res.data?.result?.cancelled)) {
+          break;
         }
       }
 
@@ -403,26 +393,18 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
 
       setIsProcessing(false);
       setIsStopping(false);
-
-      if (partialResults.length > 0) {
-        setBatchResults(partialResults);
-        setJobInfo((prev) =>
-          prev
-            ? {
-                ...prev,
-                status: 'cancelled',
-                completedCount: finalCompleted,
-                failedCount: finalFailed,
-              }
-            : null
-        );
-        setSuccessMsg(
-          `Batch stopped by user. ${finalCompleted} links created successfully before cancellation and are listed below.`
-        );
-      } else {
-        setJobInfo((prev) => (prev ? { ...prev, status: 'cancelled' } : null));
-        setSuccessMsg('Bulk batch processing stopped by user.');
-      }
+      setBatchResults([]);
+      setJobInfo((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'cancelled',
+              completedCount: 0,
+              failedCount: 0,
+            }
+          : null
+      );
+      setSuccessMsg('Bulk batch processing stopped. All partially created links have been rolled back and not saved to Supabase.');
     } catch (err: any) {
       setIsStopping(false);
       setIsProcessing(false);
@@ -493,15 +475,19 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
             }
             setIsProcessing(false);
 
-            const created = result?.results || result?.created || [];
-            if (Array.isArray(created) && created.length > 0) {
-              setBatchResults(created);
-            }
+            if (rawStatus === 'cancelled' || result?.cancelled) {
+              setBatchResults([]);
+              setJobInfo((prev) => (prev ? { ...prev, status: 'cancelled', completedCount: 0 } : null));
+              setSuccessMsg('Bulk batch processing stopped. All partially created links were rolled back and not saved to Supabase.');
+            } else {
+              const created = result?.results || result?.created || [];
+              if (Array.isArray(created) && created.length > 0) {
+                setBatchResults(created);
+              }
 
-            if (rawStatus === 'completed') {
-              setSuccessMsg(`Batch completed successfully! ${completedCount} links created in ${elapsed}s.`);
-            } else if (rawStatus === 'cancelled') {
-              setSuccessMsg(`Batch stopped by user. ${completedCount} links created before cancellation.`);
+              if (rawStatus === 'completed') {
+                setSuccessMsg(`Batch completed successfully! ${completedCount} links created in ${elapsed}s.`);
+              }
             }
           }
         }
@@ -893,7 +879,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                   <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
                   <span>
                     {isStopping
-                      ? 'Stopping & Preserving Minted Links...'
+                      ? 'Stopping & Rolling Back Links...'
                       : `Minting Links (${jobInfo?.progress || 0}%)...`}
                   </span>
                 </div>
@@ -905,7 +891,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
                   disabled={isStopping}
                   aria-label="Stop Bulk Processing"
                   className="flex items-center justify-center gap-1.5 px-4 py-2 rounded text-xs font-bold shadow-xs transition bg-red-600 hover:bg-red-700 active:bg-red-800 text-white disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shrink-0"
-                  title="Immediately abort the bulk creation job and preserve minted links"
+                  title="Immediately abort the bulk creation job and discard partially created links"
                 >
                   {isStopping ? (
                     <>

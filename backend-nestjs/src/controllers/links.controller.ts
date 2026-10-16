@@ -364,12 +364,12 @@ export class LinksController {
       });
     }
 
-    // Set cancellation token in Redis for active workers to break gracefully and commit minted links
+    // Set cancellation token in Redis for active workers to break gracefully and rollback minted links
     await this.redis.client.set(`bulk:cancel:${jobId}`, '1', 'EX', 3600);
 
     return reply.send({
       success: true,
-      data: { jobId, status: 'cancelled', message: 'Bulk job cancellation signal sent successfully' },
+      data: { jobId, status: 'cancelled', message: 'Bulk job cancellation signal sent successfully. Minted links will be rolled back and not saved.' },
     });
   }
 

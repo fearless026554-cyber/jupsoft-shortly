@@ -34,6 +34,7 @@ export class BulkProcessor extends WorkerHost {
       let processedCount = 0;
       const results: Array<{ externalRef?: string; destinationUrl: string; shortUrl?: string; error?: string }> = new Array(total);
       const createdForCache: Array<{ domainId: string; code: string; cached: any }> = [];
+      const createdLinkIds: string[] = [];
 
       // 1. Pre-query tenant code once to eliminate 500 redundant SELECT queries
       let tenantCode: string | undefined;
@@ -104,6 +105,10 @@ export class BulkProcessor extends WorkerHost {
               await client.query('RELEASE SAVEPOINT sp_bulk_item');
 
               const actualCode = (created.link as any).short_code || created.link.shortCode;
+              const linkId = (created.link as any).id;
+              if (linkId) {
+                createdLinkIds.push(linkId);
+              }
               createdForCache.push({
                 domainId: itemDomainId,
                 code: actualCode,
@@ -143,7 +148,11 @@ export class BulkProcessor extends WorkerHost {
           }
 
           if (uncommittedCount > 0) {
-            await client.query('COMMIT');
+            if (isCancelled) {
+              await client.query('ROLLBACK').catch(() => {});
+            } else {
+              await client.query('COMMIT');
+            }
           } else {
             await client.query('ROLLBACK').catch(() => {});
           }
@@ -163,8 +172,28 @@ export class BulkProcessor extends WorkerHost {
       const workers = Array.from({ length: concurrency }, (_, id) => workerTask(id + 1));
       await Promise.all(workers);
 
-      // 3. Batch cache warm-up via Redis Pipeline (1 network trip instead of 500)
-      if (createdForCache.length > 0) {
+      // If job was cancelled by user: completely rollback/purge any links that were committed so far
+      if (isCancelled && createdLinkIds.length > 0) {
+        let purgeClient;
+        try {
+          purgeClient = await this.db.pool.connect();
+          await purgeClient.query('BEGIN');
+          await purgeClient.query(`SELECT set_config('${DB_CONTEXT_KEYS.TENANT_ID}', $1, true)`, [tenantId]);
+          await purgeClient.query('DELETE FROM links WHERE id = ANY($1)', [createdLinkIds]);
+          await purgeClient.query('COMMIT');
+          this.logger.log(
+            `[BulkProcessor] Job ${job.id || job.data.jobId} cancelled: Successfully purged ${createdLinkIds.length} partially created links from Supabase.`
+          );
+        } catch (purgeErr: any) {
+          if (purgeClient) await purgeClient.query('ROLLBACK').catch(() => {});
+          this.logger.error(`[BulkProcessor] Error purging cancelled links: ${purgeErr.message}`);
+        } finally {
+          if (purgeClient) purgeClient.release();
+        }
+      }
+
+      // 3. Batch cache warm-up via Redis Pipeline (ONLY if NOT cancelled)
+      if (!isCancelled && createdForCache.length > 0) {
         try {
           const pipeline = this.redis.client.pipeline();
           for (const item of createdForCache) {
@@ -185,10 +214,17 @@ export class BulkProcessor extends WorkerHost {
         await AuditService.log(auditClient, {
           tenantId,
           actorType: 'system',
-          action: 'bulk.process',
+          action: isCancelled ? 'bulk.cancelled' : 'bulk.process',
           entity: 'bulk_jobs',
           entityId: job.id || job.data.jobId,
-          afterState: { total, completed, failed, durationMs: Date.now() - startTime, cancelled: isCancelled },
+          afterState: {
+            total,
+            completed: isCancelled ? 0 : completed,
+            failed: isCancelled ? 0 : failed,
+            durationMs: Date.now() - startTime,
+            cancelled: isCancelled,
+            purgedCount: isCancelled ? createdLinkIds.length : 0,
+          },
         });
         await auditClient.query('COMMIT');
       } catch (auditErr: any) {
@@ -200,15 +236,17 @@ export class BulkProcessor extends WorkerHost {
 
       const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(2);
       this.logger.log(
-        `[BulkProcessor] Completed ${completed}/${total} links in ${elapsedSec}s with concurrency ${concurrency} (failed: ${failed}, cancelled: ${isCancelled})`
+        `[BulkProcessor] ${isCancelled ? 'CANCELLED (links purged from Supabase)' : 'Completed'} ${isCancelled ? 0 : completed}/${total} links in ${elapsedSec}s with concurrency ${concurrency} (purged: ${isCancelled ? createdLinkIds.length : 0}, failed: ${isCancelled ? 0 : failed}, cancelled: ${isCancelled})`
       );
 
       const finalPayload = {
         total,
-        completed,
-        failed,
-        results: results.filter(Boolean),
+        completed: isCancelled ? 0 : completed,
+        failed: isCancelled ? 0 : failed,
+        results: isCancelled ? [] : results.filter(Boolean),
         cancelled: isCancelled,
+        purgedCount: isCancelled ? createdLinkIds.length : 0,
+        message: isCancelled ? 'Bulk job was cancelled. All partially created links were rolled back and not saved.' : undefined,
       };
 
       // Persist results directly to Redis so status endpoint can immediately retrieve them
