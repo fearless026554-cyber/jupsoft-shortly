@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Code2,
   Terminal,
@@ -15,6 +15,7 @@ import {
   Zap,
   Layers,
   ChevronRight,
+  ChevronLeft,
   Server,
   Globe,
   Database,
@@ -27,6 +28,9 @@ import {
   Activity,
   Lock,
   Sparkles,
+  Trash2,
+  RefreshCw,
+  BookOpen,
 } from 'lucide-react';
 import { useTenantDomains } from '../../hooks/useTenantDomains';
 
@@ -42,7 +46,7 @@ interface EndpointParam {
 
 interface EndpointDoc {
   id: string;
-  category: 'links' | 'bulk' | 'qr' | 'analytics' | 'outcomes' | 'system';
+  category: 'Links' | 'Bulk & Batch' | 'QR Studio' | 'Analytics' | 'Outcomes' | 'System';
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   path: string;
   title: string;
@@ -91,11 +95,29 @@ export const ApiDocsView: React.FC<ApiDocsViewProps> = ({ onNavigateToApiKeys, c
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Sync hash on mount and hash changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash.replace(/^#/, '');
+      if (hash) {
+        setActiveSection(hash);
+      }
+    }
+  }, []);
+
+  const handleSelectSection = (id: string) => {
+    setActiveSection(id);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `#${id}`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   // Endpoint Catalog
   const endpoints: EndpointDoc[] = useMemo(() => [
     {
       id: 'create-link',
-      category: 'links',
+      category: 'Links',
       method: 'POST',
       path: '/links',
       title: 'Create Short Link',
@@ -206,7 +228,7 @@ else:
     },
     {
       id: 'list-links',
-      category: 'links',
+      category: 'Links',
       method: 'GET',
       path: '/links',
       title: 'List Short Links',
@@ -268,7 +290,7 @@ print("Links:", len(data.get("data", [])))`,
     },
     {
       id: 'get-link',
-      category: 'links',
+      category: 'Links',
       method: 'GET',
       path: '/links/:id',
       title: 'Get Link Details',
@@ -315,7 +337,7 @@ print(response.json())`,
     },
     {
       id: 'update-link',
-      category: 'links',
+      category: 'Links',
       method: 'PATCH',
       path: '/links/:id',
       title: 'Update Short Link',
@@ -381,8 +403,49 @@ print("Updated:", response.json())`,
       },
     },
     {
+      id: 'delete-link',
+      category: 'Links',
+      method: 'DELETE',
+      path: '/links/:id',
+      title: 'Archive / Delete Link',
+      summary: 'Archive or permanently purge a short link. Permanent links require Admin authorization.',
+      description: 'Marks a short link as archived or completely purges it. Permanent links cannot be deleted via standard API calls unless authorized by Super Admin or Admin with explicit confirmation.',
+      params: [
+        { name: 'id', type: 'UUID', required: true, description: 'Unique identifier of the short link.', example: '8f7d6a42-9e31-4c12-b912-7a5e8c1b3d04' },
+        { name: 'permanent', type: 'boolean', required: false, description: 'Set true to permanently purge the record instead of soft-archiving.', example: 'false' },
+      ],
+      response: {
+        status: 200,
+        description: 'Link archived or permanently deleted.',
+        example: {
+          success: true,
+          message: 'Link archived successfully',
+        },
+      },
+      snippets: {
+        curl: `curl -X DELETE "${baseUrl}/links/8f7d6a42-9e31-4c12-b912-7a5e8c1b3d04?permanent=false" \\
+  -H "X-Api-Key: sk_live_your_api_key_here"`,
+        node: `const linkId = '8f7d6a42-9e31-4c12-b912-7a5e8c1b3d04';
+const res = await fetch(\`${baseUrl}/links/\${linkId}?permanent=false\`, {
+  method: 'DELETE',
+  headers: { 'X-Api-Key': process.env.SHORTLY_API_KEY },
+});
+const data = await res.json();
+console.log('Result:', data);`,
+        python: `import requests
+
+link_id = "8f7d6a42-9e31-4c12-b912-7a5e8c1b3d04"
+response = requests.delete(
+    f"${baseUrl}/links/{link_id}",
+    params={"permanent": "false"},
+    headers={"X-Api-Key": "sk_live_..."}
+)
+print(response.json())`,
+      },
+    },
+    {
       id: 'bulk-links',
-      category: 'bulk',
+      category: 'Bulk & Batch',
       method: 'POST',
       path: '/links/bulk',
       title: 'Bulk Batch Link Generation',
@@ -460,8 +523,69 @@ print("Batch Result:", response.json())`,
       },
     },
     {
+      id: 'batch-action',
+      category: 'Bulk & Batch',
+      method: 'POST',
+      path: '/links/batch-action',
+      title: 'Batch Multi-Link Actions',
+      summary: 'Archive, restore, or delete multiple links at once using link UUID arrays.',
+      description: 'Executes bulk state transitions across multiple links in a single atomic transaction. Permanent links are safely preserved unless explicitly authorized by an administrator.',
+      requestBody: {
+        contentType: 'application/json',
+        schema: 'BatchActionDto',
+        example: {
+          action: 'archive',
+          linkIds: ['8f7d6a42-9e31-4c12-b912-7a5e8c1b3d04', '3b1e9c22-7f41-4a11-8812-5e4a8b1c2d01'],
+        },
+      },
+      response: {
+        status: 200,
+        description: 'Batch action completed.',
+        example: {
+          success: true,
+          data: {
+            affectedCount: 2,
+            action: 'archive',
+          },
+        },
+      },
+      snippets: {
+        curl: `curl -X POST "${baseUrl}/links/batch-action" \\
+  -H "X-Api-Key: sk_live_your_api_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "action": "archive",
+    "linkIds": ["8f7d6a42-9e31-4c12-b912-7a5e8c1b3d04"]
+  }'`,
+        node: `const res = await fetch('${baseUrl}/links/batch-action', {
+  method: 'POST',
+  headers: {
+    'X-Api-Key': process.env.SHORTLY_API_KEY,
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    action: 'archive',
+    linkIds: ['8f7d6a42-9e31-4c12-b912-7a5e8c1b3d04'],
+  }),
+});
+console.log(await res.json());`,
+        python: `import requests
+
+payload = {
+    "action": "archive",
+    "linkIds": ["8f7d6a42-9e31-4c12-b912-7a5e8c1b3d04"]
+}
+response = requests.post(
+    "${baseUrl}/links/batch-action",
+    json=payload,
+    headers={"X-Api-Key": "sk_live_..."}
+)
+print(response.json())`,
+      },
+    },
+    {
       id: 'qr-code',
-      category: 'qr',
+      category: 'QR Studio',
       method: 'GET',
       path: '/links/:id/qr',
       title: 'Dynamic QR Code Generation',
@@ -510,7 +634,7 @@ print("QR Code downloaded as qrcode.png")`,
     },
     {
       id: 'analytics-summary',
-      category: 'analytics',
+      category: 'Analytics',
       method: 'GET',
       path: '/analytics/summary',
       title: 'Traffic Analytics Summary',
@@ -561,7 +685,7 @@ print("Metrics:", response.json())`,
     },
     {
       id: 'post-outcome',
-      category: 'outcomes',
+      category: 'Outcomes',
       method: 'POST',
       path: '/outcomes',
       title: 'Log Conversion Outcome',
@@ -643,7 +767,7 @@ print("Attribution:", response.json())`,
     },
     {
       id: 'health-check',
-      category: 'system',
+      category: 'System',
       method: 'GET',
       path: '/health',
       title: 'Service Health Status',
@@ -775,30 +899,50 @@ print("Health:", res.json())`,
     },
   ];
 
-  // Filtered Endpoints
-  const filteredEndpoints = useMemo(() => {
-    if (!searchQuery.trim()) return endpoints;
+  // Navigation Items List (Ordered for Prev / Next calculation)
+  const allNavItems = useMemo(() => [
+    { id: 'intro', title: 'Base URL & Protocols', category: 'Overview & Standards', icon: Globe },
+    { id: 'auth', title: 'Authentication', category: 'Overview & Standards', icon: Key },
+    { id: 'ratelimits', title: 'Rate Limits & Headers', category: 'Overview & Standards', icon: Clock },
+    { id: 'errors', title: 'Error Handling', category: 'Overview & Standards', icon: AlertTriangle },
+    ...endpoints.map((ep) => ({
+      id: ep.id,
+      title: ep.title,
+      category: ep.category,
+      method: ep.method,
+      icon: Code2,
+    })),
+  ], [endpoints]);
+
+  // Filtered Navigation based on search
+  const filteredNavItems = useMemo(() => {
+    if (!searchQuery.trim()) return allNavItems;
     const q = searchQuery.toLowerCase();
-    return endpoints.filter(
-      (ep) =>
-        ep.title.toLowerCase().includes(q) ||
-        ep.path.toLowerCase().includes(q) ||
-        ep.summary.toLowerCase().includes(q) ||
-        ep.method.toLowerCase().includes(q) ||
-        ep.category.toLowerCase().includes(q)
+    return allNavItems.filter((item) =>
+      item.title.toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q) ||
+      (item as any).method?.toLowerCase().includes(q)
     );
-  }, [endpoints, searchQuery]);
+  }, [allNavItems, searchQuery]);
+
+  // Current Item Index & Adjacent Items for Pagination
+  const currentIndex = allNavItems.findIndex((item) => item.id === activeSection);
+  const prevItem = currentIndex > 0 ? allNavItems[currentIndex - 1] : null;
+  const nextItem = currentIndex >= 0 && currentIndex < allNavItems.length - 1 ? allNavItems[currentIndex + 1] : null;
+
+  // Selected Endpoint Object (if activeSection is an endpoint)
+  const currentEndpoint = endpoints.find((ep) => ep.id === activeSection);
 
   return (
-    <div className="space-y-6 w-full text-slate-800 pb-16">
+    <div className="space-y-4 w-full text-slate-800 pb-16">
       {/* 1. Header Banner */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
               <Code2 className="w-4 h-4" />
             </div>
-            <h1 className="text-lg font-bold text-slate-900 tracking-tight">
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
               Developer API Reference &amp; SDKs
             </h1>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -806,7 +950,7 @@ print("Health:", res.json())`,
             </span>
           </div>
           <p className="text-xs text-slate-500 max-w-2xl">
-            Enterprise RESTful APIs for sub-2ms short link generation, bulk CSV batching, dynamic vector QR codes, traffic analytics, and closed-loop outcome attribution.
+            Clean, modular documentation for short links, bulk CSV batching, QR codes, analytics, and revenue attribution.
           </p>
         </div>
 
@@ -840,381 +984,402 @@ print("Health:", res.json())`,
         </div>
       </div>
 
-      {/* 2. Main 2-Column Documentation Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Sticky Navigation Column (3 cols) */}
-        <aside className="lg:col-span-3 sticky top-4 space-y-4">
+      {/* 2. Focused Modular Documentation Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Left Navigation Sidebar (3 cols) */}
+        <aside className="lg:col-span-3 lg:sticky lg:top-4 space-y-3">
           {/* Quick Search */}
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search endpoints, errors..."
+              placeholder="Search reference..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 shadow-2xs"
             />
           </div>
 
-          {/* Quick Jump Links */}
-          <div className="bg-white rounded-lg border border-slate-200 p-2 shadow-2xs space-y-1 text-xs">
-            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Overview &amp; Standards
-            </div>
-            <a
-              href="#section-intro"
-              onClick={() => setActiveSection('intro')}
-              className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition ${
-                activeSection === 'intro' ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Globe className="w-3.5 h-3.5 text-blue-500" />
-                <span>Base URL &amp; Protocols</span>
+          {/* Navigation Panel */}
+          <div className="bg-white rounded-xl border border-slate-200 p-2.5 shadow-2xs space-y-3 max-h-[calc(100vh-140px)] overflow-y-auto">
+            {/* Overview & Standards Group */}
+            <div>
+              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Overview &amp; Standards
               </div>
-            </a>
-            <a
-              href="#section-auth"
-              onClick={() => setActiveSection('auth')}
-              className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition ${
-                activeSection === 'auth' ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Key className="w-3.5 h-3.5 text-amber-500" />
-                <span>Authentication</span>
-              </div>
-            </a>
-            <a
-              href="#section-ratelimits"
-              onClick={() => setActiveSection('ratelimits')}
-              className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition ${
-                activeSection === 'ratelimits' ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Rate Limits &amp; Headers</span>
-              </div>
-            </a>
-            <a
-              href="#section-errors"
-              onClick={() => setActiveSection('errors')}
-              className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition ${
-                activeSection === 'errors' ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
-                <span>Error Handling</span>
-              </div>
-            </a>
-
-            <div className="pt-2 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              API Endpoints ({filteredEndpoints.length})
-            </div>
-            <div className="max-h-[380px] overflow-y-auto space-y-0.5 pr-1">
-              {filteredEndpoints.map((ep) => (
-                <a
-                  key={ep.id}
-                  href={`#ep-${ep.id}`}
-                  onClick={() => setActiveSection(ep.id)}
-                  className={`flex items-center justify-between px-2.5 py-1.5 rounded-md transition text-[11px] ${
-                    activeSection === ep.id
-                      ? 'bg-blue-50 text-blue-700 font-bold'
-                      : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span
-                      className={`px-1 py-0.2 rounded text-[9px] font-mono font-bold uppercase ${
-                        ep.method === 'GET'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : ep.method === 'POST'
-                          ? 'bg-blue-100 text-blue-800'
-                          : ep.method === 'PATCH'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-red-100 text-red-800'
+              <div className="space-y-0.5 mt-1">
+                {[
+                  { id: 'intro', label: 'Base URL & Protocols', icon: Globe },
+                  { id: 'auth', label: 'Authentication', icon: Key },
+                  { id: 'ratelimits', label: 'Rate Limits & Headers', icon: Clock },
+                  { id: 'errors', label: 'Error Handling', icon: AlertTriangle },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeSection === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleSelectSection(item.id)}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer text-left ${
+                        isActive
+                          ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                          : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
                       }`}
                     >
-                      {ep.method}
-                    </span>
-                    <span className="truncate">{ep.title}</span>
-                  </div>
-                </a>
-              ))}
+                      <div className="flex items-center gap-2 truncate">
+                        <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                        <span className="truncate">{item.label}</span>
+                      </div>
+                      {isActive && <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-80" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Endpoints Groups */}
+            <div className="pt-2 border-t border-slate-100">
+              <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                <span>API Endpoints</span>
+                <span className="font-mono text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded-full font-bold">
+                  {endpoints.length}
+                </span>
+              </div>
+              <div className="space-y-0.5 mt-1">
+                {endpoints.map((ep) => {
+                  const isActive = activeSection === ep.id;
+                  return (
+                    <button
+                      key={ep.id}
+                      onClick={() => handleSelectSection(ep.id)}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition cursor-pointer text-left ${
+                        isActive
+                          ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                          : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span
+                          className={`px-1 py-0.2 rounded text-[9px] font-mono font-bold uppercase shrink-0 ${
+                            isActive
+                              ? 'bg-white/20 text-white'
+                              : ep.method === 'GET'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : ep.method === 'POST'
+                              ? 'bg-blue-100 text-blue-800'
+                              : ep.method === 'PATCH'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {ep.method}
+                        </span>
+                        <span className="truncate text-[11px]">{ep.title}</span>
+                      </div>
+                      {isActive && <ChevronRight className="w-3.5 h-3.5 shrink-0 opacity-80" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </aside>
 
-        {/* Right Documentation Stream (9 cols) */}
-        <main className="lg:col-span-9 space-y-8">
-          {/* SECTION 1: Base URL & Protocol */}
-          <section id="section-intro" className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-blue-600" />
-                <h2 className="text-sm font-bold text-slate-900">Base URL &amp; Protocols</h2>
-              </div>
-              <span className="text-[11px] font-mono text-slate-500">TLS 1.3 / HTTPS</span>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Shortly exposes standard REST APIs accepting and returning <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px]">application/json</code>. All network traffic must occur over encrypted HTTPS. Requests over plaintext HTTP are rejected.
-            </p>
-
-            <div className="bg-slate-900 rounded-lg p-3 text-white flex items-center justify-between font-mono text-xs shadow-inner">
-              <div className="flex items-center gap-2 truncate">
-                <span className="text-slate-400 select-none">BASE_URL:</span>
-                <span className="text-emerald-400 font-semibold">{baseUrl}</span>
-              </div>
-              <button
-                onClick={() => handleCopy(baseUrl, 'copy-base-url')}
-                className="flex items-center gap-1 px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] transition cursor-pointer shrink-0"
-              >
-                {copiedId === 'copy-base-url' ? (
-                  <>
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    <span>Copied</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3" />
-                    <span>Copy URL</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </section>
-
-          {/* SECTION 2: Authentication Reference */}
-          <section id="section-auth" className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Key className="w-4 h-4 text-amber-500" />
-                <h2 className="text-sm font-bold text-slate-900">API Key Authentication</h2>
-              </div>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                X-Api-Key Header
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Authenticate API calls by including your secret API key in the <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px]">X-Api-Key</code> request header. Alternatively, standard HTTP Bearer token syntax (<code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px]">Authorization: Bearer sk_live_...</code>) is accepted.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1.5">
-                <div className="font-semibold text-slate-800 flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Header Authentication (Recommended)</span>
-                </div>
-                <div className="font-mono text-[11px] bg-white p-2 rounded border border-slate-200 text-slate-700 select-all">
-                  X-Api-Key: sk_live_7c8d9e0f1a2b...
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Ideal for microservices, backend webhooks, cron workers, and ERP integration pipelines.
-                </p>
+        {/* Right Active-Item View Container (9 cols) */}
+        <main className="lg:col-span-9 space-y-5">
+          {/* Active View: SECTION 1: Base URL & Protocol */}
+          {activeSection === 'intro' && (
+            <div className="space-y-5 animate-in fade-in duration-150">
+              {/* Breadcrumb */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span>Overview &amp; Standards</span>
+                <ChevronRight className="w-3 h-3 text-slate-400" />
+                <span className="font-semibold text-slate-900">Base URL &amp; Protocols</span>
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1.5">
-                <div className="font-semibold text-slate-800 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Bearer Token Alternative</span>
-                </div>
-                <div className="font-mono text-[11px] bg-white p-2 rounded border border-slate-200 text-slate-700 select-all">
-                  Authorization: Bearer sk_live_7c8d9e0f1a2b...
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Compatible with API gateway proxies, Zapier, Postman, and standard HTTP client interceptors.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-bold">Security Rule:</span> API keys are <span className="underline">never</span> accepted via query strings (e.g. <code className="font-mono text-[11px]">?api_key=...</code>) to protect tokens from being cached in upstream browser histories, CDN access logs, or proxy request logs.
-              </div>
-            </div>
-
-            {/* Framework Snippet Tabs */}
-            <div className="space-y-2 pt-2">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                <span>Sample Authenticated Request:</span>
-                <span className="text-[11px] text-slate-400 font-mono">Status Check</span>
-              </div>
-
-              <div className="bg-[#0d1527] rounded-lg border border-slate-800 overflow-hidden shadow-sm">
-                <div className="bg-[#162032] px-3 py-1.5 flex items-center justify-between border-b border-slate-800 text-xs">
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2">
-                    <Terminal className="w-3.5 h-3.5 text-blue-400" />
-                    <span className="font-mono text-[11px] text-slate-300">
-                      {selectedFramework === 'curl' ? 'cURL' : selectedFramework === 'node' ? 'Node.js' : 'Python'}
-                    </span>
+                    <Globe className="w-4 h-4 text-blue-600" />
+                    <h2 className="text-sm font-bold text-slate-900">Base URL &amp; Network Protocols</h2>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-500">TLS 1.3 / HTTPS</span>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Shortly exposes high-throughput RESTful endpoints accepting and returning <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px]">application/json</code>. All network traffic must occur over encrypted HTTPS. Plaintext HTTP requests are automatically rejected.
+                </p>
+
+                <div className="bg-[#0d1527] rounded-lg p-3 text-white flex items-center justify-between font-mono text-xs shadow-inner">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="text-slate-400 select-none">PRODUCTION_BASE_URL:</span>
+                    <span className="text-emerald-400 font-semibold">{baseUrl}</span>
                   </div>
                   <button
-                    onClick={() => {
-                      const snippet = selectedFramework === 'curl'
-                        ? `curl -X GET "${baseUrl}/links?limit=5" \\\n  -H "X-Api-Key: sk_live_your_key_here"`
-                        : selectedFramework === 'node'
-                        ? `const res = await fetch('${baseUrl}/links?limit=5', {\n  headers: { 'X-Api-Key': 'sk_live_your_key_here' }\n});\nconst data = await res.json();`
-                        : `import requests\nres = requests.get('${baseUrl}/links', params={'limit': 5}, headers={'X-Api-Key': 'sk_live_your_key_here'})\nprint(res.json())`;
-                      handleCopy(snippet, 'auth-snippet');
-                    }}
-                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition cursor-pointer"
+                    onClick={() => handleCopy(baseUrl, 'copy-base-url')}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] transition cursor-pointer shrink-0"
                   >
-                    {copiedId === 'auth-snippet' ? (
+                    {copiedId === 'copy-base-url' ? (
                       <>
                         <Check className="w-3 h-3 text-emerald-400" />
-                        <span className="text-emerald-400">Copied</span>
+                        <span>Copied</span>
                       </>
                     ) : (
                       <>
                         <Copy className="w-3 h-3" />
-                        <span>Copy</span>
+                        <span>Copy URL</span>
                       </>
                     )}
                   </button>
                 </div>
-                <pre className="p-3.5 text-slate-200 font-mono text-xs overflow-x-auto leading-relaxed">
-                  {selectedFramework === 'curl' && `curl -X GET "${baseUrl}/links?limit=5" \\
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-xs">
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                    <div className="font-semibold text-slate-800">Edge Redirection</div>
+                    <p className="text-[11px] text-slate-500">
+                      Sub-2ms link redirection distributed globally across Redis edge nodes.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                    <div className="font-semibold text-slate-800">Character Encoding</div>
+                    <p className="text-[11px] text-slate-500">
+                      Full UTF-8 support with automated TRAI 160-character GSM-7 SMS optimizations.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                    <div className="font-semibold text-slate-800">Idempotency</div>
+                    <p className="text-[11px] text-slate-500">
+                      Safe retries on POST endpoints via automatic unique constraint reconciliation.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Active View: SECTION 2: Authentication */}
+          {activeSection === 'auth' && (
+            <div className="space-y-5 animate-in fade-in duration-150">
+              {/* Breadcrumb */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span>Overview &amp; Standards</span>
+                <ChevronRight className="w-3 h-3 text-slate-400" />
+                <span className="font-semibold text-slate-900">API Key Authentication</span>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Key className="w-4 h-4 text-amber-500" />
+                    <h2 className="text-sm font-bold text-slate-900">API Key Authentication Reference</h2>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                    X-Api-Key Header
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Authenticate API calls by including your secret API key in the <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px]">X-Api-Key</code> request header. Alternatively, standard HTTP Bearer token syntax (<code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px]">Authorization: Bearer sk_live_...</code>) is accepted.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                    <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Header Authentication (Recommended)</span>
+                    </div>
+                    <div className="font-mono text-[11px] bg-white p-2 rounded border border-slate-200 text-slate-700 select-all">
+                      X-Api-Key: sk_live_7c8d9e0f1a2b...
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Standard for microservices, backend webhooks, cron workers, and ERP integration pipelines.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                    <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Bearer Token Alternative</span>
+                    </div>
+                    <div className="font-mono text-[11px] bg-white p-2 rounded border border-slate-200 text-slate-700 select-all">
+                      Authorization: Bearer sk_live_7c8d9e0f1a2b...
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Compatible with API gateway proxies, Zapier, Postman, and standard HTTP client interceptors.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Security Rule:</span> API keys are <span className="underline font-semibold">never</span> accepted via query parameters (e.g. <code className="font-mono text-[11px]">?api_key=...</code>) to protect tokens from being logged in upstream browser histories, CDN access logs, or proxy request logs.
+                  </div>
+                </div>
+
+                {/* Framework Snippet Box */}
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    <span>Sample Authenticated Request:</span>
+                    <span className="text-[11px] text-slate-400 font-mono">Status Check</span>
+                  </div>
+
+                  <div className="bg-[#0d1527] rounded-lg border border-slate-800 overflow-hidden shadow-sm">
+                    <div className="bg-[#162032] px-3 py-1.5 flex items-center justify-between border-b border-slate-800 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Terminal className="w-3.5 h-3.5 text-blue-400" />
+                        <span className="font-mono text-[11px] text-slate-300">
+                          {selectedFramework === 'curl' ? 'cURL' : selectedFramework === 'node' ? 'Node.js' : 'Python'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const snippet = selectedFramework === 'curl'
+                            ? `curl -X GET "${baseUrl}/links?limit=5" \\\n  -H "X-Api-Key: sk_live_your_key_here"`
+                            : selectedFramework === 'node'
+                            ? `const res = await fetch('${baseUrl}/links?limit=5', {\n  headers: { 'X-Api-Key': 'sk_live_your_key_here' }\n});\nconst data = await res.json();`
+                            : `import requests\nres = requests.get('${baseUrl}/links', params={'limit': 5}, headers={'X-Api-Key': 'sk_live_your_key_here'})\nprint(res.json())`;
+                          handleCopy(snippet, 'auth-snippet');
+                        }}
+                        className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition cursor-pointer"
+                      >
+                        {copiedId === 'auth-snippet' ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <pre className="p-3.5 text-slate-200 font-mono text-xs overflow-x-auto leading-relaxed">
+                      {selectedFramework === 'curl' && `curl -X GET "${baseUrl}/links?limit=5" \\
   -H "X-Api-Key: sk_live_your_key_here"`}
-                  {selectedFramework === 'node' && `const res = await fetch('${baseUrl}/links?limit=5', {
+                      {selectedFramework === 'node' && `const res = await fetch('${baseUrl}/links?limit=5', {
   headers: {
     'X-Api-Key': process.env.SHORTLY_API_KEY,
   },
 });
 const data = await res.json();`}
-                  {selectedFramework === 'python' && `import os
+                      {selectedFramework === 'python' && `import os
 import requests
 
 headers = {"X-Api-Key": os.getenv("SHORTLY_API_KEY", "sk_live_...")}
 response = requests.get("${baseUrl}/links", params={"limit": 5}, headers=headers)
 data = response.json()`}
-                </pre>
-              </div>
-            </div>
-          </section>
-
-          {/* SECTION 3: Rate Limits & Headers */}
-          <section id="section-ratelimits" className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-indigo-600" />
-                <h2 className="text-sm font-bold text-slate-900">Rate Limits &amp; Response Headers</h2>
-              </div>
-              <span className="text-[11px] font-mono text-slate-500">60-Second Sliding Window</span>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Shortly applies token-bucket rate limiting backed by distributed Redis memory clusters. Every HTTP API response includes standard telemetry headers allowing clients to monitor remaining capacity in real-time.
-            </p>
-
-            {/* Rate Limit Headers Table */}
-            <div className="rounded-lg border border-slate-200 overflow-hidden shadow-2xs">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">Header Name</th>
-                    <th className="py-2.5 px-3">Type</th>
-                    <th className="py-2.5 px-3">Description</th>
-                    <th className="py-2.5 px-3">Example</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-blue-700">X-RateLimit-Limit</td>
-                    <td className="py-2.5 px-3 font-mono text-slate-500">Integer</td>
-                    <td className="py-2.5 px-3 text-slate-600">The maximum number of allowed requests in the rolling 60-second window.</td>
-                    <td className="py-2.5 px-3 font-mono text-slate-800">60</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-blue-700">X-RateLimit-Remaining</td>
-                    <td className="py-2.5 px-3 font-mono text-slate-500">Integer</td>
-                    <td className="py-2.5 px-3 text-slate-600">Remaining requests available before hitting HTTP 429 throttling.</td>
-                    <td className="py-2.5 px-3 font-mono text-slate-800">59</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-blue-700">X-RateLimit-Reset</td>
-                    <td className="py-2.5 px-3 font-mono text-slate-500">Unix Timestamp</td>
-                    <td className="py-2.5 px-3 text-slate-600">UTC epoch timestamp (in seconds) when the current rate limit window resets.</td>
-                    <td className="py-2.5 px-3 font-mono text-slate-800">1791894000</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-rose-700">Retry-After</td>
-                    <td className="py-2.5 px-3 font-mono text-slate-500">Integer (Sec)</td>
-                    <td className="py-2.5 px-3 text-slate-600">Sent on HTTP 429; the exact number of seconds client must sleep before retrying.</td>
-                    <td className="py-2.5 px-3 font-mono text-rose-600 font-bold">18</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* Tier Quotas Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Default Developer Key</div>
-                <div className="text-base font-bold text-slate-900 mt-1">10 – 60 req/min</div>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Default sandbox quota. Configurable per-key by Super Admin operators.
-                </p>
-              </div>
-              <div className="p-3 bg-blue-50/60 rounded-lg border border-blue-200">
-                <div className="text-blue-600 text-[10px] uppercase font-bold tracking-wider">Standard Production</div>
-                <div className="text-base font-bold text-blue-900 mt-1">300 – 1,200 req/min</div>
-                <p className="text-[11px] text-blue-700/80 mt-1">
-                  High-throughput capacity for e-commerce, CRM, and SMS transactional alerts.
-                </p>
-              </div>
-              <div className="p-3 bg-emerald-50/60 rounded-lg border border-emerald-200">
-                <div className="text-emerald-700 text-[10px] uppercase font-bold tracking-wider">Bulk Ingestion Engine</div>
-                <div className="text-base font-bold text-emerald-900 mt-1">10,000 links / batch</div>
-                <p className="text-[11px] text-emerald-800/80 mt-1">
-                  Asynchronous BullMQ worker pipelines processing massive CSV file uploads.
-                </p>
-              </div>
-            </div>
-
-            {/* Exponential Backoff Handling Code */}
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-slate-700">
-                Recommended Client Handling: Exponential Backoff with Rate Limit Inspection
-              </div>
-              <div className="bg-[#0d1527] rounded-lg border border-slate-800 overflow-hidden shadow-sm">
-                <div className="bg-[#162032] px-3 py-1.5 flex items-center justify-between border-b border-slate-800 text-xs">
-                  <span className="font-mono text-[11px] text-slate-300">
-                    {selectedFramework === 'curl' ? 'cURL Header Inspection' : selectedFramework === 'node' ? 'Node.js Backoff Middleware' : 'Python Retry Loop'}
-                  </span>
-                  <button
-                    onClick={() => {
-                      const snippet = selectedFramework === 'curl'
-                        ? `curl -i -X GET "${baseUrl}/links" -H "X-Api-Key: sk_live_..."`
-                        : selectedFramework === 'node'
-                        ? `async function fetchWithBackoff(url, options = {}, retries = 3) {\n  const res = await fetch(url, options);\n  if (res.status === 429 && retries > 0) {\n    const retryAfter = parseInt(res.headers.get('retry-after') || '2', 10);\n    console.warn(\`Rate limited. Sleeping for \${retryAfter}s...\`);\n    await new Promise(r => setTimeout(r, retryAfter * 1000));\n    return fetchWithBackoff(url, options, retries - 1);\n  }\n  return res;\n}`
-                        : `import time\nimport requests\n\ndef fetch_with_retry(url, headers, retries=3):\n    response = requests.get(url, headers=headers)\n    if response.status_code == 429 and retries > 0:\n        retry_after = int(response.headers.get("Retry-After", 2))\n        print(f"Rate limited. Backing off for {retry_after} seconds...")\n        time.sleep(retry_after)\n        return fetch_with_retry(url, headers, retries - 1)\n    return response`;
-                      handleCopy(snippet, 'backoff-snippet');
-                    }}
-                    className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition cursor-pointer"
-                  >
-                    {copiedId === 'backoff-snippet' ? (
-                      <>
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        <span className="text-emerald-400">Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
+                    </pre>
+                  </div>
                 </div>
-                <pre className="p-3.5 text-slate-200 font-mono text-xs overflow-x-auto leading-relaxed">
-                  {selectedFramework === 'curl' && `# Use -i flag to inspect live rate-limit headers
+              </div>
+            </div>
+          )}
+
+          {/* Active View: SECTION 3: Rate Limits & Headers */}
+          {activeSection === 'ratelimits' && (
+            <div className="space-y-5 animate-in fade-in duration-150">
+              {/* Breadcrumb */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span>Overview &amp; Standards</span>
+                <ChevronRight className="w-3 h-3 text-slate-400" />
+                <span className="font-semibold text-slate-900">Rate Limits &amp; Response Headers</span>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-indigo-600" />
+                    <h2 className="text-sm font-bold text-slate-900">Rate Limits &amp; Telemetry Headers</h2>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-500">60-Second Sliding Window</span>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Shortly applies token-bucket rate limiting backed by distributed Redis memory clusters. Every HTTP API response includes standard telemetry headers allowing clients to monitor remaining capacity in real-time.
+                </p>
+
+                {/* Headers Table */}
+                <div className="rounded-lg border border-slate-200 overflow-hidden shadow-2xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                      <tr>
+                        <th className="py-2.5 px-3">Header Name</th>
+                        <th className="py-2.5 px-3">Type</th>
+                        <th className="py-2.5 px-3">Description</th>
+                        <th className="py-2.5 px-3">Example</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-3 font-mono font-bold text-blue-700">X-RateLimit-Limit</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">Integer</td>
+                        <td className="py-2.5 px-3 text-slate-600">The maximum number of allowed requests in the rolling 60-second window.</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-800">60</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-3 font-mono font-bold text-blue-700">X-RateLimit-Remaining</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">Integer</td>
+                        <td className="py-2.5 px-3 text-slate-600">Remaining requests available before hitting HTTP 429 throttling.</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-800">59</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-3 font-mono font-bold text-blue-700">X-RateLimit-Reset</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">Unix Timestamp</td>
+                        <td className="py-2.5 px-3 text-slate-600">UTC epoch timestamp (in seconds) when the current rate limit window resets.</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-800">1791894000</td>
+                      </tr>
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-3 font-mono font-bold text-rose-700">Retry-After</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">Integer (Sec)</td>
+                        <td className="py-2.5 px-3 text-slate-600">Sent on HTTP 429; the exact number of seconds client must sleep before retrying.</td>
+                        <td className="py-2.5 px-3 font-mono text-rose-600 font-bold">18</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Exponential Backoff Code */}
+                <div className="space-y-2 pt-2">
+                  <div className="text-xs font-semibold text-slate-700">
+                    Recommended Handling: Exponential Backoff &amp; Sleep Loop
+                  </div>
+                  <div className="bg-[#0d1527] rounded-lg border border-slate-800 overflow-hidden shadow-sm">
+                    <div className="bg-[#162032] px-3 py-1.5 flex items-center justify-between border-b border-slate-800 text-xs">
+                      <span className="font-mono text-[11px] text-slate-300">
+                        {selectedFramework === 'curl' ? 'cURL Header Inspection' : selectedFramework === 'node' ? 'Node.js Backoff Middleware' : 'Python Retry Loop'}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const snippet = selectedFramework === 'curl'
+                            ? `curl -i -X GET "${baseUrl}/links" -H "X-Api-Key: sk_live_..."`
+                            : selectedFramework === 'node'
+                            ? `async function fetchWithBackoff(url, options = {}, retries = 3) {\n  const res = await fetch(url, options);\n  if (res.status === 429 && retries > 0) {\n    const retryAfter = parseInt(res.headers.get('retry-after') || '2', 10);\n    console.warn(\`Rate limited. Sleeping for \${retryAfter}s...\`);\n    await new Promise(r => setTimeout(r, retryAfter * 1000));\n    return fetchWithBackoff(url, options, retries - 1);\n  }\n  return res;\n}`
+                            : `import time\nimport requests\n\ndef fetch_with_retry(url, headers, retries=3):\n    response = requests.get(url, headers=headers)\n    if response.status_code == 429 and retries > 0:\n        retry_after = int(response.headers.get("Retry-After", 2))\n        print(f"Rate limited. Backing off for {retry_after} seconds...")\n        time.sleep(retry_after)\n        return fetch_with_retry(url, headers, retries - 1)\n    return response`;
+                          handleCopy(snippet, 'backoff-snippet');
+                        }}
+                        className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition cursor-pointer"
+                      >
+                        {copiedId === 'backoff-snippet' ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <pre className="p-3.5 text-slate-200 font-mono text-xs overflow-x-auto leading-relaxed">
+                      {selectedFramework === 'curl' && `# Use -i flag to inspect live rate-limit headers
 curl -i -X GET "${baseUrl}/links" \\
   -H "X-Api-Key: sk_live_your_key_here"`}
-                  {selectedFramework === 'node' && `async function fetchWithBackoff(url, options = {}, retries = 3) {
+                      {selectedFramework === 'node' && `async function fetchWithBackoff(url, options = {}, retries = 3) {
   const res = await fetch(url, options);
 
   // Inspect rate limit remaining
@@ -1230,7 +1395,7 @@ curl -i -X GET "${baseUrl}/links" \\
 
   return res;
 }`}
-                  {selectedFramework === 'python' && `import time
+                      {selectedFramework === 'python' && `import time
 import requests
 
 def request_with_backoff(url, headers, retries=3):
@@ -1245,188 +1410,140 @@ def request_with_backoff(url, headers, retries=3):
         return request_with_backoff(url, headers, retries - 1)
 
     return response`}
-                </pre>
-              </div>
-            </div>
-          </section>
-
-          {/* SECTION 4: Standard Error Responses Reference */}
-          <section id="section-errors" className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-rose-600" />
-                <h2 className="text-sm font-bold text-slate-900">Standard Error Responses</h2>
-              </div>
-              <span className="text-[11px] font-mono text-slate-500">RFC 7807 Error Envelope</span>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              All error responses return a standardized JSON envelope with <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px]">success: false</code> and an <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px]">error</code> object containing a canonical machine-readable <code className="font-mono text-[11px]">code</code> and a human-readable <code className="font-mono text-[11px]">message</code>.
-            </p>
-
-            {/* Error Code Tabs */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-100">
-              {errorCatalog.map((err) => (
-                <button
-                  key={err.code}
-                  onClick={() => setSelectedErrorTab(err.status.toString())}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
-                    selectedErrorTab === err.status.toString()
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-600 bg-slate-100 hover:bg-slate-200/70'
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      err.status >= 500
-                        ? 'bg-red-400'
-                        : err.status === 429
-                        ? 'bg-amber-400'
-                        : err.status === 401 || err.status === 403
-                        ? 'bg-rose-400'
-                        : 'bg-blue-400'
-                    }`}
-                  />
-                  <span>HTTP {err.status}</span>
-                  <span className="text-[10px] font-mono opacity-80">({err.code})</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Active Error Card Detail */}
-            {(() => {
-              const activeErr = errorCatalog.find((e) => e.status.toString() === selectedErrorTab) || errorCatalog[0];
-              return (
-                <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded font-mono font-bold text-xs ${
-                          activeErr.status >= 500
-                            ? 'bg-red-100 text-red-800 border border-red-200'
-                            : activeErr.status === 429
-                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                            : 'bg-rose-100 text-rose-800 border border-rose-200'
-                        }`}
-                      >
-                        HTTP {activeErr.status} {activeErr.code}
-                      </span>
-                      <span className="font-semibold text-slate-800 text-xs">{activeErr.title}</span>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-600">{activeErr.description}</p>
-                  <div className="text-[11px] text-slate-500">
-                    <span className="font-semibold text-slate-700">Common Triggers:</span> {activeErr.cause}
-                  </div>
-
-                  <div className="bg-[#0d1527] rounded-lg p-3 text-slate-200 font-mono text-xs overflow-x-auto relative shadow-inner">
-                    <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 select-none font-sans font-bold">
-                      Response Payload (JSON):
-                    </div>
-                    <pre>{JSON.stringify(activeErr.json, null, 2)}</pre>
+                    </pre>
                   </div>
                 </div>
-              );
-            })()}
-
-            {/* Error Matrix Summary Table */}
-            <div className="rounded-lg border border-slate-200 overflow-hidden shadow-2xs">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Error Code</th>
-                    <th className="py-2.5 px-3">Meaning / Root Cause</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-amber-700">400 Bad Request</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">VALIDATION_ERROR / INVALID_INPUT</td>
-                    <td className="py-2.5 px-3 text-slate-600">Payload schema violation or malformed destination URL.</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-amber-700">400 Bad Request</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">SCREENING_FAILED</td>
-                    <td className="py-2.5 px-3 text-slate-600">Target URL flagged as phishing, scam, or malware by screening queue.</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-rose-700">401 Unauthorized</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">UNAUTHORIZED / INVALID_API_KEY</td>
-                    <td className="py-2.5 px-3 text-slate-600">Missing X-Api-Key header or key does not exist.</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-rose-700">403 Forbidden</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">KEY_REVOKED / KEY_EXPIRED</td>
-                    <td className="py-2.5 px-3 text-slate-600">Key was deactivated or has expired past validity timestamp.</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-rose-700">403 Forbidden</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">FORBIDDEN</td>
-                    <td className="py-2.5 px-3 text-slate-600">Scope deficit or attempted action on another tenant's resource.</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-slate-700">404 Not Found</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">NOT_FOUND</td>
-                    <td className="py-2.5 px-3 text-slate-600">Specified link ID or short code not found.</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-purple-700">409 Conflict</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">ALIAS_CONFLICT</td>
-                    <td className="py-2.5 px-3 text-slate-600">Custom slug already assigned to another link on this domain.</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-orange-700">429 Rate Limited</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">RATE_LIMIT_EXCEEDED</td>
-                    <td className="py-2.5 px-3 text-slate-600">Key exceeded allowed calls in 60s sliding window. Sleep for Retry-After.</td>
-                  </tr>
-                  <tr className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-mono font-bold text-red-700">500 Server Error</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">INTERNAL_SERVER_ERROR</td>
-                    <td className="py-2.5 px-3 text-slate-600">Unexpected server fault. Automatically alerted to Shortly DevOps.</td>
-                  </tr>
-                </tbody>
-              </table>
+              </div>
             </div>
-          </section>
+          )}
 
-          {/* SECTION 5: Endpoints Deep Dive */}
-          <div className="space-y-6 pt-4">
-            <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-              <Layers className="w-4 h-4 text-blue-600" />
-              <h2 className="text-base font-bold text-slate-900">Endpoint Reference &amp; Multi-Framework Snippets</h2>
+          {/* Active View: SECTION 4: Error Handling */}
+          {activeSection === 'errors' && (
+            <div className="space-y-5 animate-in fade-in duration-150">
+              {/* Breadcrumb */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span>Overview &amp; Standards</span>
+                <ChevronRight className="w-3 h-3 text-slate-400" />
+                <span className="font-semibold text-slate-900">Standard Error Responses</span>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    <h2 className="text-sm font-bold text-slate-900">Error Handling &amp; Status Code Matrix</h2>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-500">RFC 7807 Standard</span>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  All error responses return a standardized JSON envelope with <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px]">success: false</code> and an <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-800 text-[11px]">error</code> object containing a canonical machine-readable <code className="font-mono text-[11px]">code</code> and a human-readable <code className="font-mono text-[11px]">message</code>.
+                </p>
+
+                {/* Interactive Error Code Tabs */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-100">
+                  {errorCatalog.map((err) => (
+                    <button
+                      key={err.code}
+                      onClick={() => setSelectedErrorTab(err.status.toString())}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                        selectedErrorTab === err.status.toString()
+                          ? 'bg-slate-900 text-white shadow-2xs'
+                          : 'text-slate-600 bg-slate-100 hover:bg-slate-200/70'
+                      }`}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          err.status >= 500
+                            ? 'bg-red-400'
+                            : err.status === 429
+                            ? 'bg-amber-400'
+                            : err.status === 401 || err.status === 403
+                            ? 'bg-rose-400'
+                            : 'bg-blue-400'
+                        }`}
+                      />
+                      <span>HTTP {err.status}</span>
+                      <span className="text-[10px] font-mono opacity-80">({err.code})</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Error Detail Card */}
+                {(() => {
+                  const activeErr = errorCatalog.find((e) => e.status.toString() === selectedErrorTab) || errorCatalog[0];
+                  return (
+                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded font-mono font-bold text-xs ${
+                              activeErr.status >= 500
+                                ? 'bg-red-100 text-red-800 border border-red-200'
+                                : activeErr.status === 429
+                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                : 'bg-rose-100 text-rose-800 border border-rose-200'
+                            }`}
+                          >
+                            HTTP {activeErr.status} {activeErr.code}
+                          </span>
+                          <span className="font-semibold text-slate-800 text-xs">{activeErr.title}</span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-slate-600">{activeErr.description}</p>
+                      <div className="text-[11px] text-slate-500">
+                        <span className="font-semibold text-slate-700">Common Triggers:</span> {activeErr.cause}
+                      </div>
+
+                      <div className="bg-[#0d1527] rounded-lg p-3 text-slate-200 font-mono text-xs overflow-x-auto relative shadow-inner">
+                        <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 select-none font-sans font-bold">
+                          Response Payload (JSON):
+                        </div>
+                        <pre>{JSON.stringify(activeErr.json, null, 2)}</pre>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
+          )}
 
-            {filteredEndpoints.map((ep) => (
-              <div
-                key={ep.id}
-                id={`ep-${ep.id}`}
-                className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4 transition scroll-mt-6 hover:border-slate-300"
-              >
-                {/* Endpoint Header Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          {/* Active View: Specific Endpoint */}
+          {currentEndpoint && (
+            <div className="space-y-5 animate-in fade-in duration-150">
+              {/* Breadcrumb */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                <span>{currentEndpoint.category}</span>
+                <ChevronRight className="w-3 h-3 text-slate-400" />
+                <span className="font-semibold text-slate-900">{currentEndpoint.title}</span>
+              </div>
+
+              {/* Endpoint Card */}
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-2xs space-y-4">
+                {/* Header Strip */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2.5">
                     <span
                       className={`px-2 py-0.5 rounded font-mono font-bold text-xs uppercase ${
-                        ep.method === 'GET'
+                        currentEndpoint.method === 'GET'
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          : ep.method === 'POST'
+                          : currentEndpoint.method === 'POST'
                           ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                          : ep.method === 'PATCH'
+                          : currentEndpoint.method === 'PATCH'
                           ? 'bg-amber-100 text-amber-800 border border-amber-200'
                           : 'bg-red-100 text-red-800 border border-red-200'
                       }`}
                     >
-                      {ep.method}
+                      {currentEndpoint.method}
                     </span>
                     <span className="font-mono text-xs font-semibold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
-                      {ep.path}
+                      {currentEndpoint.path}
                     </span>
-                    <span className="font-bold text-slate-800 text-sm hidden sm:inline">• {ep.title}</span>
+                    <h2 className="text-sm font-bold text-slate-900">• {currentEndpoint.title}</h2>
                   </div>
 
-                  {/* Local Framework Selector */}
+                  {/* Local Framework Switcher */}
                   <div className="flex items-center bg-slate-100 p-0.5 rounded border border-slate-200 text-xs">
                     {(['curl', 'node', 'python'] as Framework[]).map((fw) => (
                       <button
@@ -1444,35 +1561,35 @@ def request_with_backoff(url, headers, retries=3):
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-600 leading-relaxed">{ep.description}</p>
+                <p className="text-xs text-slate-600 leading-relaxed">{currentEndpoint.description}</p>
 
-                {/* Parameters Table (if any) */}
-                {ep.params && ep.params.length > 0 && (
-                  <div className="space-y-2">
+                {/* Parameters Reference */}
+                {currentEndpoint.params && currentEndpoint.params.length > 0 && (
+                  <div className="space-y-2 pt-1">
                     <div className="text-xs font-semibold text-slate-700">Request Parameters:</div>
-                    <div className="rounded-lg border border-slate-200 overflow-hidden">
+                    <div className="rounded-lg border border-slate-200 overflow-hidden shadow-2xs">
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-[11px]">
                           <tr>
-                            <th className="py-2 px-3">Field</th>
-                            <th className="py-2 px-3">Type</th>
-                            <th className="py-2 px-3">Requirement</th>
-                            <th className="py-2 px-3">Description</th>
+                            <th className="py-2.5 px-3">Field</th>
+                            <th className="py-2.5 px-3">Type</th>
+                            <th className="py-2.5 px-3">Requirement</th>
+                            <th className="py-2.5 px-3">Description</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-[11px]">
-                          {ep.params.map((param) => (
+                          {currentEndpoint.params.map((param) => (
                             <tr key={param.name} className="hover:bg-slate-50/50">
-                              <td className="py-2 px-3 font-mono font-semibold text-slate-800">{param.name}</td>
-                              <td className="py-2 px-3 font-mono text-slate-500">{param.type}</td>
-                              <td className="py-2 px-3">
+                              <td className="py-2.5 px-3 font-mono font-semibold text-slate-800">{param.name}</td>
+                              <td className="py-2.5 px-3 font-mono text-slate-500">{param.type}</td>
+                              <td className="py-2.5 px-3">
                                 {param.required ? (
                                   <span className="text-rose-600 font-bold">Required</span>
                                 ) : (
                                   <span className="text-slate-400">Optional</span>
                                 )}
                               </td>
-                              <td className="py-2 px-3 text-slate-600">{param.description}</td>
+                              <td className="py-2.5 px-3 text-slate-600">{param.description}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1481,8 +1598,8 @@ def request_with_backoff(url, headers, retries=3):
                   </div>
                 )}
 
-                {/* Interactive Code Snippet Box */}
-                <div className="space-y-1.5 pt-1">
+                {/* Code Snippet Box */}
+                <div className="space-y-1.5 pt-2">
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
                     <span>Code Snippet ({selectedFramework.toUpperCase()}):</span>
                     <span className="text-[11px] text-slate-400 font-mono">Ready to Execute</span>
@@ -1494,10 +1611,10 @@ def request_with_backoff(url, headers, retries=3):
                         {selectedFramework === 'curl' ? 'Terminal (cURL)' : selectedFramework === 'node' ? 'Node.js (Fetch)' : 'Python 3 (Requests)'}
                       </span>
                       <button
-                        onClick={() => handleCopy(ep.snippets[selectedFramework], `snip-${ep.id}`)}
+                        onClick={() => handleCopy(currentEndpoint.snippets[selectedFramework], `snip-${currentEndpoint.id}`)}
                         className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition cursor-pointer"
                       >
-                        {copiedId === `snip-${ep.id}` ? (
+                        {copiedId === `snip-${currentEndpoint.id}` ? (
                           <>
                             <Check className="w-3 h-3 text-emerald-400" />
                             <span className="text-emerald-400">Copied</span>
@@ -1511,30 +1628,59 @@ def request_with_backoff(url, headers, retries=3):
                       </button>
                     </div>
                     <pre className="p-3.5 text-slate-200 font-mono text-xs overflow-x-auto leading-relaxed">
-                      {ep.snippets[selectedFramework]}
+                      {currentEndpoint.snippets[selectedFramework]}
                     </pre>
                   </div>
                 </div>
 
-                {/* Expected Response Drawer */}
-                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+                {/* Expected Response Box */}
+                <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
                   <div className="flex items-center justify-between text-xs font-semibold">
                     <div className="flex items-center gap-1.5 text-slate-700">
                       <span className="w-2 h-2 rounded-full bg-emerald-500" />
                       <span>Expected Response</span>
                       <span className="font-mono text-[11px] text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.2 rounded">
-                        HTTP {ep.response.status}
+                        HTTP {currentEndpoint.response.status}
                       </span>
                     </div>
-                    <span className="text-[11px] text-slate-400">{ep.response.description}</span>
+                    <span className="text-[11px] text-slate-400">{currentEndpoint.response.description}</span>
                   </div>
 
                   <div className="bg-[#0d1527] rounded-lg p-3 text-slate-200 font-mono text-xs overflow-x-auto">
-                    <pre>{JSON.stringify(ep.response.example, null, 2)}</pre>
+                    <pre>{JSON.stringify(currentEndpoint.response.example, null, 2)}</pre>
                   </div>
                 </div>
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* 3. Bottom Previous / Next Pagination Footer */}
+          <div className="pt-2 flex items-center justify-between border-t border-slate-200/80">
+            {prevItem ? (
+              <button
+                onClick={() => handleSelectSection(prevItem.id)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition cursor-pointer text-left"
+              >
+                <ChevronLeft className="w-4 h-4 text-slate-400" />
+                <div>
+                  <div className="text-[10px] text-slate-400 uppercase font-mono">Previous</div>
+                  <div className="truncate max-w-[180px]">{prevItem.title}</div>
+                </div>
+              </button>
+            ) : <div />}
+
+            {nextItem ? (
+              <button
+                onClick={() => handleSelectSection(nextItem.id)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition cursor-pointer text-right ml-auto"
+              >
+                <div>
+                  <div className="text-[10px] text-slate-400 uppercase font-mono">Next</div>
+                  <div className="truncate max-w-[180px]">{nextItem.title}</div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </button>
+            ) : <div />}
           </div>
         </main>
       </div>
