@@ -30,7 +30,7 @@ export const Pagination: React.FC<PaginationProps> = ({
   const [jumpInput, setJumpInput] = useState('');
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
-  if (totalPages <= 1 && totalItems <= pageSize) {
+  if (totalItems <= 0) {
     return null;
   }
   const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);

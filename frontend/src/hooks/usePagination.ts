@@ -26,9 +26,10 @@ export function usePagination<T>(items: T[], initialPageSize = 10) {
   };
 
   const paginatedItems = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
+    const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+    const startIndex = (safeCurrentPage - 1) * pageSize;
     return items.slice(startIndex, startIndex + pageSize);
-  }, [items, currentPage, pageSize]);
+  }, [items, currentPage, pageSize, totalPages]);
 
   return {
     currentPage,
