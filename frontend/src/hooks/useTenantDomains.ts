@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { api } from '../api';
 
 const DEFAULT_SHORT_DOMAIN =
-  process.env.NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN || '';
+  process.env.NEXT_PUBLIC_DEFAULT_SHORT_DOMAIN || 'go.jupsoft.com';
 const DEFAULT_CNAME_DOMAIN =
-  process.env.NEXT_PUBLIC_CNAME_DOMAIN || '';
+  process.env.NEXT_PUBLIC_CNAME_DOMAIN || 'go.jupsoft.com';
 
 export function buildShortUrl(domain: string, shortCode: string): string {
   return `https://${domain}/${shortCode}`;
