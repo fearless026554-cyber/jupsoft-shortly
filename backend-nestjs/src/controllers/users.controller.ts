@@ -83,18 +83,23 @@ export class UsersController {
 
     if (isSuperAdmin) {
       const users = await this.db.withSuperAdminContext(async (client) => {
-        let query = `SELECT id, tenant_id, name, email, role, status, avatar_url, last_login_at, created_at FROM users`;
+        let query = `
+          SELECT u.id, u.tenant_id, u.name, u.email, u.role, u.status, u.avatar_url, u.last_login_at, u.created_at,
+                 t.name as tenant_name, t.code as tenant_code
+          FROM users u
+          LEFT JOIN tenants t ON u.tenant_id = t.id
+        `;
         const params: any[] = [];
         const conditions: string[] = [];
 
         if (targetTenantId) {
           params.push(targetTenantId);
-          conditions.push(`tenant_id = $${params.length}`);
+          conditions.push(`u.tenant_id = $${params.length}`);
         }
 
         if (cursor) {
           params.push(new Date(cursor));
-          conditions.push(`created_at < $${params.length}`);
+          conditions.push(`u.created_at < $${params.length}`);
         }
 
         if (conditions.length > 0) {
@@ -102,7 +107,7 @@ export class UsersController {
         }
 
         params.push(limit);
-        query += ` ORDER BY created_at DESC LIMIT $${params.length}`;
+        query += ` ORDER BY u.created_at DESC LIMIT $${params.length}`;
         const res = await client.query(query, params);
         return res.rows;
       });
@@ -110,14 +115,20 @@ export class UsersController {
     }
 
     const users = await this.db.withTenantContext(tenantId, async (client) => {
-      let query = `SELECT id, tenant_id, name, email, role, status, avatar_url, last_login_at, created_at FROM users WHERE tenant_id = $1`;
+      let query = `
+        SELECT u.id, u.tenant_id, u.name, u.email, u.role, u.status, u.avatar_url, u.last_login_at, u.created_at,
+               t.name as tenant_name, t.code as tenant_code
+        FROM users u
+        LEFT JOIN tenants t ON u.tenant_id = t.id
+        WHERE u.tenant_id = $1
+      `;
       const params: any[] = [tenantId];
       if (cursor) {
         params.push(new Date(cursor));
-        query += ` AND created_at < $2`;
+        query += ` AND u.created_at < $2`;
       }
       params.push(limit);
-      query += ` ORDER BY created_at DESC LIMIT $${params.length}`;
+      query += ` ORDER BY u.created_at DESC LIMIT $${params.length}`;
       const res = await client.query(query, params);
       return res.rows;
     });

@@ -29,35 +29,39 @@ export class RateLimiterGuard implements CanActivate {
 
     // Apply rate limiting to non-API redirect routes (/:code, /:tenant/:alias)
     if (!url.startsWith('/api')) {
-      const redirectLimit = (env.NODE_ENV === 'development' || isLoopback) ? 1000 : RATE_LIMITS.REDIRECT_RPM;
-      const keyIdentifier = `redirect:ip:${clientIp}`;
-      const now = Math.floor(Date.now() / 1000);
-      const windowStart = now - (now % RATE_LIMITS.WINDOW_SIZE_SEC);
-      const resetTime = windowStart + RATE_LIMITS.WINDOW_SIZE_SEC;
-      const rateLimitKey = REDIS_KEYS.RATE_LIMIT_KEY(keyIdentifier, windowStart);
+      try {
+        const redirectLimit = (env.NODE_ENV === 'development' || isLoopback) ? 1000 : RATE_LIMITS.REDIRECT_RPM;
+        const keyIdentifier = `redirect:ip:${clientIp}`;
+        const now = Math.floor(Date.now() / 1000);
+        const windowStart = now - (now % RATE_LIMITS.WINDOW_SIZE_SEC);
+        const resetTime = windowStart + RATE_LIMITS.WINDOW_SIZE_SEC;
+        const rateLimitKey = REDIS_KEYS.RATE_LIMIT_KEY(keyIdentifier, windowStart);
 
-      const currentCount = await this.redis.client.incr(rateLimitKey);
-      if (currentCount === 1) {
-        await this.redis.client.expire(
-          rateLimitKey,
-          RATE_LIMITS.WINDOW_SIZE_SEC + REDIS_CONFIG.RATE_LIMIT_KEY_GRACE_SEC
-        );
-      }
+        const currentCount = await this.redis.client.incr(rateLimitKey);
+        if (currentCount === 1) {
+          await this.redis.client.expire(
+            rateLimitKey,
+            RATE_LIMITS.WINDOW_SIZE_SEC + REDIS_CONFIG.RATE_LIMIT_KEY_GRACE_SEC
+          );
+        }
 
-      const remaining = Math.max(0, redirectLimit - currentCount);
-      reply.header(HeaderNames.X_RATELIMIT_LIMIT, redirectLimit);
-      reply.header(HeaderNames.X_RATELIMIT_REMAINING, remaining);
-      reply.header(HeaderNames.X_RATELIMIT_RESET, resetTime);
+        const remaining = Math.max(0, redirectLimit - currentCount);
+        reply.header(HeaderNames.X_RATELIMIT_LIMIT, redirectLimit);
+        reply.header(HeaderNames.X_RATELIMIT_REMAINING, remaining);
+        reply.header(HeaderNames.X_RATELIMIT_RESET, resetTime);
 
-      if (currentCount > redirectLimit) {
-        reply.status(429).send({
-          success: false,
-          error: {
-            code: ErrorCodes.RATE_LIMIT_EXCEEDED,
-            message: `Too many redirect requests. Please try again in ${resetTime - now} seconds.`,
-          },
-        });
-        return false;
+        if (currentCount > redirectLimit) {
+          reply.status(429).send({
+            success: false,
+            error: {
+              code: ErrorCodes.RATE_LIMIT_EXCEEDED,
+              message: `Too many redirect requests. Please try again in ${resetTime - now} seconds.`,
+            },
+          });
+          return false;
+        }
+      } catch {
+        // Fail-open: If Redis is degraded, never block critical user redirects
       }
 
       return true;
@@ -174,34 +178,38 @@ export class RateLimiterGuard implements CanActivate {
       }
     }
 
-    const now = Math.floor(Date.now() / 1000);
-    const windowStart = now - (now % RATE_LIMITS.WINDOW_SIZE_SEC);
-    const resetTime = windowStart + RATE_LIMITS.WINDOW_SIZE_SEC;
-    const rateLimitKey = REDIS_KEYS.RATE_LIMIT_KEY(keyIdentifier, windowStart);
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const windowStart = now - (now % RATE_LIMITS.WINDOW_SIZE_SEC);
+      const resetTime = windowStart + RATE_LIMITS.WINDOW_SIZE_SEC;
+      const rateLimitKey = REDIS_KEYS.RATE_LIMIT_KEY(keyIdentifier, windowStart);
 
-    const currentCount = await this.redis.client.incr(rateLimitKey);
-    if (currentCount === 1) {
-      await this.redis.client.expire(
-        rateLimitKey,
-        RATE_LIMITS.WINDOW_SIZE_SEC + REDIS_CONFIG.RATE_LIMIT_KEY_GRACE_SEC
-      );
-    }
+      const currentCount = await this.redis.client.incr(rateLimitKey);
+      if (currentCount === 1) {
+        await this.redis.client.expire(
+          rateLimitKey,
+          RATE_LIMITS.WINDOW_SIZE_SEC + REDIS_CONFIG.RATE_LIMIT_KEY_GRACE_SEC
+        );
+      }
 
-    const remaining = Math.max(0, limit - currentCount);
+      const remaining = Math.max(0, limit - currentCount);
 
-    reply.header(HeaderNames.X_RATELIMIT_LIMIT, limit);
-    reply.header(HeaderNames.X_RATELIMIT_REMAINING, remaining);
-    reply.header(HeaderNames.X_RATELIMIT_RESET, resetTime);
+      reply.header(HeaderNames.X_RATELIMIT_LIMIT, limit);
+      reply.header(HeaderNames.X_RATELIMIT_REMAINING, remaining);
+      reply.header(HeaderNames.X_RATELIMIT_RESET, resetTime);
 
-    if (currentCount > limit) {
-      reply.status(429).send({
-        success: false,
-        error: {
-          code: ErrorCodes.RATE_LIMIT_EXCEEDED,
-          message: `API rate limit of ${limit} requests per minute exceeded. Try again in ${resetTime - now} seconds.`,
-        },
-      });
-      return false;
+      if (currentCount > limit) {
+        reply.status(429).send({
+          success: false,
+          error: {
+            code: ErrorCodes.RATE_LIMIT_EXCEEDED,
+            message: `API rate limit of ${limit} requests per minute exceeded. Try again in ${resetTime - now} seconds.`,
+          },
+        });
+        return false;
+      }
+    } catch {
+      // Fail-open: If Redis is temporarily degraded, do not fail legitimate API calls
     }
 
     return true;

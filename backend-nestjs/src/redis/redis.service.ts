@@ -65,15 +65,21 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     if (tenantId && alias) {
       pipeline.del(RedisKeyBuilder.alias(tenantId, alias));
     }
+    await pipeline.exec();
+
     if (linkId) {
       try {
-        const analyticsKeys = await this.client.keys(`analytics:link:*:${linkId}:*`);
-        if (analyticsKeys.length > 0) {
-          pipeline.del(...analyticsKeys);
-        }
+        const stream = this.client.scanStream({
+          match: `analytics:link:*:${linkId}:*`,
+          count: 100,
+        });
+        stream.on('data', (keys: string[]) => {
+          if (keys && keys.length > 0) {
+            this.client.unlink(...keys).catch(() => {});
+          }
+        });
       } catch {}
     }
-    await pipeline.exec();
   }
 
   /**

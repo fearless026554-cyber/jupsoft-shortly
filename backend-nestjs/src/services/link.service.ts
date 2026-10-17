@@ -108,11 +108,12 @@ export class LinkService {
         }
 
         // Single query fetching all taken candidates matching baseAlias-% to avoid N sequential queries
-        const pattern = `${baseAlias}-%`;
+        const escapedBaseAlias = baseAlias.replace(/[_%]/g, '\\$&');
+        const pattern = `${escapedBaseAlias}-%`;
         const existingCandidatesRes = await client.query(
           `SELECT LOWER(COALESCE(alias, short_code)) as code FROM links 
            WHERE ((domain_id = $1) OR (tenant_id = $2))
-             AND (LOWER(alias) LIKE $3 OR LOWER(short_code) LIKE $3)`,
+             AND (LOWER(alias) LIKE $3 ESCAPE '\\' OR LOWER(short_code) LIKE $3 ESCAPE '\\')`,
           [domainId, tenantId, pattern.toLowerCase()]
         );
 

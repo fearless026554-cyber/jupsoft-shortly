@@ -317,15 +317,15 @@ export class ClickProcessor extends WorkerHost {
   }
 
   @OnWorkerEvent('failed')
-  async onFailed(job: Job<ClickIngestJobData, any, string>, err: Error) {
-    if (job.attemptsMade >= (job.opts.attempts || 3)) {
+  async onFailed(job: Job<ClickIngestJobData, any, string> | undefined, err: Error) {
+    if (job && job.attemptsMade >= (job.opts?.attempts || 3)) {
       try {
         await this.redis.client.lpush(
           'queue:clicks:dlq',
           JSON.stringify({
             jobId: job.id,
             data: job.data,
-            error: err.message,
+            error: err?.message || 'Unknown job failure',
             failedAt: new Date().toISOString(),
           })
         );

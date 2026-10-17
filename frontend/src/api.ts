@@ -53,6 +53,9 @@ export interface TenantItem {
 
 export interface UserItem {
   id: string;
+  tenant_id?: string;
+  tenant_name?: string;
+  tenant_code?: string;
   name: string;
   email: string;
   role: 'super_admin' | 'tenant_admin' | 'manager' | 'user' | 'read_only';
