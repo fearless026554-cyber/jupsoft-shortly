@@ -31,6 +31,7 @@ export interface CreateLinkDto {
   redirectType?: '302' | '307';
   isPermanent?: boolean;
   is_permanent?: boolean;
+  tenantId?: string;
 }
 
 export interface OutcomeRecord {
@@ -387,12 +388,14 @@ export const api = {
   },
 
   // Bulk
-  async bulkCreate(items: Array<{ destinationUrl: string; alias?: string; tag?: string; externalRef?: string }>) {
+  async bulkCreate(items: Array<{ destinationUrl: string; alias?: string; tag?: string; externalRef?: string }>, tenantId?: string) {
     clearApiCache('links');
+    const payload: any = { links: items };
+    if (tenantId && tenantId !== 'all') payload.tenantId = tenantId;
     const res = await secureFetch(`${API_BASE_URL}/links/bulk`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ links: items }),
+      body: JSON.stringify(payload),
     });
     return res.json();
   },
@@ -428,10 +431,11 @@ export const api = {
   },
 
   // Analytics
-  async getAnalyticsSummary(startDate?: string, endDate?: string) {
+  async getAnalyticsSummary(startDate?: string, endDate?: string, tenantId?: string) {
     const params = new URLSearchParams();
     if (startDate) params.set('startDate', startDate);
     if (endDate) params.set('endDate', endDate);
+    if (tenantId && tenantId !== 'all') params.set('tenantId', tenantId);
     const queryString = params.toString() ? `?${params.toString()}` : '';
     const url = `${API_BASE_URL}/analytics/summary${queryString}`;
     return dedupeGet(url, async () => {
@@ -470,10 +474,14 @@ export const api = {
     });
   },
 
-  async getOutcomes(limit = 50) {
-    return dedupeGet(`${API_BASE_URL}/outcomes?limit=${limit}`, async () => {
+  async getOutcomes(limit = 50, tenantId?: string) {
+    const params = new URLSearchParams();
+    params.set('limit', String(limit));
+    if (tenantId && tenantId !== 'all') params.set('tenantId', tenantId);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return dedupeGet(`${API_BASE_URL}/outcomes${queryString}`, async () => {
       try {
-        const res = await secureFetch(`${API_BASE_URL}/outcomes?limit=${limit}`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/outcomes${queryString}`, { headers });
         const json = await res.json();
         return json.success ? json.data : [];
       } catch {
@@ -526,10 +534,13 @@ export const api = {
   },
 
   // Users & RBAC
-  async getUsers(): Promise<UserItem[]> {
-    return dedupeGet(`${API_BASE_URL}/users`, async () => {
+  async getUsers(tenantId?: string): Promise<UserItem[]> {
+    const params = new URLSearchParams();
+    if (tenantId && tenantId !== 'all') params.set('tenantId', tenantId);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return dedupeGet(`${API_BASE_URL}/users${queryString}`, async () => {
       try {
-        const res = await secureFetch(`${API_BASE_URL}/users`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/users${queryString}`, { headers });
         const json = await res.json();
         return json.success && Array.isArray(json.data) ? json.data : [];
       } catch {
@@ -538,7 +549,7 @@ export const api = {
     });
   },
 
-  async inviteUser(dto: { name: string; email: string; role: string; password?: string }) {
+  async inviteUser(dto: { name: string; email: string; role: string; password?: string; tenantId?: string }) {
     clearApiCache('users');
     const res = await secureFetch(`${API_BASE_URL}/users`, {
       method: 'POST',
@@ -578,10 +589,13 @@ export const api = {
   },
 
   // Domains & TRAI DLT
-  async getDomains(): Promise<DomainItem[]> {
-    return dedupeGet(`${API_BASE_URL}/domains`, async () => {
+  async getDomains(tenantId?: string): Promise<DomainItem[]> {
+    const params = new URLSearchParams();
+    if (tenantId && tenantId !== 'all') params.set('tenantId', tenantId);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return dedupeGet(`${API_BASE_URL}/domains${queryString}`, async () => {
       try {
-        const res = await secureFetch(`${API_BASE_URL}/domains`, { headers });
+        const res = await secureFetch(`${API_BASE_URL}/domains${queryString}`, { headers });
         const json = await res.json();
         return json.success && Array.isArray(json.data) ? json.data : [];
       } catch {
@@ -590,7 +604,7 @@ export const api = {
     });
   },
 
-  async createDomain(dto: { hostname: string; type?: string }) {
+  async createDomain(dto: { hostname: string; type?: string; tenantId?: string }) {
     clearApiCache('domains');
     const res = await secureFetch(`${API_BASE_URL}/domains`, {
       method: 'POST',

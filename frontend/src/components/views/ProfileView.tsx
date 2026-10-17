@@ -233,7 +233,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   )}
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                  {currentUser?.email || 'admin@jupsoft.com'}
+                  {currentUser?.email || '—'}
                 </div>
                 <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mt-1 flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5 text-blue-500" />

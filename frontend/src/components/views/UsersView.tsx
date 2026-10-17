@@ -52,9 +52,10 @@ import {
 interface UsersViewProps {
   onOpenInviteModal: () => void;
   currentUser?: any;
+  activeTenantId?: string;
 }
 
-export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, currentUser }) => {
+export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, currentUser, activeTenantId }) => {
   const [activeTab, setActiveTab] = useState<'directory' | 'hierarchy' | 'matrix'>('directory');
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,7 +89,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const data = await api.getUsers();
+      const data = await api.getUsers(activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined);
       setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load users:', err);
@@ -100,7 +101,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [activeTenantId]);
 
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {

@@ -52,9 +52,10 @@ interface JobInfo {
 
 interface BulkStudioViewProps {
   currentUser?: any;
+  activeTenantId?: string;
 }
 
-export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) => {
+export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser, activeTenantId }) => {
   // URL Normalization & Validation Helper
   const normalizeUrl = (url: string) => {
     const trimmed = url.trim();
@@ -326,7 +327,7 @@ export const BulkStudioView: React.FC<BulkStudioViewProps> = ({ currentUser }) =
         externalRef: r.externalRef.trim() || undefined,
       }));
 
-      const res = await api.bulkCreate(items);
+      const res = await api.bulkCreate(items, activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined);
       if (res.success && res.data) {
         const jobId = res.data.jobId;
         const status = (res.data.status as any) || 'queued';

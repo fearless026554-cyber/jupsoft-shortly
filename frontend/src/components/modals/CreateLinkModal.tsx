@@ -24,12 +24,14 @@ interface CreateLinkModalProps {
   isOpen: boolean;
   onClose: () => void;
   onLinkCreated: (createdLink?: any) => void;
+  activeTenantId?: string;
 }
 
 export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
   isOpen,
   onClose,
   onLinkCreated,
+  activeTenantId,
 }) => {
   const [destinationUrl, setDestinationUrl] = useState('');
   const [alias, setAlias] = useState('');
@@ -140,6 +142,7 @@ export const CreateLinkModal: React.FC<CreateLinkModalProps> = ({
         expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
         isPermanent: isPermanent,
         is_permanent: isPermanent,
+        tenantId: activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined,
       };
 
       const res = await api.createLink(dto);

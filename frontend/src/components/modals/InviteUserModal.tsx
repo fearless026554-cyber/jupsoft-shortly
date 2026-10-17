@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, UserPlus, Mail, Shield, KeyRound, RefreshCw, Eye, EyeOff, CheckCircle2, Crown } from 'lucide-react';
-import { api } from '../../api';
+import { api, TenantItem } from '../../api';
 import { getAllowedInviteRoles, getRoleConfig, generateStrongPassword, UserRole } from '../../utils/rbac';
 
 interface InviteUserModalProps {
@@ -10,6 +10,8 @@ interface InviteUserModalProps {
   onClose: () => void;
   onUserInvited: (user?: any) => void;
   currentUser?: any;
+  activeTenantId?: string;
+  tenants?: TenantItem[];
 }
 
 export const InviteUserModal: React.FC<InviteUserModalProps> = ({
@@ -17,14 +19,20 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
   onClose,
   onUserInvited,
   currentUser,
+  activeTenantId,
+  tenants,
 }) => {
   const allowedRoles = getAllowedInviteRoles(currentUser?.role);
   const defaultRole = allowedRoles.includes('user') ? 'user' : allowedRoles[0] || 'user';
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>(defaultRole as UserRole);
+  const [selectedTenantId, setSelectedTenantId] = useState<string>(
+    activeTenantId && activeTenantId !== 'all' ? activeTenantId : (tenants?.[0]?.id || '')
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,11 +45,12 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
       setEmail('');
       setPassword(generateStrongPassword());
       setRole(defaultRole as UserRole);
+      setSelectedTenantId(activeTenantId && activeTenantId !== 'all' ? activeTenantId : (tenants?.[0]?.id || ''));
       setError(null);
       setLoading(false);
     }
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, defaultRole]);
+  }, [isOpen, defaultRole, activeTenantId, tenants]);
 
   if (!isOpen) return null;
 
@@ -64,6 +73,7 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
         email: email.trim().toLowerCase(),
         role,
         password: password.trim() || undefined,
+        tenantId: isSuperAdmin && selectedTenantId ? selectedTenantId : undefined,
       });
 
       if (res.success) {
@@ -176,6 +186,26 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Target Tenant (Super Admin Only) */}
+          {isSuperAdmin && tenants && tenants.length > 0 && (
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Target Organization / Tenant *
+              </label>
+              <select
+                value={selectedTenantId}
+                onChange={(e) => setSelectedTenantId(e.target.value)}
+                className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Role Selection */}
           <div>

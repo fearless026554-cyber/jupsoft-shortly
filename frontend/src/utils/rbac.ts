@@ -394,14 +394,13 @@ export function hasPermission(role: string | undefined, permissionId: string): b
   return perm ? perm.allowedRoles.includes(role as UserRole) : false;
 }
 
-export function isRootSuperAdminAccount(user?: { email?: string; name?: string; role?: string } | null): boolean {
+export function isRootSuperAdminAccount(user?: { email?: string; name?: string; role?: string; is_root?: boolean; tenant_id?: string | null } | null): boolean {
   if (!user) return false;
+  if ((user as any).is_root) return true;
+  // System root administrator is an unassigned super_admin (no tenant binding)
+  if (user.role === 'super_admin' && !user.tenant_id) return true;
   const email = (user.email || '').toLowerCase().trim();
-  return (
-    email === 'admin@jupsoft.com' ||
-    email === 'sachin@jupsoft.com' ||
-    email === 'superadmin@jupsoft.com'
-  );
+  return user.role === 'super_admin' && (email.startsWith('admin@') || email.startsWith('superadmin@'));
 }
 
 export function getRolePermissions(role?: string): RBACPermission[] {

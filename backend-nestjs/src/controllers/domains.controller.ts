@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Query, Req, Res, UseGuards, UseInterceptors } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import * as dns from 'node:dns/promises';
 import * as os from 'node:os';
@@ -7,12 +7,13 @@ import { DatabaseService } from '../db/database.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { AuthGuard, RequireScope } from '../common/guards/auth.guard.js';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor.js';
-import { ApiScopes, ErrorCodes, RedisKeyBuilder } from '../constants/index.js';
+import { ApiScopes, ErrorCodes, RedisKeyBuilder, UserRoles } from '../constants/index.js';
 import { env } from '../config/env.js';
 
 const createDomainSchema = z.object({
   hostname: z.string().min(3).max(255).regex(/^[a-z0-9.-]+$/, 'Invalid hostname format'),
   type: z.enum(['subdomain', 'custom']),
+  tenantId: z.string().uuid().optional(),
 });
 
 const patchDomainSchema = z.object({
@@ -165,18 +166,41 @@ export class DomainsController {
 
   @Get()
   @RequireScope(ApiScopes.LINKS_READ)
-  async listDomains(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+  async listDomains(
+    @Query('tenantId') queryTenantId: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
     const auth = (req as any).auth;
+    const isSuperAdmin =
+      auth.role === UserRoles.SUPER_ADMIN ||
+      auth.scopes?.includes(ApiScopes.SUPER_ADMIN) ||
+      auth.scopes?.includes(ApiScopes.WILDCARD);
     const tenantId = auth.tenantId;
 
-    const [domains, serverIp] = await Promise.all([
-      this.db.pool.query(
-        `SELECT id, tenant_id, hostname, type, verification_status, dlt_status, ssl_active, created_at
+    let targetTenantId: string | undefined;
+    if (isSuperAdmin) {
+      if (queryTenantId && queryTenantId !== 'all') {
+        targetTenantId = queryTenantId;
+      } else {
+        targetTenantId = undefined;
+      }
+    } else {
+      targetTenantId = tenantId;
+    }
+
+    const domainQuery = targetTenantId
+      ? `SELECT id, tenant_id, hostname, type, verification_status, dlt_status, ssl_active, created_at
          FROM domains
          WHERE tenant_id = $1 OR tenant_id IS NULL
-         ORDER BY (tenant_id IS NOT NULL) DESC, (verification_status = 'verified') DESC, created_at ASC`,
-        [tenantId]
-      ),
+         ORDER BY (tenant_id IS NOT NULL) DESC, (verification_status = 'verified') DESC, created_at ASC`
+      : `SELECT id, tenant_id, hostname, type, verification_status, dlt_status, ssl_active, created_at
+         FROM domains
+         ORDER BY (tenant_id IS NOT NULL) DESC, (verification_status = 'verified') DESC, created_at ASC`;
+    const domainParams = targetTenantId ? [targetTenantId] : [];
+
+    const [domains, serverIp] = await Promise.all([
+      this.db.pool.query(domainQuery, domainParams),
       getLiveServerIp(),
     ]);
 
@@ -216,7 +240,30 @@ export class DomainsController {
   async createDomain(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const dto = createDomainSchema.parse(req.body);
     const auth = (req as any).auth;
-    const tenantId = auth.tenantId;
+    const isSuperAdmin =
+      auth.role === UserRoles.SUPER_ADMIN ||
+      auth.scopes?.includes(ApiScopes.SUPER_ADMIN) ||
+      auth.scopes?.includes(ApiScopes.WILDCARD);
+
+    if (dto.tenantId && dto.tenantId !== auth.tenantId && !isSuperAdmin) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: ErrorCodes.FORBIDDEN, message: 'Cannot create domains for other tenants' },
+      });
+    }
+
+    const tenantId = isSuperAdmin && dto.tenantId ? dto.tenantId : auth.tenantId;
+
+    if (isSuperAdmin && dto.tenantId) {
+      const tenantCheck = await this.db.pool.query('SELECT id, status FROM tenants WHERE id = $1', [tenantId]);
+      if (tenantCheck.rowCount === 0) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: ErrorCodes.NOT_FOUND, message: 'Target tenant does not exist' },
+        });
+      }
+    }
+
     const cleanHost = dto.hostname.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 
     try {

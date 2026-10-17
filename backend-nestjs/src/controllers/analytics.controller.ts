@@ -40,25 +40,29 @@ export class AnalyticsController {
   ) {
     const dto = analyticsQuerySchema.parse({ startDate, endDate });
     const auth = (req as any).auth;
+    const isSuperAdmin = auth.role === 'super_admin' || auth.scopes?.includes('*') || auth.scopes?.includes('super_admin');
     const tenantId = auth.tenantId;
 
-    const cacheKey = `analytics:link:${tenantId}:${id}:${dto.startDate || 'all'}:${dto.endDate || 'all'}`;
+    const cacheKey = `analytics:link:${isSuperAdmin ? 'super' : tenantId}:${id}:${dto.startDate || 'all'}:${dto.endDate || 'all'}`;
     const cached = await this.redis.client.get(cacheKey);
     if (cached) {
       return reply.send({ success: true, data: JSON.parse(cached) });
     }
 
-    const result = await this.db.withTenantContext(tenantId, async (client) => {
+    const runAnalytics = async (client: any) => {
       const linkRes = await client.query(
-        'SELECT id, short_code, click_count, external_ref FROM links WHERE id = $1 AND tenant_id = $2',
-        [id, tenantId]
+        isSuperAdmin
+          ? 'SELECT id, tenant_id, short_code, click_count, external_ref FROM links WHERE id = $1'
+          : 'SELECT id, tenant_id, short_code, click_count, external_ref FROM links WHERE id = $1 AND tenant_id = $2',
+        isSuperAdmin ? [id] : [id, tenantId]
       );
       if (linkRes.rowCount === 0) return null;
       const link = linkRes.rows[0];
+      const linkTenantId = link.tenant_id;
 
       let query = `SELECT date, clicks, unique_clicks, by_device, by_os, by_browser, by_country, by_referrer
                    FROM click_daily WHERE link_id = $1 AND tenant_id = $2`;
-      const params: any[] = [id, tenantId];
+      const params: any[] = [id, linkTenantId];
 
       if (dto.startDate) {
         params.push(dto.startDate);
@@ -75,11 +79,15 @@ export class AnalyticsController {
       const outcomeRes = await client.query(
         `SELECT COUNT(id) AS total_outcomes, COALESCE(SUM(value), 0) AS total_revenue
          FROM outcomes WHERE link_id = $1 AND tenant_id = $2`,
-        [id, tenantId]
+        [id, linkTenantId]
       );
 
       return { link, daily: dailyRes.rows, outcomes: outcomeRes.rows[0] };
-    });
+    };
+
+    const result = isSuperAdmin
+      ? await this.db.withSuperAdminContext(runAnalytics)
+      : await this.db.withTenantContext(tenantId, runAnalytics);
 
     if (!result) {
       return reply.status(404).send({

@@ -74,22 +74,46 @@ export class OutcomesController {
 
   @Get()
   @RequireScope(ApiScopes.ANALYTICS_READ)
-  async getOutcomes(@Query('limit') limit: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+  async getOutcomes(
+    @Query('limit') limit: string,
+    @Query('tenantId') queryTenantId: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
     const auth = (req as any).auth;
+    const isSuperAdmin = auth.role === 'super_admin' || auth.scopes?.includes('*') || auth.scopes?.includes('super_admin');
     const tenantId = auth.tenantId;
     const limitNum = Math.min(Math.max(1, limit ? parseInt(limit, 10) || 50 : 50), 100);
 
-    const outcomes = await this.db.withTenantContext(tenantId, async (client) => {
-      const res = await client.query(
-        `SELECT o.id, o.external_ref, o.outcome_type, o.value, o.occurred_at, l.short_code, l.tag 
+    let targetTenantId: string | undefined;
+    if (isSuperAdmin) {
+      if (queryTenantId && queryTenantId !== 'all') {
+        targetTenantId = queryTenantId;
+      } else {
+        targetTenantId = undefined;
+      }
+    } else {
+      targetTenantId = tenantId;
+    }
+
+    const runQuery = async (client: any) => {
+      let query = `SELECT o.id, o.external_ref, o.outcome_type, o.value, o.occurred_at, l.short_code, l.tag 
          FROM outcomes o
-         LEFT JOIN links l ON o.link_id = l.id
-         WHERE o.tenant_id = $1
-         ORDER BY o.occurred_at DESC LIMIT $2`,
-        [tenantId, limitNum]
-      );
+         LEFT JOIN links l ON o.link_id = l.id`;
+      const params: any[] = [];
+      if (targetTenantId) {
+        params.push(targetTenantId);
+        query += ` WHERE o.tenant_id = $${params.length}`;
+      }
+      params.push(limitNum);
+      query += ` ORDER BY o.occurred_at DESC LIMIT $${params.length}`;
+      const res = await client.query(query, params);
       return res.rows;
-    });
+    };
+
+    const outcomes = isSuperAdmin && !targetTenantId
+      ? await this.db.withSuperAdminContext(runQuery)
+      : await this.db.withTenantContext(targetTenantId || tenantId, runQuery);
 
     return reply.send({ success: true, data: outcomes });
   }

@@ -207,6 +207,13 @@ describe('Security Audit Fixes Verification (Controller-Level)', () => {
 
   it('Transactional Email: UsersController.inviteUser sends credentials email via EmailService', async () => {
     const mockDb = {
+      withSuperAdminContext: vi.fn().mockImplementation(async (cb: any) => {
+        return cb({
+          query: vi.fn().mockResolvedValue({
+            rows: [{ id: 'usr-new-1', name: 'Rohan Sharma', email: 'rohan@jupsoft.com', role: 'user', status: 'invited' }],
+          }),
+        });
+      }),
       withTenantContext: vi.fn().mockImplementation(async (_tenantId: string, cb: any) => {
         return cb({
           query: vi.fn().mockResolvedValue({
@@ -477,5 +484,70 @@ describe('Security Audit Fixes Verification (Controller-Level)', () => {
       expect(reply.getBody()?.data?.status).toBe('suspended');
       expect(mockRedis.invalidateTenantStatus).toHaveBeenCalledWith('tenant-123');
     });
+
+    it('UsersController.listUsers filters by tenantId query param for super admin', async () => {
+      let executedQuery = '';
+      let executedParams: any[] = [];
+      const mockDb = {
+        withSuperAdminContext: vi.fn().mockImplementation(async (cb: any) => {
+          return cb({
+            query: vi.fn().mockImplementation(async (q: string, params: any[]) => {
+              executedQuery = q;
+              executedParams = params;
+              return { rows: [{ id: 'usr-target', tenant_id: 'tenant-target' }] };
+            }),
+          });
+        }),
+      } as any;
+      const mockRedis = {} as any;
+      const mockEmail = {} as any;
+      const controller = new UsersController(mockDb, mockRedis, mockEmail);
+
+      const req: any = {
+        auth: {
+          role: UserRoles.SUPER_ADMIN,
+          tenantId: 'tenant-default',
+        },
+      };
+      const reply = createMockReply();
+
+      await controller.listUsers('50', '', 'tenant-target', req, reply);
+
+      expect(reply.getStatus()).toBe(200);
+      expect(executedQuery).toContain('tenant_id = $1');
+      expect(executedParams).toContain('tenant-target');
+      expect(reply.getBody()?.data).toHaveLength(1);
+    });
+
+    it('UsersController.inviteUser rejects cross-tenant invitation by non-super-admin with 403', async () => {
+      const mockDb = {
+        withTenantContext: vi.fn(),
+      } as any;
+      const mockRedis = {} as any;
+      const mockEmail = {} as any;
+      const controller = new UsersController(mockDb, mockRedis, mockEmail);
+
+      const req: any = {
+        body: {
+          name: 'Jane Doe',
+          email: 'jane@othercorp.com',
+          role: 'user',
+          tenantId: 'a0000000-0000-4000-8000-000000000002',
+        },
+        auth: {
+          role: UserRoles.TENANT_ADMIN,
+          tenantId: 'a0000000-0000-4000-8000-000000000001',
+        },
+      };
+      const reply = createMockReply();
+
+      await controller.inviteUser(req, reply);
+
+      expect(reply.getStatus()).toBe(403);
+      expect(reply.getBody()?.success).toBe(false);
+      expect(reply.getBody()?.error?.code).toBe(ErrorCodes.FORBIDDEN);
+      expect(mockDb.withTenantContext).not.toHaveBeenCalled();
+    });
   });
 });
+

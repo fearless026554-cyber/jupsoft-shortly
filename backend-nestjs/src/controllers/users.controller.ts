@@ -22,17 +22,20 @@ import {
 
 import bcrypt from 'bcryptjs';
 
-const ROOT_PROTECTED_EMAILS = ['admin@jupsoft.com', 'sachin@jupsoft.com', 'superadmin@jupsoft.com'];
-
 function isRootSuperAdmin(email?: string): boolean {
   if (!email) return false;
-  return ROOT_PROTECTED_EMAILS.includes(email.toLowerCase().trim());
+  const configuredRootEmails = (process.env.ROOT_ADMIN_EMAILS || 'admin@jupsoft.com,superadmin@jupsoft.com')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return configuredRootEmails.includes(email.toLowerCase().trim());
 }
 
 const inviteUserSchema = z.object({
   name: z.string().min(2).max(255),
   email: z.string().email(),
   role: z.enum(ALL_USER_ROLES as any),
+  tenantId: z.string().uuid().optional(),
   password: z.string().min(8, 'Password must be at least 8 characters').max(128).optional(),
 });
 
@@ -58,6 +61,7 @@ export class UsersController {
   async listUsers(
     @Query('limit') limitStr: string,
     @Query('cursor') cursor: string,
+    @Query('tenantId') queryTenantId: string,
     @Req() req: FastifyRequest,
     @Res() reply: FastifyReply
   ) {
@@ -66,14 +70,37 @@ export class UsersController {
     const tenantId = auth.tenantId;
     const limit = Math.min(Math.max(1, limitStr ? parseInt(limitStr, 10) || 50 : 50), 100);
 
-    if (isSuperAdmin && !tenantId) {
+    let targetTenantId: string | undefined;
+    if (isSuperAdmin) {
+      if (queryTenantId && queryTenantId !== 'all') {
+        targetTenantId = queryTenantId;
+      } else {
+        targetTenantId = undefined;
+      }
+    } else {
+      targetTenantId = tenantId;
+    }
+
+    if (isSuperAdmin) {
       const users = await this.db.withSuperAdminContext(async (client) => {
         let query = `SELECT id, tenant_id, name, email, role, status, avatar_url, last_login_at, created_at FROM users`;
         const params: any[] = [];
+        const conditions: string[] = [];
+
+        if (targetTenantId) {
+          params.push(targetTenantId);
+          conditions.push(`tenant_id = $${params.length}`);
+        }
+
         if (cursor) {
           params.push(new Date(cursor));
-          query += ` WHERE created_at < $1`;
+          conditions.push(`created_at < $${params.length}`);
         }
+
+        if (conditions.length > 0) {
+          query += ` WHERE ` + conditions.join(' AND ');
+        }
+
         params.push(limit);
         query += ` ORDER BY created_at DESC LIMIT $${params.length}`;
         const res = await client.query(query, params);
@@ -104,7 +131,29 @@ export class UsersController {
   async inviteUser(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const dto = inviteUserSchema.parse(req.body);
     const auth = (req as any).auth;
-    const tenantId = auth.tenantId;
+    const isSuperAdmin = auth.role === UserRoles.SUPER_ADMIN || auth.scopes?.includes(ApiScopes.SUPER_ADMIN) || auth.scopes?.includes(ApiScopes.WILDCARD);
+
+    if (dto.tenantId && dto.tenantId !== auth.tenantId && !isSuperAdmin) {
+      return reply.status(403).send({
+        success: false,
+        error: {
+          code: ErrorCodes.FORBIDDEN,
+          message: 'Cannot invite users to other tenants',
+        },
+      });
+    }
+
+    const tenantId = isSuperAdmin && dto.tenantId ? dto.tenantId : auth.tenantId;
+
+    if (isSuperAdmin && dto.tenantId) {
+      const tenantCheck = await this.db.pool.query('SELECT id, status FROM tenants WHERE id = $1', [tenantId]);
+      if (tenantCheck.rowCount === 0) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: ErrorCodes.NOT_FOUND, message: 'Target tenant does not exist' },
+        });
+      }
+    }
 
     // Security Gate 1: Check allowed invite roles based on caller's role hierarchy
     const allowedRoles = getAllowedInviteRoles(auth.role);
@@ -138,13 +187,21 @@ export class UsersController {
     const passwordHash = await bcrypt.hash(rawPassword, 10);
     const initialStatus = isGeneratedPassword ? UserStatus.INVITED : UserStatus.ACTIVE;
 
-    const created = await this.db.withTenantContext(tenantId, async (client) => {
-      const res = await client.query(
-        `INSERT INTO users (tenant_id, name, email, password_hash, role, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, status, created_at`,
-        [tenantId, dto.name, dto.email.toLowerCase(), passwordHash, dto.role, initialStatus]
-      );
-      return res.rows[0];
-    });
+    const created = isSuperAdmin
+      ? await this.db.withSuperAdminContext(async (client) => {
+          const res = await client.query(
+            `INSERT INTO users (tenant_id, name, email, password_hash, role, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, status, created_at`,
+            [tenantId, dto.name, dto.email.toLowerCase(), passwordHash, dto.role, initialStatus]
+          );
+          return res.rows[0];
+        })
+      : await this.db.withTenantContext(tenantId, async (client) => {
+          const res = await client.query(
+            `INSERT INTO users (tenant_id, name, email, password_hash, role, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, role, status, created_at`,
+            [tenantId, dto.name, dto.email.toLowerCase(), passwordHash, dto.role, initialStatus]
+          );
+          return res.rows[0];
+        });
 
     // Automated Transactional Email: Dispatch credentials to user inbox
     this.emailService

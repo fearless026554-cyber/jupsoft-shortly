@@ -22,9 +22,10 @@ import { Permissions } from '../../utils/rbac';
 
 interface DomainsViewProps {
   currentUser?: any;
+  activeTenantId?: string;
 }
 
-export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
+export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser, activeTenantId }) => {
   const [domains, setDomains] = useState<DomainItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [newHostname, setNewHostname] = useState('');
@@ -50,7 +51,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
   const loadDomains = async () => {
     setLoading(true);
     try {
-      const data = await api.getDomains();
+      const data = await api.getDomains(activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined);
       setDomains(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load domains:', err);
@@ -62,7 +63,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
 
   useEffect(() => {
     loadDomains();
-  }, []);
+  }, [activeTenantId]);
 
   const handleAddDomain = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,6 +75,7 @@ export const DomainsView: React.FC<DomainsViewProps> = ({ currentUser }) => {
       const res = await api.createDomain({
         hostname: newHostname.trim().toLowerCase(),
         type: 'custom',
+        tenantId: activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined,
       });
 
       if (res.success) {

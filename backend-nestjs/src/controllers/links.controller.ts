@@ -59,6 +59,7 @@ const createLinkSchema = z.object({
   destinationUrl: z.string().url('Must be a valid URL'),
   alias: z.string().max(LINK_LIMITS.MAX_ALIAS_LEN).optional(),
   domainId: z.string().uuid().optional(),
+  tenantId: z.string().uuid().optional(),
   expiresAt: z.string().datetime().optional(),
   maxClicks: z.number().int().positive().optional(),
   tag: z.string().max(LINK_LIMITS.MAX_TAG_LEN).optional(),
@@ -80,6 +81,7 @@ const patchLinkSchema = z.object({
 });
 
 const bulkCreateSchema = z.object({
+  tenantId: z.string().uuid().optional(),
   domainId: z.string().uuid().optional(),
   links: z
     .array(
@@ -120,7 +122,30 @@ export class LinksController {
     const dto = createLinkSchema.parse(req.body);
     const auth = (req as any).auth;
     const geoUa = getGeoUa(req);
-    const tenantId = auth.tenantId;
+    const isSuperAdmin =
+      auth.role === UserRoles.SUPER_ADMIN ||
+      auth.scopes?.includes(ApiScopes.SUPER_ADMIN) ||
+      auth.scopes?.includes(ApiScopes.WILDCARD);
+
+    if (dto.tenantId && dto.tenantId !== auth.tenantId && !isSuperAdmin) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: ErrorCodes.FORBIDDEN, message: 'Cannot create links for other tenants' },
+      });
+    }
+
+    const tenantId = isSuperAdmin && dto.tenantId ? dto.tenantId : auth.tenantId;
+
+    if (isSuperAdmin && dto.tenantId) {
+      const tenantCheck = await this.db.pool.query('SELECT id, status FROM tenants WHERE id = $1', [tenantId]);
+      if (tenantCheck.rowCount === 0) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: ErrorCodes.NOT_FOUND, message: 'Target tenant does not exist' },
+        });
+      }
+    }
+
     let domainId: string = dto.domainId || env.DEFAULT_DOMAIN_ID;
     if (!dto.domainId) {
       domainId = await this.redis.getTenantPrimaryDomainId(tenantId);
@@ -235,7 +260,19 @@ export class LinksController {
     }
 
     const auth = (req as any).auth;
-    const tenantId = auth.tenantId;
+    const isSuperAdmin =
+      auth.role === UserRoles.SUPER_ADMIN ||
+      auth.scopes?.includes(ApiScopes.SUPER_ADMIN) ||
+      auth.scopes?.includes(ApiScopes.WILDCARD);
+
+    if (dto.tenantId && dto.tenantId !== auth.tenantId && !isSuperAdmin) {
+      return reply.status(403).send({
+        success: false,
+        error: { code: ErrorCodes.FORBIDDEN, message: 'Cannot create bulk links for other tenants' },
+      });
+    }
+
+    const tenantId = isSuperAdmin && dto.tenantId ? dto.tenantId : auth.tenantId;
     const defaultDomainId = dto.domainId || env.DEFAULT_DOMAIN_ID;
 
     const domainIdsToCheck = new Set<string>();
@@ -379,7 +416,10 @@ export class LinksController {
   async batchAction(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const dto = batchActionSchema.parse(req.body);
     const auth = (req as any).auth;
-    const isSuperAdmin = auth?.role === 'super_admin' || auth?.scopes?.includes('*');
+    const isSuperAdmin =
+      auth?.role === UserRoles.SUPER_ADMIN ||
+      auth?.scopes?.includes(ApiScopes.SUPER_ADMIN) ||
+      auth?.scopes?.includes(ApiScopes.WILDCARD);
     const tenantId = auth?.tenantId;
     const geoUa = getGeoUa(req);
 
@@ -399,10 +439,10 @@ export class LinksController {
     const runBatch = async (client: any) => {
       // Security check: inspect permanent links in the target batch
       const inspectRes = await client.query(
-        isSuperAdmin && !tenantId
-          ? `SELECT id, short_code, alias, domain_id, destination_url, external_ref, tag, status FROM links WHERE id = ANY($1::uuid[])`
-          : `SELECT id, short_code, alias, domain_id, destination_url, external_ref, tag, status FROM links WHERE id = ANY($1::uuid[]) AND tenant_id = $2`,
-        isSuperAdmin && !tenantId ? [validIds] : [validIds, tenantId]
+        isSuperAdmin
+          ? `SELECT id, short_code, alias, domain_id, destination_url, external_ref, tag, status, tenant_id FROM links WHERE id = ANY($1::uuid[])`
+          : `SELECT id, short_code, alias, domain_id, destination_url, external_ref, tag, status, tenant_id FROM links WHERE id = ANY($1::uuid[]) AND tenant_id = $2`,
+        isSuperAdmin ? [validIds] : [validIds, tenantId]
       );
       const targetRows = inspectRes.rows;
       if (targetRows.length === 0) return [];
@@ -441,7 +481,7 @@ export class LinksController {
       const params: any[] = [targetIdsToProcess];
 
       if (dto.action === 'delete') {
-        if (isSuperAdmin && !tenantId) {
+        if (isSuperAdmin) {
           query = `DELETE FROM links WHERE id = ANY($1::uuid[]) RETURNING id, domain_id, short_code, alias, tenant_id`;
         } else {
           params.push(tenantId);
@@ -450,7 +490,7 @@ export class LinksController {
       } else {
         const targetStatus = dto.action === 'archive' ? LinkStatus.ARCHIVED : LinkStatus.ACTIVE;
         params.push(targetStatus);
-        if (isSuperAdmin && !tenantId) {
+        if (isSuperAdmin) {
           query = `UPDATE links SET status = $2, updated_at = NOW() WHERE id = ANY($1::uuid[]) RETURNING id, domain_id, short_code, alias, tenant_id`;
         } else {
           params.push(tenantId);
@@ -476,7 +516,7 @@ export class LinksController {
       return res.rows;
     };
 
-    const affectedRows = isSuperAdmin && !tenantId
+    const affectedRows = isSuperAdmin
       ? await this.db.withSuperAdminContext(runBatch)
       : await this.db.withTenantContext(tenantId, runBatch);
 
@@ -703,7 +743,10 @@ export class LinksController {
   async updateLink(@Param('id') id: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const dto = patchLinkSchema.parse(req.body);
     const auth = (req as any).auth;
-    const isSuperAdmin = auth?.role === 'super_admin' || auth?.scopes?.includes('*');
+    const isSuperAdmin =
+      auth?.role === UserRoles.SUPER_ADMIN ||
+      auth?.scopes?.includes(ApiScopes.SUPER_ADMIN) ||
+      auth?.scopes?.includes(ApiScopes.WILDCARD);
     const tenantId = auth?.tenantId;
     const geoUa = getGeoUa(req);
 
@@ -712,7 +755,7 @@ export class LinksController {
 
     const runUpdate = async (client: any) => {
       let currentRes;
-      if (isSuperAdmin && !tenantId) {
+      if (isSuperAdmin) {
         currentRes = await client.query('SELECT * FROM links WHERE id = $1', [id]);
       } else {
         currentRes = await client.query('SELECT * FROM links WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
@@ -820,7 +863,7 @@ export class LinksController {
       }
 
       let res;
-      if (isSuperAdmin && !tenantId) {
+      if (isSuperAdmin) {
         res = await client.query(
           `UPDATE links 
            SET destination_url = $1, status = $2, expires_at = $3, max_clicks = $4, tag = $5, short_code = $6, alias = $7, external_ref = $8, updated_at = NOW() 
@@ -853,7 +896,7 @@ export class LinksController {
       return res.rows[0];
     };
 
-    const updated = isSuperAdmin && !tenantId
+    const updated = isSuperAdmin
       ? await this.db.withSuperAdminContext(runUpdate)
       : await this.db.withTenantContext(tenantId!, runUpdate);
 
@@ -896,7 +939,10 @@ export class LinksController {
   @UseInterceptors(IdempotencyInterceptor)
   async deleteLink(@Param('id') id: string, @Query('permanent') permanentStr: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const auth = (req as any).auth;
-    const isSuperAdmin = auth?.role === 'super_admin' || auth?.scopes?.includes('*');
+    const isSuperAdmin =
+      auth?.role === UserRoles.SUPER_ADMIN ||
+      auth?.scopes?.includes(ApiScopes.SUPER_ADMIN) ||
+      auth?.scopes?.includes(ApiScopes.WILDCARD);
     const tenantId = auth?.tenantId;
     const geoUa = getGeoUa(req);
     const isPermanent = permanentStr === 'true' || (req.query as any)?.permanent === 'true';
@@ -905,10 +951,10 @@ export class LinksController {
 
     const runDelete = async (client: any) => {
       // Security check: inspect target link
-      const targetQuery = isSuperAdmin && !tenantId
+      const targetQuery = isSuperAdmin
         ? `SELECT id, domain_id, short_code, alias, tenant_id, destination_url, external_ref, tag FROM links WHERE id = $1`
         : `SELECT id, domain_id, short_code, alias, tenant_id, destination_url, external_ref, tag FROM links WHERE id = $1 AND tenant_id = $2`;
-      const targetParams = isSuperAdmin && !tenantId ? [id] : [id, tenantId];
+      const targetParams = isSuperAdmin ? [id] : [id, tenantId];
       const targetCheck = await client.query(targetQuery, targetParams);
       if (targetCheck.rowCount === 0) return null;
       const targetLink = targetCheck.rows[0];
@@ -922,7 +968,7 @@ export class LinksController {
 
       let res;
       if (isPermanent) {
-        if (isSuperAdmin && !tenantId) {
+        if (isSuperAdmin) {
           res = await client.query(
             `DELETE FROM links WHERE id = $1 RETURNING id, domain_id, short_code, alias, tenant_id`,
             [id]
@@ -934,7 +980,7 @@ export class LinksController {
           );
         }
       } else {
-        if (isSuperAdmin && !tenantId) {
+        if (isSuperAdmin) {
           res = await client.query(
             `UPDATE links SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, domain_id, short_code, alias, tenant_id`,
             [LinkStatus.ARCHIVED, id]
@@ -962,7 +1008,7 @@ export class LinksController {
       return row;
     };
 
-    const result = isSuperAdmin && !tenantId
+    const result = isSuperAdmin
       ? await this.db.withSuperAdminContext(runDelete)
       : await this.db.withTenantContext(tenantId!, runDelete);
 

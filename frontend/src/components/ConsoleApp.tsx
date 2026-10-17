@@ -868,7 +868,7 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
           )}
 
           {/* Module 3: Bulk CSV Studio */}
-          {activeTab === 'bulk' && <BulkStudioView currentUser={currentUser} />}
+          {activeTab === 'bulk' && <BulkStudioView currentUser={currentUser} activeTenantId={activeTenantId} />}
 
           {/* Module 4: Outcomes & Fee Ledger */}
           {activeTab === 'outcomes' && <OutcomesView links={links} currentUser={currentUser} />}
@@ -907,11 +907,12 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
             <UsersView
               onOpenInviteModal={() => setIsInviteUserModalOpen(true)}
               currentUser={currentUser}
+              activeTenantId={activeTenantId}
             />
           )}
 
           {/* Module 9: Domains & TRAI DLT */}
-          {activeTab === 'domains' && <DomainsView currentUser={currentUser} />}
+          {activeTab === 'domains' && <DomainsView currentUser={currentUser} activeTenantId={activeTenantId} />}
 
           {/* Module 10: Abuse Quarantine & Killswitch */}
           {activeTab === 'abuse' && (
@@ -978,6 +979,7 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
         isOpen={isCreateLinkModalOpen}
         onClose={() => setIsCreateLinkModalOpen(false)}
         onLinkCreated={handleLinkCreated}
+        activeTenantId={activeTenantId}
       />
 
       <CreateTenantModal
@@ -999,6 +1001,8 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
           loadData();
         }}
         currentUser={currentUser}
+        activeTenantId={activeTenantId}
+        tenants={tenants}
       />
 
       <CreateApiKeyModal
