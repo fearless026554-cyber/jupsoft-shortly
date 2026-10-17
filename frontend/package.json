@@ -2,11 +2,13 @@
   "name": "frontend",
   "private": true,
   "version": "0.0.0",
+  "author": "Viraj (@virajverse)",
   "type": "module",
   "scripts": {
     "dev": "next dev -p 5001 -H 0.0.0.0",
     "build": "next build",
-    "start": "next start -p 5001 -H 0.0.0.0"
+    "start": "next start -p 5001 -H 0.0.0.0",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "lucide-react": "^1.48.0",

@@ -13,10 +13,13 @@ DECLARE
     v_tenant_id UUID := '11111111-1111-1111-1111-111111111111';
     v_domain_id UUID := '0bb05033-f0ae-4779-b747-d386b8d67be1';
     v_admin_id  UUID := '4a0e8559-e3f9-496f-bca2-6ef990744fe6';
-    v_admin_email TEXT := COALESCE(NULLIF(current_setting('app.admin_email', true), ''), 'sachin@jupsoft.com');
-    v_admin_pass  TEXT := COALESCE(NULLIF(current_setting('app.admin_password', true), ''), 'Admin@Jupsoft2026!');
+    v_admin_email TEXT := COALESCE(NULLIF(current_setting('app.admin_email', true), ''), 'admin@jupsoft.com');
+    v_admin_pass  TEXT := NULLIF(current_setting('app.admin_password', true), '');
     v_domain_host TEXT := COALESCE(NULLIF(current_setting('app.domain_host', true), ''), 'go.jupsoft.com');
 BEGIN
+    IF v_admin_pass IS NULL OR LENGTH(v_admin_pass) < 12 THEN
+        RAISE EXCEPTION 'Super Administrator password (app.admin_password) must be set and at least 12 characters';
+    END IF;
     -- 1. Ensure root tenant exists
     INSERT INTO tenants (id, code, name, status, plan_id)
     VALUES (v_tenant_id, 'jupsoft', 'Jupsoft Technologies', 'active', 'internal_unlimited')

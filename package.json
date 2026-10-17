@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "description": "Jupsoft Link Management Platform (JLMP)",
+  "author": "Viraj (@virajverse)",
+  "organization": "Jupsoft Technologies (jupsoft-system)",
   "scripts": {
     "dev": "pnpm --filter backend-nestjs start:dev",
     "dev:backend": "pnpm --filter backend-nestjs start:dev",
@@ -14,6 +16,10 @@
     "start:backend": "pnpm --filter backend-nestjs start:prod",
     "start:frontend": "pnpm --filter frontend start",
     "test": "pnpm --filter backend-nestjs test",
-    "lint": "pnpm --filter backend-nestjs lint"
+    "typecheck": "pnpm --filter backend-nestjs build && pnpm --filter frontend typecheck",
+    "lint": "pnpm --filter backend-nestjs lint",
+    "deploy": "bash deploy/deploy-pm2.sh",
+    "deploy:pm2": "bash deploy/deploy-pm2.sh",
+    "deploy:docker": "bash deploy/deploy.sh"
   }
 }

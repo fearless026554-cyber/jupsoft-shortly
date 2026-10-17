@@ -1,0 +1,27 @@
+# ==============================================================================
+# Enterprise CODEOWNERS Configuration - Jupsoft Technologies
+# ==============================================================================
+# Organization Owner : @jupsoft-system
+# Lead Author        : @virajverse (Viraj)
+# ==============================================================================
+
+# Default global code ownership
+* @jupsoft-system @virajverse
+
+# Security, Policies & Governance
+/SECURITY.md @jupsoft-system @virajverse
+/.github/workflows/ @jupsoft-system @virajverse
+/.gitignore @jupsoft-system @virajverse
+
+# Backend & Database
+/backend-nestjs/ @jupsoft-system @virajverse
+/backend-nestjs/src/db/ @jupsoft-system @virajverse
+/scripts/ @jupsoft-system @virajverse
+
+# Frontend
+/frontend/ @jupsoft-system @virajverse
+
+# Infrastructure, Nginx & Deployment
+/nginx/ @jupsoft-system @virajverse
+/deploy/ @jupsoft-system @virajverse
+/docker-compose.yml @jupsoft-system @virajverse

@@ -1,16 +1,62 @@
+# ==============================================================================
+# Enterprise Git Ignore Rules - Jupsoft Shortly
+# ==============================================================================
+
+# Dependencies
 node_modules/
 .pnpm-store/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs & caches
 dist/
 build/
 .next/
+out/
 coverage/
+*.tsbuildinfo
+.turbo/
+.cache/
+
+# Logs & Database Dumps
 *.log
+dump.rdb
+*.rdb
+*.sqlite
+*.db
+
+# Secrets & Environment Configurations
 .env
 .env.local
+.env.development
+.env.test
 .env.production
+.env*.local
+!.env*.example
+*.bak
+.env_backups/
+
+# Cryptographic Keys & Certificates
+*.pem
+*.key
+*.crt
+*.cer
+*.pfx
+*.p12
+backend-nestjs/certs/
+nginx/certs/*.crt
+nginx/certs/*.key
+nginx/certs/*.pem
+!nginx/certs/.gitkeep
+
+# IDEs, Workstation & Temporary files
 .DS_Store
 Thumbs.db
-dump.rdb
-*.tsbuildinfo
-
-backend-nestjs/certs/
+.idea/
+.vscode/
+*.swp
+*.swo
+scratch/
+.kilo/

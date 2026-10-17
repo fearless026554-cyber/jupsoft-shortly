@@ -1,7 +1,7 @@
 packages:
-  - 'backend'
   - 'backend-nestjs'
   - 'frontend'
+  - 'packages/*'
 allowBuilds:
   '@scarf/scarf': true
   esbuild: true
