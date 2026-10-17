@@ -39,7 +39,9 @@ export class BulkProcessor extends WorkerHost {
       // 1. Pre-query tenant code once to eliminate 500 redundant SELECT queries
       let tenantCode: string | undefined;
       try {
-        const tRes = await this.db.pool.query('SELECT code FROM tenants WHERE id = $1', [tenantId]);
+        const tRes = await this.db.withSuperAdminContext(async (client) => {
+          return client.query('SELECT code FROM tenants WHERE id = $1', [tenantId]);
+        });
         tenantCode = tRes.rows[0]?.code;
       } catch (err: any) {
         this.logger.warn(`Could not resolve tenant code for tenant ${tenantId}: ${err.message}`);

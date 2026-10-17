@@ -182,10 +182,12 @@ export class RedirectController {
     let tenantId = await this.redis.client.get(tenantCodeKey);
 
     if (!tenantId) {
-      const res = await this.db.pool.query(
-        `SELECT id, status FROM tenants WHERE code = $1`,
-        [tenantCode.toLowerCase()]
-      );
+      const res = await this.db.withSuperAdminContext(async (client) => {
+        return client.query(
+          `SELECT id, status FROM tenants WHERE code = $1`,
+          [tenantCode.toLowerCase()]
+        );
+      });
       if (res.rowCount === 0) {
         return reply.status(404).send({
           success: false,

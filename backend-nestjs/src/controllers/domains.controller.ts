@@ -189,23 +189,28 @@ export class DomainsController {
       targetTenantId = tenantId;
     }
 
-    const domainQuery = targetTenantId
-      ? `SELECT id, tenant_id, hostname, type, verification_status, dlt_status, ssl_active, created_at
-         FROM domains
-         WHERE tenant_id = $1 OR tenant_id IS NULL
-         ORDER BY (tenant_id IS NOT NULL) DESC, (verification_status = 'verified') DESC, created_at ASC`
-      : `SELECT id, tenant_id, hostname, type, verification_status, dlt_status, ssl_active, created_at
-         FROM domains
-         ORDER BY (tenant_id IS NOT NULL) DESC, (verification_status = 'verified') DESC, created_at ASC`;
-    const domainParams = targetTenantId ? [targetTenantId] : [];
+    const runDomainQuery = async (client: any) => {
+      const domainQuery = targetTenantId
+        ? `SELECT id, tenant_id, hostname, type, verification_status, dlt_status, ssl_active, created_at
+           FROM domains
+           WHERE tenant_id = $1 OR tenant_id IS NULL OR id = $2
+           ORDER BY (tenant_id IS NOT NULL) DESC, (verification_status = 'verified') DESC, created_at ASC`
+        : `SELECT id, tenant_id, hostname, type, verification_status, dlt_status, ssl_active, created_at
+           FROM domains
+           ORDER BY (tenant_id IS NOT NULL) DESC, (verification_status = 'verified') DESC, created_at ASC`;
+      const domainParams = targetTenantId ? [targetTenantId, env.DEFAULT_DOMAIN_ID] : [];
+      return client.query(domainQuery, domainParams);
+    };
 
     const [domains, serverIp] = await Promise.all([
-      this.db.pool.query(domainQuery, domainParams),
+      isSuperAdmin
+        ? this.db.withSuperAdminContext(runDomainQuery)
+        : this.db.withTenantContext(targetTenantId || auth.tenantId, runDomainQuery),
       getLiveServerIp(),
     ]);
 
     const enrichedRows = await Promise.all(
-      domains.rows.map(async (row) => {
+      domains.rows.map(async (row: any) => {
         const txtToken = `shortly-verify=${String(row.id).slice(0, 8)}`;
         let liveDns = { aRecords: [] as string[], cnameRecords: [] as string[], txtRecords: [] as string[] };
         if (row.type === 'custom' || row.tenant_id !== null) {
@@ -255,7 +260,9 @@ export class DomainsController {
     const tenantId = isSuperAdmin && dto.tenantId ? dto.tenantId : auth.tenantId;
 
     if (isSuperAdmin && dto.tenantId) {
-      const tenantCheck = await this.db.pool.query('SELECT id, status FROM tenants WHERE id = $1', [tenantId]);
+      const tenantCheck = await this.db.withSuperAdminContext(async (client) => {
+        return client.query('SELECT id, status FROM tenants WHERE id = $1', [tenantId]);
+      });
       if (tenantCheck.rowCount === 0) {
         return reply.status(404).send({
           success: false,

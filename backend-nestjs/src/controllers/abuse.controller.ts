@@ -67,7 +67,9 @@ export class AbuseController {
       const params: any[] = [code];
 
       if (hostname) {
-        const domRes = await this.db.pool.query('SELECT id FROM domains WHERE hostname = $1', [hostname]);
+        const domRes = await this.db.withSuperAdminContext(async (client) => {
+          return client.query('SELECT id FROM domains WHERE hostname = $1', [hostname]);
+        });
         if (domRes.rowCount && domRes.rowCount > 0) {
           query += ' AND domain_id = $2';
           params.push(domRes.rows[0].id);

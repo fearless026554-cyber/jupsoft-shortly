@@ -130,7 +130,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const cached = await this.client.get(key);
     if (cached) return cached;
 
-    const res = await this.db.pool.query('SELECT status FROM tenants WHERE id = $1', [tenantId]);
+    const res = await this.db.withSuperAdminContext(async (client) => {
+      return client.query('SELECT status FROM tenants WHERE id = $1', [tenantId]);
+    });
     const status = res.rows[0]?.status || TenantStatus.ACTIVE;
     await this.client.setex(key, env.CACHE_TENANT_TTL_SEC, status);
     return status;
@@ -188,13 +190,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const cached = await this.client.get(key);
     if (cached) return cached;
 
-    const res = await this.db.pool.query(
-      `SELECT id FROM domains
-       WHERE tenant_id = $1 OR tenant_id IS NULL
-       ORDER BY (verification_status = 'verified') DESC, (tenant_id IS NOT NULL) DESC, created_at ASC
-       LIMIT 1`,
-      [tenantId]
-    );
+    const res = await this.db.withSuperAdminContext(async (client) => {
+      return client.query(
+        `SELECT id FROM domains
+         WHERE tenant_id = $1 OR tenant_id IS NULL OR id = $2
+         ORDER BY (verification_status = 'verified') DESC, (tenant_id IS NOT NULL) DESC, created_at ASC
+         LIMIT 1`,
+        [tenantId, env.DEFAULT_DOMAIN_ID]
+      );
+    });
     const domainId = res.rows[0]?.id || env.DEFAULT_DOMAIN_ID;
     await this.client.setex(key, 600, domainId);
     return domainId;
@@ -205,7 +209,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const cached = await this.client.get(key);
     if (cached !== null) return cached;
 
-    const res = await this.db.pool.query('SELECT code FROM tenants WHERE id = $1', [tenantId]);
+    const res = await this.db.withSuperAdminContext(async (client) => {
+      return client.query('SELECT code FROM tenants WHERE id = $1', [tenantId]);
+    });
     const code = res.rows[0]?.code || '';
     await this.client.setex(key, 1800, code);
     return code || null;

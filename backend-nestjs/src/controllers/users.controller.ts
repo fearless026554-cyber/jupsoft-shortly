@@ -146,7 +146,9 @@ export class UsersController {
     const tenantId = isSuperAdmin && dto.tenantId ? dto.tenantId : auth.tenantId;
 
     if (isSuperAdmin && dto.tenantId) {
-      const tenantCheck = await this.db.pool.query('SELECT id, status FROM tenants WHERE id = $1', [tenantId]);
+      const tenantCheck = await this.db.withSuperAdminContext(async (client) => {
+        return client.query('SELECT id, status FROM tenants WHERE id = $1', [tenantId]);
+      });
       if (tenantCheck.rowCount === 0) {
         return reply.status(404).send({
           success: false,

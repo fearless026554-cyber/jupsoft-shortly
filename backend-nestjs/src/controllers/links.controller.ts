@@ -137,7 +137,9 @@ export class LinksController {
     const tenantId = isSuperAdmin && dto.tenantId ? dto.tenantId : auth.tenantId;
 
     if (isSuperAdmin && dto.tenantId) {
-      const tenantCheck = await this.db.pool.query('SELECT id, status FROM tenants WHERE id = $1', [tenantId]);
+      const tenantCheck = await this.db.withSuperAdminContext(async (client) => {
+        return client.query('SELECT id, status FROM tenants WHERE id = $1', [tenantId]);
+      });
       if (tenantCheck.rowCount === 0) {
         return reply.status(404).send({
           success: false,
@@ -150,10 +152,12 @@ export class LinksController {
     if (!dto.domainId) {
       domainId = await this.redis.getTenantPrimaryDomainId(tenantId);
     } else if (dto.domainId !== env.DEFAULT_DOMAIN_ID) {
-      const domRes = await this.db.pool.query(
-        'SELECT id FROM domains WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)',
-        [dto.domainId, tenantId]
-      );
+      const domRes = await this.db.withSuperAdminContext(async (client) => {
+        return client.query(
+          'SELECT id FROM domains WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL OR id = $3)',
+          [dto.domainId, tenantId, env.DEFAULT_DOMAIN_ID]
+        );
+      });
       if (domRes.rowCount === 0) {
         return reply.status(403).send({
           success: false,
@@ -273,6 +277,19 @@ export class LinksController {
     }
 
     const tenantId = isSuperAdmin && dto.tenantId ? dto.tenantId : auth.tenantId;
+
+    if (isSuperAdmin && dto.tenantId) {
+      const tenantCheck = await this.db.withSuperAdminContext(async (client) => {
+        return client.query('SELECT id, status FROM tenants WHERE id = $1', [tenantId]);
+      });
+      if (tenantCheck.rowCount === 0) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: ErrorCodes.NOT_FOUND, message: 'Target tenant does not exist' },
+        });
+      }
+    }
+
     const defaultDomainId = dto.domainId || env.DEFAULT_DOMAIN_ID;
 
     const domainIdsToCheck = new Set<string>();
@@ -287,10 +304,12 @@ export class LinksController {
 
     if (domainIdsToCheck.size > 0) {
       const ids = Array.from(domainIdsToCheck);
-      const domRes = await this.db.pool.query(
-        'SELECT id FROM domains WHERE id = ANY($1::uuid[]) AND (tenant_id = $2 OR tenant_id IS NULL)',
-        [ids, tenantId]
-      );
+      const domRes = await this.db.withSuperAdminContext(async (client) => {
+        return client.query(
+          'SELECT id FROM domains WHERE id = ANY($1::uuid[]) AND (tenant_id = $2 OR tenant_id IS NULL OR id = $3)',
+          [ids, tenantId, env.DEFAULT_DOMAIN_ID]
+        );
+      });
       if (domRes.rowCount !== ids.length) {
         return reply.status(403).send({
           success: false,
