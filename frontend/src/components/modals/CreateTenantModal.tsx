@@ -7,7 +7,7 @@ import { api } from '../../api';
 interface CreateTenantModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onTenantCreated: () => void;
+  onTenantCreated: (tenant?: any) => void;
 }
 
 export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
@@ -41,15 +41,22 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
     setLoading(true);
     setError(null);
 
+    const cleanCode = code.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (!cleanCode) {
+      setError('Tenant code is required (lowercase letters, numbers, or hyphens)');
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await api.createTenant({
-        code: code.trim().toLowerCase(),
+        code: cleanCode,
         name: name.trim(),
         planId,
       });
 
-      if (res.success) {
-        onTenantCreated();
+      if (res.success && res.data) {
+        onTenantCreated(res.data);
         onClose();
       } else {
         setError(res.error?.message || 'Failed to add tenant');
@@ -115,12 +122,12 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
                 type="text"
                 required
                 value={code}
-                onChange={(e) => setCode(e.target.value.toLowerCase())}
+                onChange={(e) => setCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                 placeholder="e.g. acme"
                 className="w-full text-xs px-3 py-2 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
               />
               <span className="text-[10px] text-slate-400 mt-0.5 block">
-                Lowercase letters only
+                Lowercase letters and hyphens only
               </span>
             </div>
 
@@ -135,7 +142,7 @@ export const CreateTenantModal: React.FC<CreateTenantModalProps> = ({
               >
                 <option value="internal_unlimited">Internal Unlimited</option>
                 <option value="standard">Standard</option>
-                <option value="enterprise_multi_branch">Enterprise</option>
+                <option value="enterprise">Enterprise</option>
               </select>
             </div>
           </div>

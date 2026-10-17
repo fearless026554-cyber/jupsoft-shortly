@@ -6,6 +6,7 @@ import { UserRoles } from './constants/roles.js';
 import { UsersController } from './controllers/users.controller.js';
 import { AbuseController } from './controllers/abuse.controller.js';
 import { AuthController } from './controllers/auth.controller.js';
+import { TenantsController } from './controllers/tenants.controller.js';
 
 function createMockReply() {
   let statusCode = 200;
@@ -330,5 +331,151 @@ describe('Security Audit Fixes Verification (Controller-Level)', () => {
     expect(mockRedisClient.del).toHaveBeenCalledWith('pwd_reset:valid-reset-token-64-bytes-sample-token');
     expect(mockRedis.incrementUserTokenVersion).toHaveBeenCalledWith('usr-123');
     expect(updatedPasswordHash).not.toBe('MySecureNewPassword2026!'); // Must be hashed with bcrypt
+  });
+
+  describe('Tenants Management Endpoints', () => {
+    it('TenantsController.createTenant successfully creates a tenant and trims code', async () => {
+      let insertedParams: any[] = [];
+      const mockDb = {
+        withSuperAdminContext: vi.fn().mockImplementation(async (cb: any) => {
+          return cb({
+            query: vi.fn().mockImplementation(async (q: string, params: any[]) => {
+              if (q.includes('SELECT id FROM tenants')) {
+                return { rowCount: 0 };
+              }
+              if (q.includes('INSERT INTO tenants')) {
+                insertedParams = params;
+                return {
+                  rows: [
+                    {
+                      id: 'tenant-uuid-1',
+                      code: params[0],
+                      name: params[1],
+                      status: 'active',
+                      plan_id: params[2],
+                      created_at: new Date().toISOString(),
+                    },
+                  ],
+                };
+              }
+              return { rows: [] };
+            }),
+          });
+        }),
+      } as any;
+      const mockRedis = { invalidateTenantStatus: vi.fn() } as any;
+      const controller = new TenantsController(mockDb, mockRedis);
+
+      const req: any = {
+        body: {
+          code: '  acme-corp  ',
+          name: 'Acme Corporation',
+          planId: 'internal_unlimited',
+        },
+      };
+      const reply = createMockReply();
+
+      await controller.createTenant(req, reply);
+
+      expect(reply.getStatus()).toBe(201);
+      expect(reply.getBody()?.success).toBe(true);
+      expect(reply.getBody()?.data?.code).toBe('acme-corp');
+      expect(insertedParams[0]).toBe('acme-corp');
+      expect(insertedParams[1]).toBe('Acme Corporation');
+      expect(insertedParams[2]).toBe('internal_unlimited');
+    });
+
+    it('TenantsController.createTenant gracefully normalizes enterprise_multi_branch to enterprise', async () => {
+      let insertedPlan = '';
+      const mockDb = {
+        withSuperAdminContext: vi.fn().mockImplementation(async (cb: any) => {
+          return cb({
+            query: vi.fn().mockImplementation(async (q: string, params: any[]) => {
+              if (q.includes('SELECT id FROM tenants')) return { rowCount: 0 };
+              if (q.includes('INSERT INTO tenants')) {
+                insertedPlan = params[2];
+                return { rows: [{ id: 'tenant-uuid-2', code: params[0], name: params[1], plan_id: params[2] }] };
+              }
+              return { rows: [] };
+            }),
+          });
+        }),
+      } as any;
+      const mockRedis = { invalidateTenantStatus: vi.fn() } as any;
+      const controller = new TenantsController(mockDb, mockRedis);
+
+      const req: any = {
+        body: {
+          code: 'enterprise-test',
+          name: 'Enterprise Branch Co',
+          planId: 'enterprise_multi_branch',
+        },
+      };
+      const reply = createMockReply();
+
+      await controller.createTenant(req, reply);
+
+      expect(reply.getStatus()).toBe(201);
+      expect(insertedPlan).toBe('enterprise');
+    });
+
+    it('TenantsController.createTenant rejects duplicate tenant code with 409 CONFLICT', async () => {
+      const mockDb = {
+        withSuperAdminContext: vi.fn().mockImplementation(async (cb: any) => {
+          return cb({
+            query: vi.fn().mockImplementation(async (q: string) => {
+              if (q.includes('SELECT id FROM tenants')) {
+                return { rowCount: 1 }; // already exists
+              }
+              return { rows: [] };
+            }),
+          });
+        }),
+      } as any;
+      const mockRedis = { invalidateTenantStatus: vi.fn() } as any;
+      const controller = new TenantsController(mockDb, mockRedis);
+
+      const req: any = {
+        body: {
+          code: 'existing-code',
+          name: 'Existing Tenant',
+          planId: 'standard',
+        },
+      };
+      const reply = createMockReply();
+
+      await controller.createTenant(req, reply);
+
+      expect(reply.getStatus()).toBe(409);
+      expect(reply.getBody()?.success).toBe(false);
+      expect(reply.getBody()?.error?.code).toBe(ErrorCodes.CONFLICT);
+      expect(reply.getBody()?.error?.message).toContain('already in use');
+    });
+
+    it('TenantsController.updateTenant updates status and invalidates Redis cache', async () => {
+      const mockDb = {
+        withSuperAdminContext: vi.fn().mockImplementation(async (cb: any) => {
+          return cb({
+            query: vi.fn().mockResolvedValue({
+              rows: [{ id: 'tenant-123', status: 'suspended', name: 'Acme Corp' }],
+            }),
+          });
+        }),
+      } as any;
+      const mockRedis = { invalidateTenantStatus: vi.fn().mockResolvedValue(undefined) } as any;
+      const controller = new TenantsController(mockDb, mockRedis);
+
+      const req: any = {
+        body: { status: 'suspended' },
+      };
+      const reply = createMockReply();
+
+      await controller.updateTenant('tenant-123', req, reply);
+
+      expect(reply.getStatus()).toBe(200);
+      expect(reply.getBody()?.success).toBe(true);
+      expect(reply.getBody()?.data?.status).toBe('suspended');
+      expect(mockRedis.invalidateTenantStatus).toHaveBeenCalledWith('tenant-123');
+    });
   });
 });

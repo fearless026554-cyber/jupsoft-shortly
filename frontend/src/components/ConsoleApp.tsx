@@ -983,8 +983,11 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
       <CreateTenantModal
         isOpen={isCreateTenantModalOpen}
         onClose={() => setIsCreateTenantModalOpen(false)}
-        onTenantCreated={() => {
+        onTenantCreated={(newTenant) => {
           loadTenants();
+          if (newTenant && newTenant.id) {
+            setActiveTenantId(newTenant.id);
+          }
           loadData();
         }}
       />

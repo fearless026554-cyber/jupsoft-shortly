@@ -8,13 +8,16 @@ import { IdempotencyInterceptor } from '../common/interceptors/idempotency.inter
 import { ApiScopes, ErrorCodes, SubscriptionPlans } from '../constants/index.js';
 
 const createTenantSchema = z.object({
-  code: z.string().min(2).max(32).regex(/^[a-z0-9-]+$/, 'Code must be lowercase alphanumeric or hyphen'),
-  name: z.string().min(2).max(255),
-  planId: z.enum([
-    SubscriptionPlans.INTERNAL_UNLIMITED,
-    SubscriptionPlans.STANDARD,
-    SubscriptionPlans.ENTERPRISE,
-  ]),
+  code: z.string().trim().toLowerCase().min(2).max(32).regex(/^[a-z0-9-]+$/, 'Code must be lowercase alphanumeric or hyphen'),
+  name: z.string().trim().min(2).max(255),
+  planId: z.preprocess(
+    (val) => (val === 'enterprise_multi_branch' ? SubscriptionPlans.ENTERPRISE : val),
+    z.enum([
+      SubscriptionPlans.INTERNAL_UNLIMITED,
+      SubscriptionPlans.STANDARD,
+      SubscriptionPlans.ENTERPRISE,
+    ])
+  ),
 });
 
 const patchTenantSchema = z.object({
@@ -58,10 +61,24 @@ export class TenantsController {
   @UseInterceptors(IdempotencyInterceptor)
   async createTenant(@Req() req: FastifyRequest, @Res() reply: FastifyReply) {
     const dto = createTenantSchema.parse(req.body);
+    const code = dto.code.toLowerCase().trim();
+
+    const existing = await this.db.withSuperAdminContext(async (client) => {
+      const check = await client.query('SELECT id FROM tenants WHERE LOWER(code) = LOWER($1)', [code]);
+      return check.rowCount ? check.rowCount > 0 : false;
+    });
+
+    if (existing) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: ErrorCodes.CONFLICT, message: `Tenant code "${code}" is already in use. Please choose another code.` },
+      });
+    }
+
     const created = await this.db.withSuperAdminContext(async (client) => {
       const res = await client.query(
         `INSERT INTO tenants (code, name, status, plan_id) VALUES ($1, $2, 'active', $3) RETURNING *`,
-        [dto.code.toLowerCase(), dto.name, dto.planId]
+        [code, dto.name.trim(), dto.planId]
       );
       return res.rows[0];
     });

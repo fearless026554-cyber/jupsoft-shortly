@@ -43,6 +43,9 @@ export class ErrorHandlerFilter implements ExceptionFilter {
       } else if (exception.constraint === 'uq_domain_hostname') {
         code = ErrorCodes.DOMAIN_CONFLICT;
         message = 'Hostname is already registered';
+      } else if (exception.constraint === 'tenants_code_key') {
+        code = ErrorCodes.CONFLICT;
+        message = 'Tenant code is already in use. Please choose a different code.';
       }
     } else if (exception.code === ErrorCodes.SCREENING_FAILED || 
               (typeof exception.message === 'string' && exception.message.toLowerCase().includes('screening failed'))) {
