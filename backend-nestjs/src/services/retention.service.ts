@@ -36,7 +36,9 @@ export class RetentionService {
           const partitionDate = new Date(Date.UTC(year, month - 1, 1));
 
           if (partitionDate < cutoffDate) {
-            await client.query(`DROP TABLE IF EXISTS ${name}`);
+            // Reconstruct identifier purely from numeric regex captures and double-quote it
+            const safeIdentifier = `clicks_${match[1]}_${match[2]}`;
+            await client.query(`DROP TABLE IF EXISTS "${safeIdentifier}"`);
             droppedPartitions.push(name);
           }
         }
