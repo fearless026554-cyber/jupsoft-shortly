@@ -104,6 +104,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isCreateTenantOpen, setIsCreateTenantOpen] = useState(false);
   const [isInviteUserOpen, setIsInviteUserOpen] = useState(false);
   const [isCreateApiKeyOpen, setIsCreateApiKeyOpen] = useState(false);
+  const [usersRefreshTrigger, setUsersRefreshTrigger] = useState(0);
+  const [pendingShareCredentials, setPendingShareCredentials] = useState<{ user: any; password: string } | null>(null);
 
   const loadStats = async () => {
     try {
@@ -327,6 +329,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onOpenInviteModal={() => setIsInviteUserOpen(true)}
             currentUser={currentUser}
             activeTenantId={activeTenantId}
+            tenants={tenants}
+            initialShareCredentials={pendingShareCredentials}
+            onClearInitialShareCredentials={() => setPendingShareCredentials(null)}
+            refreshTrigger={usersRefreshTrigger}
           />
         )}
 
@@ -376,8 +382,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       <InviteUserModal
         isOpen={isInviteUserOpen}
         onClose={() => setIsInviteUserOpen(false)}
-        onUserInvited={() => {
+        onUserInvited={(createdData) => {
           clearApiCache('users');
+          setUsersRefreshTrigger((prev) => prev + 1);
+          if (createdData && createdData.initialPassword) {
+            const targetTenant = tenants?.find((t) => t.id === (createdData.tenantId || createdData.tenant_id || activeTenantId));
+            setPendingShareCredentials({
+              user: {
+                ...createdData,
+                tenant_name: targetTenant?.name,
+                tenant_code: targetTenant?.code,
+              },
+              password: createdData.initialPassword,
+            });
+            setActiveSubTab('users');
+          }
         }}
         currentUser={currentUser}
         activeTenantId={activeTenantId}
