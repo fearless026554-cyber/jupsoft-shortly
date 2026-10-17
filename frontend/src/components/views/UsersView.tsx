@@ -29,8 +29,9 @@ import {
   AlertCircle,
   Globe,
   SlidersHorizontal,
+  MessageSquare,
 } from 'lucide-react';
-import { UserItem, api, exportToCsv } from '../../api';
+import { UserItem, TenantItem, api, exportToCsv } from '../../api';
 import { usePagination } from '../../hooks/usePagination';
 import { Pagination } from '../ui/Pagination';
 import { TableSkeleton } from '../ui/Skeleton';
@@ -53,15 +54,29 @@ interface UsersViewProps {
   onOpenInviteModal: () => void;
   currentUser?: any;
   activeTenantId?: string;
+  tenants?: TenantItem[];
+  initialShareCredentials?: { user: UserItem; password: string } | null;
+  onClearInitialShareCredentials?: () => void;
+  refreshTrigger?: number;
 }
 
-export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, currentUser, activeTenantId }) => {
+export const UsersView: React.FC<UsersViewProps> = ({
+  onOpenInviteModal,
+  currentUser,
+  activeTenantId,
+  tenants,
+  initialShareCredentials,
+  onClearInitialShareCredentials,
+  refreshTrigger,
+}) => {
+  const isSuperAdmin = currentUser?.role === 'super_admin';
   const [activeTab, setActiveTab] = useState<'directory' | 'hierarchy' | 'matrix'>('directory');
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [tenantFilter, setTenantFilter] = useState<string>('all');
 
   // Modals state
   const [resetTarget, setResetTarget] = useState<UserItem | null>(null);
@@ -84,12 +99,26 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
     user: UserItem;
     password: string;
   } | null>(null);
+  const [showSharePassword, setShowSharePassword] = useState(true);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+
+  useEffect(() => {
+    if (initialShareCredentials) {
+      setShareCredentials(initialShareCredentials);
+      if (onClearInitialShareCredentials) {
+        onClearInitialShareCredentials();
+      }
+    }
+  }, [initialShareCredentials, onClearInitialShareCredentials]);
 
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const data = await api.getUsers(activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined);
+      const targetTenant = isSuperAdmin
+        ? (tenantFilter !== 'all' ? tenantFilter : (activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined))
+        : (activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined);
+      const data = await api.getUsers(targetTenant);
       setUsers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load users:', err);
@@ -101,20 +130,31 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
 
   useEffect(() => {
     loadUsers();
-  }, [activeTenantId]);
+  }, [activeTenantId, tenantFilter, refreshTrigger]);
 
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
       const matchesSearch =
         u.name.toLowerCase().includes(search.toLowerCase()) ||
-        u.email.toLowerCase().includes(search.toLowerCase());
+        u.email.toLowerCase().includes(search.toLowerCase()) ||
+        (u.tenant_name && u.tenant_name.toLowerCase().includes(search.toLowerCase())) ||
+        (u.tenant_code && u.tenant_code.toLowerCase().includes(search.toLowerCase()));
       const matchesRole = roleFilter === 'all' || u.role === roleFilter;
       const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
-      return matchesSearch && matchesRole && matchesStatus;
+      const matchesTenant = !isSuperAdmin || tenantFilter === 'all' || u.tenant_id === tenantFilter;
+      return matchesSearch && matchesRole && matchesStatus && matchesTenant;
     });
-  }, [users, search, roleFilter, statusFilter]);
+  }, [users, search, roleFilter, statusFilter, tenantFilter, isSuperAdmin]);
 
   const pagination = usePagination(filteredUsers, 10);
+
+  const handleCopyCredentials = () => {
+    if (!shareCredentials) return;
+    const text = `Shortly Account Credentials\nEmail: ${shareCredentials.user.email}\nTemporary Password: ${shareCredentials.password}\nLogin at: ${window.location.origin}/login`;
+    navigator.clipboard.writeText(text);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2000);
+  };
 
   // Export CSV
   const handleExport = () => {
@@ -123,6 +163,8 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
       filteredUsers.map((u) => ({
         Name: u.name,
         Email: u.email,
+        Workspace: u.tenant_name || 'Global Organization',
+        WorkspaceCode: u.tenant_code || 'GLOBAL',
         Role: getRoleDisplayName(u.role),
         HierarchyLevel: getRoleLevel(u.role),
         Status: u.status,
@@ -234,14 +276,53 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
     }
   };
 
-  // Copy Credentials card
-  const handleCopyCredentials = () => {
-    if (!shareCredentials) return;
+  // Share Credentials Helpers (WhatsApp / Formatted Invitation / Password Copy)
+  const getInvitationText = (user: UserItem, password?: string) => {
     const portalUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://shortly.jupsoft.com/login';
-    const text = `Jupsoft Shortly — Access Credentials\nPortal URL: ${portalUrl}\nEmail: ${shareCredentials.user.email}\nTemporary Password: ${shareCredentials.password}\nRole: ${getRoleDisplayName(shareCredentials.user.role)}\n\nPlease sign in and update your password upon initial login.`;
-    navigator.clipboard.writeText(text).catch(() => {});
+    const workspaceName = user.tenant_name ? `${user.tenant_name} (${user.tenant_code || 'JLMP'})` : 'Jupsoft Shortly Global';
+    const roleName = getRoleDisplayName(user.role);
+    const pwd = password || 'Provided by Administrator';
+
+    return `🚀 *Welcome to Jupsoft Shortly Platform!*
+
+You have been granted operator access to the *${workspaceName}* link management and routing portal.
+
+📋 *Your Account Access Details:*
+• *Portal URL:* ${portalUrl}
+• *Username / Email:* ${user.email}
+• *Temporary Password:* ${pwd}
+• *Assigned Role:* ${roleName}
+
+🔒 *Security Notice:* Please sign in immediately and update your password upon initial login.
+If you have any questions, reach out to your system administrator.`;
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!shareCredentials) return;
+    const text = getInvitationText(shareCredentials.user, shareCredentials.password);
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    if (typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const handleCopyInvitationText = () => {
+    if (!shareCredentials) return;
+    const text = getInvitationText(shareCredentials.user, shareCredentials.password);
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+    setCopiedInvite(true);
+    setTimeout(() => setCopiedInvite(false), 2500);
+  };
+
+  const handleCopyPasswordOnly = () => {
+    if (!shareCredentials) return;
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(shareCredentials.password).catch(() => {});
+    }
     setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2500);
+    setTimeout(() => setCopiedKey(false), 2000);
   };
 
   // Render Avatar
@@ -409,8 +490,27 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
               )}
             </div>
 
-            {/* Role & Status Selectors */}
-            <div className="flex items-center gap-2.5 w-full md:w-auto">
+            {/* Role, Status & Tenant Selectors */}
+            <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+              {isSuperAdmin && tenants && tenants.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0 hidden sm:block" />
+                  <select
+                    value={tenantFilter}
+                    onChange={(e) => setTenantFilter(e.target.value)}
+                    className="text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[190px] truncate font-medium"
+                    title="Filter by Workspace / Tenant"
+                  >
+                    <option value="all">All Workspaces ({tenants.length})</option>
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
@@ -441,7 +541,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
           <div className="bg-white dark:bg-[#0f172a] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
             {loading ? (
               <div className="p-6">
-                <TableSkeleton rows={6} columns={5} />
+                <TableSkeleton rows={6} columns={7} />
               </div>
             ) : filteredUsers.length === 0 ? (
               <div className="p-12 text-center space-y-3">
@@ -459,6 +559,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400">
                       <th className="py-3 px-4 font-semibold">Operator / Account</th>
+                      <th className="py-3 px-4 font-semibold">Workspace / Tenant</th>
                       <th className="py-3 px-4 font-semibold">Assigned Role &amp; Tier</th>
                       <th className="py-3 px-4 font-semibold">Account Status</th>
                       <th className="py-3 px-4 font-semibold">Last Active</th>
@@ -502,6 +603,30 @@ export const UsersView: React.FC<UsersViewProps> = ({ onOpenInviteModal, current
                                 </div>
                               </div>
                             </div>
+                          </td>
+
+                          {/* Workspace / Tenant */}
+                          <td className="py-3.5 px-4">
+                            {user.tenant_name ? (
+                              <div className="space-y-0.5">
+                                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                  <Building2 className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                  <span className="truncate max-w-[140px]" title={user.tenant_name}>
+                                    {user.tenant_name}
+                                  </span>
+                                </div>
+                                {user.tenant_code && (
+                                  <span className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-semibold border border-slate-200 dark:border-slate-700 inline-block">
+                                    {user.tenant_code}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                <Globe className="w-3 h-3 text-purple-500 shrink-0" />
+                                <span>Global Platform</span>
+                              </span>
+                            )}
                           </td>
 
                           {/* Role Badge */}
