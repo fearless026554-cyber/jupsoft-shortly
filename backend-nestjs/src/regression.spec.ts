@@ -20,7 +20,7 @@ describe('JLMP Backend - Full Regression & PRD Verification Suite', () => {
     }
   });
 
-  it('FR-08: Screening Service should detect and block shortener chaining (bit.ly, tinyurl, t.co)', () => {
+  it('FR-08: Screening Service should detect and block shortener chaining (bit.ly, tinyurl, t.co) and SSRF addresses', () => {
     const validUrl = ScreeningService.validateDestinationUrl('https://jupsoft.com/admissions/apply');
     expect(validUrl.valid).toBe(true);
 
@@ -33,6 +33,20 @@ describe('JLMP Backend - Full Regression & PRD Verification Suite', () => {
 
     const ftp = ScreeningService.validateDestinationUrl('ftp://files.example.com/payload.exe');
     expect(ftp.valid).toBe(false);
+
+    // SEC-02 SSRF Protection
+    const loopback = ScreeningService.validateDestinationUrl('http://127.0.0.1:8080/admin');
+    expect(loopback.valid).toBe(false);
+    expect(loopback.reason).toMatch(/local, private, or cloud metadata/);
+
+    const awsMetadata = ScreeningService.validateDestinationUrl('http://169.254.169.254/latest/meta-data/');
+    expect(awsMetadata.valid).toBe(false);
+
+    const private192 = ScreeningService.validateDestinationUrl('http://192.168.1.1/router-settings');
+    expect(private192.valid).toBe(false);
+
+    const private10 = ScreeningService.validateDestinationUrl('http://10.0.0.5:5432');
+    expect(private10.valid).toBe(false);
   });
 
   it('FR-11: User-Agent parser accurately extracts devices, OS, and identifies web crawlers / bots', () => {

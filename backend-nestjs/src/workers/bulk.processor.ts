@@ -63,6 +63,8 @@ export class BulkProcessor extends WorkerHost {
           await client.query(`SELECT set_config('${DB_CONTEXT_KEYS.TENANT_ID}', $1, true)`, [tenantId]);
 
           let uncommittedCount = 0;
+          const batchCache: any[] = [];
+          const batchIds: string[] = [];
 
           while (true) {
             if (isCancelled) break;
@@ -109,9 +111,9 @@ export class BulkProcessor extends WorkerHost {
               const actualCode = (created.link as any).short_code || created.link.shortCode;
               const linkId = (created.link as any).id;
               if (linkId) {
-                createdLinkIds.push(linkId);
+                batchIds.push(linkId);
               }
-              createdForCache.push({
+              batchCache.push({
                 domainId: itemDomainId,
                 code: actualCode,
                 cached: LinkService.toCachedLink(created.link),
@@ -139,6 +141,11 @@ export class BulkProcessor extends WorkerHost {
             // Commit every BATCH_COMMIT_SIZE items to keep subtransactions < 16, preventing SLRU lock degradation
             if (uncommittedCount >= BATCH_COMMIT_SIZE) {
               await client.query('COMMIT');
+              createdLinkIds.push(...batchIds);
+              createdForCache.push(...batchCache);
+              batchIds.length = 0;
+              batchCache.length = 0;
+
               await client.query('BEGIN');
               await client.query(`SELECT set_config('${DB_CONTEXT_KEYS.TENANT_ID}', $1, true)`, [tenantId]);
               uncommittedCount = 0;
@@ -154,6 +161,8 @@ export class BulkProcessor extends WorkerHost {
               await client.query('ROLLBACK').catch(() => {});
             } else {
               await client.query('COMMIT');
+              createdLinkIds.push(...batchIds);
+              createdForCache.push(...batchCache);
             }
           } else {
             await client.query('ROLLBACK').catch(() => {});

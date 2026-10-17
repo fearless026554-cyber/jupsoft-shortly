@@ -56,13 +56,22 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     domainId: string,
     shortCode: string,
     tenantId?: string,
-    alias?: string | null
+    alias?: string | null,
+    linkId?: string
   ): Promise<void> {
     const pipeline = this.client.pipeline();
     pipeline.del(RedisKeyBuilder.link(domainId, shortCode));
     pipeline.del(RedisKeyBuilder.linkClicks(domainId, shortCode));
     if (tenantId && alias) {
       pipeline.del(RedisKeyBuilder.alias(tenantId, alias));
+    }
+    if (linkId) {
+      try {
+        const analyticsKeys = await this.client.keys(`analytics:link:*:${linkId}:*`);
+        if (analyticsKeys.length > 0) {
+          pipeline.del(...analyticsKeys);
+        }
+      } catch {}
     }
     await pipeline.exec();
   }

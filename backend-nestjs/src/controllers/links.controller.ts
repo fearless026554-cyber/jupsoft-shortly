@@ -930,7 +930,7 @@ export class LinksController {
     if (previousAlias && previousAlias !== updated.alias) {
       await this.redis.invalidateLink(updated.domain_id, updated.short_code, effectiveTenant, previousAlias);
     }
-    await this.redis.invalidateLink(updated.domain_id, updated.short_code, effectiveTenant, updated.alias);
+    await this.redis.invalidateLink(updated.domain_id, updated.short_code, effectiveTenant, updated.alias, updated.id);
     await this.redis.client.del(`link:detail:${effectiveTenant}:${id}`).catch(() => {});
 
     if (dto.destinationUrl) {
@@ -1036,7 +1036,7 @@ export class LinksController {
     }
 
     const effectiveTenant = tenantId || result.tenant_id || 'global';
-    await this.redis.invalidateLink(result.domain_id, result.short_code, effectiveTenant, result.alias);
+    await this.redis.invalidateLink(result.domain_id, result.short_code, effectiveTenant, result.alias, result.id);
     await this.redis.client.del(`link:detail:${effectiveTenant}:${id}`).catch(() => {});
     return reply.send({ success: true, message: isPermanent ? 'Link permanently deleted' : 'Link archived successfully' });
   }
