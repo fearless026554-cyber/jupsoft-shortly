@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { RateLimiterGuard } from './common/guards/rate-limiter.guard.js';
 import { DatabaseModule } from './db/database.module.js';
@@ -25,10 +24,6 @@ import { EmailService } from './services/email.service.js';
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([{
-      ttl: 60000,
-      limit: 1000, // 1000 requests per IP per minute
-    }]),
     DatabaseModule,
     RedisModule,
     BullModule.forRoot({
@@ -56,10 +51,6 @@ import { EmailService } from './services/email.service.js';
     HealthController,
   ],
   providers: [
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
     {
       provide: APP_GUARD,
       useClass: RateLimiterGuard,

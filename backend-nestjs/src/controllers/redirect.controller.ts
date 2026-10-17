@@ -112,23 +112,20 @@ export class RedirectController {
 
     if (link!.maxClicks) {
       const clickCounterKey = REDIS_KEYS.LINK_CLICKS(domainId, code);
-      let totalClicks = await this.redis.client.incr(clickCounterKey);
-      
-      if (totalClicks === 1) {
-        if (link!.currentClicks > 0) {
-          await this.redis.client.incrby(clickCounterKey, link!.currentClicks);
-          totalClicks += link!.currentClicks;
+      let ttl = env.CACHE_LINK_TTL_SEC;
+      if (link!.expiresAt) {
+        const secondsRemaining = Math.ceil((link!.expiresAt - now) / 1000);
+        if (secondsRemaining > 0) {
+          ttl = Math.min(ttl, secondsRemaining);
         }
-
-        let ttl = env.CACHE_LINK_TTL_SEC;
-        if (link!.expiresAt) {
-          const secondsRemaining = Math.ceil((link!.expiresAt - now) / 1000);
-          if (secondsRemaining > 0) {
-            ttl = Math.min(ttl, secondsRemaining);
-          }
-        }
-        await this.redis.client.expire(clickCounterKey, Math.max(ttl, 60));
       }
+      ttl = Math.max(ttl, 60);
+
+      const totalClicks = await this.redis.incrementClickCounterAtomic(
+        clickCounterKey,
+        link!.currentClicks || 0,
+        ttl
+      );
 
       if (totalClicks > link!.maxClicks) {
         return reply.status(302).redirect(SYSTEM_ROUTES.EXPIRED);
@@ -252,23 +249,20 @@ export class RedirectController {
 
     if (link!.maxClicks) {
       const clickCounterKey = `alias_clicks:${tenantId}:${alias.toLowerCase()}`;
-      let totalClicks = await this.redis.client.incr(clickCounterKey);
-      
-      if (totalClicks === 1) {
-        if (link!.currentClicks > 0) {
-          await this.redis.client.incrby(clickCounterKey, link!.currentClicks);
-          totalClicks += link!.currentClicks;
+      let ttl = env.CACHE_LINK_TTL_SEC;
+      if (link!.expiresAt) {
+        const secondsRemaining = Math.ceil((link!.expiresAt - now) / 1000);
+        if (secondsRemaining > 0) {
+          ttl = Math.min(ttl, secondsRemaining);
         }
-
-        let ttl = env.CACHE_LINK_TTL_SEC;
-        if (link!.expiresAt) {
-          const secondsRemaining = Math.ceil((link!.expiresAt - now) / 1000);
-          if (secondsRemaining > 0) {
-            ttl = Math.min(ttl, secondsRemaining);
-          }
-        }
-        await this.redis.client.expire(clickCounterKey, Math.max(ttl, 60));
       }
+      ttl = Math.max(ttl, 60);
+
+      const totalClicks = await this.redis.incrementClickCounterAtomic(
+        clickCounterKey,
+        link!.currentClicks || 0,
+        ttl
+      );
 
       if (totalClicks > link!.maxClicks) {
         return reply.status(302).redirect(SYSTEM_ROUTES.EXPIRED);

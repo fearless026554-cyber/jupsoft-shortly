@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import * as crypto from 'node:crypto';
 import { DatabaseService } from '../db/database.service.js';
@@ -46,7 +46,33 @@ export function parseUserAgent(uaString: string): DeviceInfo {
   return { device, browser, os, isBot: false };
 }
 
+const MAX_GEO_CACHE_SIZE = 10000;
+const GEO_EVICT_BATCH = 500;
 const geoCache = new Map<string, { code: string; label: string; expiresAt: number }>();
+
+function putGeoCache(key: string, val: { code: string; label: string; expiresAt: number }) {
+  if (geoCache.has(key)) {
+    geoCache.delete(key);
+  } else if (geoCache.size >= MAX_GEO_CACHE_SIZE) {
+    // Evict oldest entries in FIFO/LRU order without clearing the entire cache (prevents cache stampede)
+    const iter = geoCache.keys();
+    for (let i = 0; i < GEO_EVICT_BATCH; i++) {
+      const oldestKey = iter.next().value;
+      if (oldestKey !== undefined) {
+        geoCache.delete(oldestKey);
+      } else {
+        break;
+      }
+    }
+  }
+  geoCache.set(key, val);
+}
+
+// Circuit breaker for external Geo IP resolution to prevent cascading worker stalls
+let geoCircuitFailures = 0;
+let geoCircuitOpenUntil = 0;
+const GEO_CIRCUIT_MAX_FAILURES = 5;
+const GEO_CIRCUIT_COOLDOWN_MS = 30000;
 
 function isPrivateOrLocalIp(ip: string): boolean {
   const clean = (ip || '').replace(/^::ffff:/, '').trim();
@@ -54,9 +80,11 @@ function isPrivateOrLocalIp(ip: string): boolean {
     !clean ||
     clean === '127.0.0.1' ||
     clean === '::1' ||
+    clean === 'localhost' ||
     clean.startsWith('10.') ||
     clean.startsWith('192.168.') ||
-    /^172\.(1[6-9]|2\d|3[0-1])\./.test(clean)
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(clean) ||
+    clean.startsWith('169.254.')
   );
 }
 
@@ -71,7 +99,11 @@ async function resolveGeoLocation(redis: RedisService, ip: string, cfCountry?: s
     }
   }
 
-  const cacheKey = isPrivateOrLocalIp(ip) ? '__LOCAL_WAN__' : ip;
+  if (isPrivateOrLocalIp(ip)) {
+    return { code: 'LOCAL', label: 'Local Network' };
+  }
+
+  const cacheKey = ip;
 
   // L1 In-Memory Fast Cache lookup
   const now = Date.now();
@@ -85,16 +117,20 @@ async function resolveGeoLocation(redis: RedisService, ip: string, cfCountry?: s
     const cached = await redis.client.get(redisGeoKey);
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (geoCache.size > 10000) geoCache.clear();
-      geoCache.set(cacheKey, { ...parsed, expiresAt: now + 3600_000 });
+      putGeoCache(cacheKey, { ...parsed, expiresAt: now + 3600_000 });
       return parsed;
     }
   } catch {}
 
+  // Check circuit breaker before external HTTP call
+  if (now < geoCircuitOpenUntil) {
+    return { code: 'XX', label: 'Unknown' };
+  }
+
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2000);
-    const target = cacheKey === '__LOCAL_WAN__' ? '' : encodeURIComponent(ip.replace(/^::ffff:/, ''));
+    const timer = setTimeout(() => controller.abort(), 1200);
+    const target = encodeURIComponent(ip.replace(/^::ffff:/, ''));
     const res = await fetch(`http://ip-api.com/json/${target}?fields=status,country,countryCode,regionName,city`, {
       signal: controller.signal,
     });
@@ -108,21 +144,28 @@ async function resolveGeoLocation(redis: RedisService, ip: string, cfCountry?: s
         city?: string;
       };
       if (data?.status === 'success' && data.countryCode) {
+        geoCircuitFailures = 0;
         const code = data.countryCode.slice(0, 8).toUpperCase();
         const place = data.city || data.regionName;
         const label = place && data.country ? `${place}, ${data.country} (${code})` : `${data.country || code} (${code})`;
         const result = { code, label };
         await redis.client.setex(redisGeoKey, 7 * 86400, JSON.stringify(result)).catch(() => {});
-        if (geoCache.size > 10000) geoCache.clear();
-        geoCache.set(cacheKey, { ...result, expiresAt: now + 3600_000 });
+        putGeoCache(cacheKey, { ...result, expiresAt: now + 3600_000 });
         return result;
       }
     }
+    geoCircuitFailures++;
+    if (geoCircuitFailures >= GEO_CIRCUIT_MAX_FAILURES) {
+      geoCircuitOpenUntil = Date.now() + GEO_CIRCUIT_COOLDOWN_MS;
+    }
   } catch {
-    // fallback if offline
+    geoCircuitFailures++;
+    if (geoCircuitFailures >= GEO_CIRCUIT_MAX_FAILURES) {
+      geoCircuitOpenUntil = Date.now() + GEO_CIRCUIT_COOLDOWN_MS;
+    }
   }
 
-  return { code: 'IN', label: 'India (IN)' };
+  return { code: 'XX', label: 'Unknown' };
 }
 
 @Processor(QueueNames.CLICKS, { concurrency: env.CLICK_WORKER_CONCURRENCY })
@@ -156,11 +199,11 @@ export class ClickProcessor extends WorkerHost {
 
         const countryCode = geo.code;
 
-        // Redis atomic unique-visitor check (0 DB queries on clicks table)
+        // Redis atomic unique-visitor check via HyperLogLog (12KB constant memory per link/day instead of MBs)
         let isUniqueToday = false;
         if (!uaInfo.isBot) {
           const visitKey = `visited:${data.linkId}:${dateStr}`;
-          const isNewVisitor = await this.redis.client.sadd(visitKey, visitorHash);
+          const isNewVisitor = await this.redis.client.pfadd(visitKey, visitorHash);
           if (isNewVisitor === 1) {
             await this.redis.client.expire(visitKey, 86400 * 2); // 48h TTL
             isUniqueToday = true;
@@ -171,16 +214,6 @@ export class ClickProcessor extends WorkerHost {
           `INSERT INTO clicks (link_id, tenant_id, clicked_at, visitor_hash, device, browser, os, country, referrer, is_bot) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
           [data.linkId, data.tenantId, clickedAt, visitorHash, uaInfo.device, uaInfo.browser, uaInfo.os, countryCode, data.referrer || null, uaInfo.isBot]
         );
-
-        if (!uaInfo.isBot) {
-          const linkUpdateRes = await client.query(`UPDATE links SET click_count = click_count + 1 WHERE id = $1 RETURNING click_count, max_clicks`, [data.linkId]);
-          if (linkUpdateRes.rowCount && linkUpdateRes.rowCount > 0) {
-            const l = linkUpdateRes.rows[0];
-            if (l.max_clicks && Number(l.click_count) >= Number(l.max_clicks)) {
-              await client.query(`UPDATE links SET status = 'expired' WHERE id = $1`, [data.linkId]);
-            }
-          }
-        }
 
         const deviceKey = uaInfo.device;
         const osKey = uaInfo.os;
@@ -259,6 +292,20 @@ export class ClickProcessor extends WorkerHost {
           );
         }
 
+        // Atomic link click_count and status update at the end of transaction (minimizes row lock duration)
+        if (!uaInfo.isBot) {
+          await client.query(
+            `UPDATE links 
+             SET click_count = click_count + 1,
+                 status = CASE 
+                   WHEN max_clicks IS NOT NULL AND (click_count + 1) >= max_clicks THEN 'expired'
+                   ELSE status
+                 END
+             WHERE id = $1`,
+            [data.linkId]
+          );
+        }
+
         await client.query('COMMIT');
       } catch (err) {
         await client.query('ROLLBACK');
@@ -266,6 +313,24 @@ export class ClickProcessor extends WorkerHost {
       } finally {
         client.release();
       }
+    }
+  }
+
+  @OnWorkerEvent('failed')
+  async onFailed(job: Job<ClickIngestJobData, any, string>, err: Error) {
+    if (job.attemptsMade >= (job.opts.attempts || 3)) {
+      try {
+        await this.redis.client.lpush(
+          'queue:clicks:dlq',
+          JSON.stringify({
+            jobId: job.id,
+            data: job.data,
+            error: err.message,
+            failedAt: new Date().toISOString(),
+          })
+        );
+        await this.redis.client.ltrim('queue:clicks:dlq', 0, 9999);
+      } catch {}
     }
   }
 }

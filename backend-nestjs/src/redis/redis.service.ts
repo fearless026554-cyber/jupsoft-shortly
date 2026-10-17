@@ -67,6 +67,40 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await pipeline.exec();
   }
 
+  /**
+   * Atomically increment click counter. If the key doesn't exist yet,
+   * sets the counter to (initialClicks + 1) with the specified TTL in seconds.
+   * Eliminates the race condition where concurrent requests could seed initialClicks multiple times.
+   */
+  async incrementClickCounterAtomic(
+    key: string,
+    initialClicks: number,
+    ttlSec: number
+  ): Promise<number> {
+    const luaScript = `
+      local key = KEYS[1]
+      local initialClicks = tonumber(ARGV[1])
+      local ttl = tonumber(ARGV[2])
+
+      if redis.call("EXISTS", key) == 0 then
+        local newClicks = initialClicks + 1
+        redis.call("SET", key, newClicks, "EX", ttl)
+        return newClicks
+      else
+        return redis.call("INCR", key)
+      end
+    `;
+
+    const result = await this.client.eval(
+      luaScript,
+      1,
+      key,
+      Math.max(0, initialClicks || 0),
+      Math.max(60, ttlSec)
+    );
+    return Number(result);
+  }
+
   async getDomainByHostname(rawHostname: string): Promise<Domain | null> {
     if (!rawHostname || typeof rawHostname !== 'string') return null;
 
@@ -90,31 +124,49 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       } catch {}
     }
 
-    const res = await this.db.pool.query(
-      `SELECT id, type, tenant_id FROM domains WHERE hostname = $1 AND verification_status = 'verified'`,
-      [hostname]
-    );
-
-    let domainRecord: Domain | null = null;
-
-    if (res.rowCount && res.rowCount > 0) {
-      domainRecord = {
-        id: res.rows[0].id,
-        type: res.rows[0].type,
-        tenantId: res.rows[0].tenant_id,
-      } as Domain;
-    } else if (isDefaultHost) {
-      let defaultRes = await this.db.pool.query(
-        `SELECT id, type, tenant_id FROM domains WHERE id = $1`,
-        [env.DEFAULT_DOMAIN_ID]
+    const domainRecord = await this.db.withSuperAdminContext(async (client) => {
+      const res = await client.query(
+        `SELECT id, type, tenant_id FROM domains WHERE hostname = $1 AND verification_status = 'verified'`,
+        [hostname]
       );
-      if (defaultRes.rowCount === 0) {
-        defaultRes = await this.db.pool.query(
-          `SELECT id, type, tenant_id FROM domains ORDER BY created_at ASC LIMIT 1`
-        );
+
+      if (res.rowCount && res.rowCount > 0) {
+        return {
+          id: res.rows[0].id,
+          type: res.rows[0].type,
+          tenantId: res.rows[0].tenant_id,
+        } as Domain;
       }
-      domainRecord = (defaultRes.rows[0] as Domain) || { id: env.DEFAULT_DOMAIN_ID, type: 'internal', tenantId: null };
-    }
+
+      if (isDefaultHost) {
+        const defaultRes = await client.query(
+          `SELECT id, type, tenant_id FROM domains WHERE id = $1 LIMIT 1`,
+          [env.DEFAULT_DOMAIN_ID]
+        );
+        if (defaultRes.rowCount && defaultRes.rowCount > 0) {
+          return {
+            id: defaultRes.rows[0].id,
+            type: defaultRes.rows[0].type,
+            tenantId: defaultRes.rows[0].tenant_id,
+          } as Domain;
+        }
+
+        const fallbackRes = await client.query(
+          `SELECT id, type, tenant_id FROM domains WHERE type = 'internal' OR type = 'system' LIMIT 1`
+        );
+        if (fallbackRes.rowCount && fallbackRes.rowCount > 0) {
+          return {
+            id: fallbackRes.rows[0].id,
+            type: fallbackRes.rows[0].type,
+            tenantId: fallbackRes.rows[0].tenant_id,
+          } as Domain;
+        }
+
+        return { id: env.DEFAULT_DOMAIN_ID, type: 'internal', tenantId: null } as Domain;
+      }
+
+      return null;
+    });
 
     if (domainRecord) {
       await this.client.setex(cacheKey, CACHE_TTL.DOMAIN_METADATA_SEC, JSON.stringify(domainRecord));

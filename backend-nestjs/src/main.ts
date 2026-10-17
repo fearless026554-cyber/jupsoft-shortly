@@ -123,9 +123,20 @@ async function bootstrap() {
     })
   );
 
-  // Security Headers (M5: HSTS enabled in production; disabled in dev/local to prevent forcing https on local custom domains)
+  // Security Headers (M5: HSTS and CSP configured; CSP enabled in production for HTML error templates & security)
   await app.register(helmet, {
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: env.NODE_ENV === 'production' ? {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+      },
+    } : false,
     hsts: env.NODE_ENV === 'production',
   });
 
@@ -140,9 +151,8 @@ async function bootstrap() {
   
   app.useGlobalFilters(new ErrorHandlerFilter());
   
-  // Register Fastify hook & middleware to populate req.geoUa on all incoming requests
+  // Register Fastify hook to populate req.geoUa on all incoming requests (native Fastify hook)
   const geoMiddleware = new GeoUAMiddleware();
-  app.use((req: any, res: any, next: any) => geoMiddleware.use(req, res, next));
   const fastifyInstance = app.getHttpAdapter().getInstance();
   fastifyInstance.addHook('onRequest', async (req: any, reply: any) => {
     geoMiddleware.use(req, reply, () => {});

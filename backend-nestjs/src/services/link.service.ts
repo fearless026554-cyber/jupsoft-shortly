@@ -107,22 +107,25 @@ export class LinkService {
           counter = parseInt(match[2], 10) + 1;
         }
 
+        // Single query fetching all taken candidates matching baseAlias-% to avoid N sequential queries
+        const pattern = `${baseAlias}-%`;
+        const existingCandidatesRes = await client.query(
+          `SELECT LOWER(COALESCE(alias, short_code)) as code FROM links 
+           WHERE ((domain_id = $1) OR (tenant_id = $2))
+             AND (LOWER(alias) LIKE $3 OR LOWER(short_code) LIKE $3)`,
+          [domainId, tenantId, pattern.toLowerCase()]
+        );
+
+        const takenCodes = new Set<string>(existingCandidatesRes.rows.map((r: any) => r.code));
         let available = false;
-        while (!available && counter <= 100) {
+        while (counter <= 1000) {
           const candidate = `${baseAlias}-${counter}`;
-          const checkRes = await client.query(
-            `SELECT id FROM links 
-             WHERE (domain_id = $1 AND (short_code = $2 OR LOWER(alias) = LOWER($2)))
-                OR (tenant_id = $3 AND (short_code = $2 OR LOWER(alias) = LOWER($2)))
-             LIMIT 1`,
-            [domainId, candidate, tenantId]
-          );
-          if (checkRes.rowCount === 0) {
+          if (!takenCodes.has(candidate.toLowerCase())) {
             sanitizedAlias = candidate;
             available = true;
-          } else {
-            counter++;
+            break;
           }
+          counter++;
         }
 
         if (!available) {

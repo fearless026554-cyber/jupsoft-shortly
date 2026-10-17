@@ -19,6 +19,7 @@ export type ActiveModule =
   | 'outcomes'
   | 'qr'
   | 'analytics'
+  | 'settings'
   | 'tenants'
   | 'users'
   | 'domains'
@@ -58,17 +59,6 @@ export const Rail: React.FC<RailProps> = ({
     ? 'apikeys'
     : null;
 
-  const defaultAdminPath =
-    defaultAdminTab === 'tenants'
-      ? '/tenants'
-      : defaultAdminTab === 'users'
-      ? '/users'
-      : defaultAdminTab === 'domains'
-      ? '/domains'
-      : defaultAdminTab === 'abuse'
-      ? '/abuse'
-      : '/apikeys';
-
   const allNavItems: {
     id: ActiveModule;
     path: string;
@@ -105,17 +95,19 @@ export const Rail: React.FC<RailProps> = ({
     ...(defaultAdminTab
       ? [
           {
-            id: defaultAdminTab,
-            path: defaultAdminPath,
+            id: 'settings' as ActiveModule,
+            path: '/settings',
             label: 'Settings',
             icon: Settings,
             badge: abuseCount > 0 ? abuseCount : null,
             isActive:
+              activeTab === 'settings' ||
               activeTab === 'tenants' ||
               activeTab === 'users' ||
               activeTab === 'domains' ||
               activeTab === 'abuse' ||
-              activeTab === 'apikeys',
+              activeTab === 'apikeys' ||
+              activeTab === 'docs',
             visible: true,
           },
         ]

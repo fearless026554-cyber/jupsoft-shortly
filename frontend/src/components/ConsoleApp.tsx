@@ -15,20 +15,13 @@ import { BulkStudioView } from './views/BulkStudioView';
 import { OutcomesView } from './views/OutcomesView';
 import { QrStudioView } from './views/QrStudioView';
 import { AnalyticsView } from './views/AnalyticsView';
-import { TenantsView } from './views/TenantsView';
-import { UsersView } from './views/UsersView';
-import { DomainsView } from './views/DomainsView';
-import { AbuseView } from './views/AbuseView';
-import { ApiKeysView } from './views/ApiKeysView';
-import { ApiDocsView } from './views/ApiDocsView';
+import { SettingsView, SettingsTab } from './views/SettingsView';
 import { HelpGuideView } from './views/HelpGuideView';
 import { ProfileView } from './views/ProfileView';
 
 // Modals
 import { CreateLinkModal } from './modals/CreateLinkModal';
 import { CreateTenantModal } from './modals/CreateTenantModal';
-import { InviteUserModal } from './modals/InviteUserModal';
-import { CreateApiKeyModal } from './modals/CreateApiKeyModal';
 import { PermanentLinkDeleteModal } from './modals/PermanentLinkDeleteModal';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { Permissions, isPermanentLink } from '../utils/rbac';
@@ -41,6 +34,7 @@ const MODULE_ROUTES: Record<ActiveModule, string> = {
   outcomes: '/outcomes',
   qr: '/qr',
   analytics: '/reports',
+  settings: '/settings',
   tenants: '/tenants',
   users: '/users',
   domains: '/domains',
@@ -60,6 +54,7 @@ const ROUTE_TO_MODULE: Record<string, ActiveModule> = {
   '/qr': 'qr',
   '/reports': 'analytics',
   '/analytics': 'analytics',
+  '/settings': 'settings',
   '/tenants': 'tenants',
   '/users': 'users',
   '/domains': 'domains',
@@ -136,6 +131,7 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
 
   const isTabAllowed = (tab: ActiveModule, role?: string): boolean => {
     switch (tab) {
+      case 'settings':
       case 'tenants':
         return Permissions.canManageTenants(role);
       case 'users':
@@ -249,8 +245,6 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
   // Modals Open State
   const [isCreateLinkModalOpen, setIsCreateLinkModalOpen] = useState(false);
   const [isCreateTenantModalOpen, setIsCreateTenantModalOpen] = useState(false);
-  const [isInviteUserModalOpen, setIsInviteUserModalOpen] = useState(false);
-  const [isCreateApiKeyModalOpen, setIsCreateApiKeyModalOpen] = useState(false);
   
   // Global Confirm Dialog State
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -748,93 +742,6 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
             </div>
           )}
 
-          {/* Contextual Sub-Tab Bar for Settings Modules */}
-          {(activeTab === 'tenants' || activeTab === 'users' || activeTab === 'domains' || activeTab === 'abuse' || activeTab === 'apikeys' || activeTab === 'docs') && (
-            <div className="mb-3.5 flex items-center gap-1 border-b border-slate-200 pb-2 overflow-x-auto">
-              {Permissions.canManageTenants(currentUser?.role) && (
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('tenants')}
-                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'tenants'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
-                  }`}
-                >
-                  Tenants & Workspaces
-                </button>
-              )}
-              {Permissions.canViewUsers(currentUser?.role) && (
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('users')}
-                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'users'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
-                  }`}
-                >
-                  Users & Roles
-                </button>
-              )}
-              {Permissions.canManageDomains(currentUser?.role) && (
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('domains')}
-                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'domains'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
-                  }`}
-                >
-                  Custom Domains
-                </button>
-              )}
-              {Permissions.canManageAbuse(currentUser?.role) && (
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('abuse')}
-                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
-                    activeTab === 'abuse'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
-                  }`}
-                >
-                  <span>Abuse & Security</span>
-                  {abuseCount > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-mono">
-                      {abuseCount}
-                    </span>
-                  )}
-                </button>
-              )}
-              {Permissions.canManageApiKeys(currentUser?.role) && (
-                <button
-                  type="button"
-                  onClick={() => handleNavigate('apikeys')}
-                  className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer whitespace-nowrap ${
-                    activeTab === 'apikeys'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
-                  }`}
-                >
-                  API Keys
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => handleNavigate('docs')}
-                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition cursor-pointer whitespace-nowrap ${
-                  activeTab === 'docs'
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
-                }`}
-              >
-                API Reference
-              </button>
-            </div>
-          )}
-
           {/* Module 1: Dashboard Home */}
           {activeTab === 'overview' && (
             <DashboardView
@@ -905,62 +812,31 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
             />
           )}
 
-          {/* Module 7: Super Admin Tenants Directory */}
-          {activeTab === 'tenants' && (
-            <TenantsView
+          {/* Module: Unified Enterprise Settings Workspace (Blogary Architecture) */}
+          {(activeTab === 'settings' ||
+            activeTab === 'tenants' ||
+            activeTab === 'users' ||
+            activeTab === 'domains' ||
+            activeTab === 'abuse' ||
+            activeTab === 'apikeys' ||
+            activeTab === 'docs') && (
+            <SettingsView
+              initialSubTab={
+                activeTab === 'settings' ? 'tenants' : (activeTab as SettingsTab)
+              }
               tenants={tenants}
               activeTenantId={activeTenantId}
-              onSelectTenant={(id) => {
-                setActiveTenantId(id);
-                handleNavigate('links');
-              }}
-              onOpenCreateTenantModal={() => setIsCreateTenantModalOpen(true)}
-              onRefreshTenants={() => {
-                clearApiCache('tenants');
-                loadTenants();
-              }}
-            />
-          )}
-
-          {/* Module 8: Users & RBAC */}
-          {activeTab === 'users' && (
-            <UsersView
-              onOpenInviteModal={() => setIsInviteUserModalOpen(true)}
+              setActiveTenantId={setActiveTenantId}
+              onRefreshTenants={loadTenants}
               currentUser={currentUser}
-              activeTenantId={activeTenantId}
-            />
-          )}
-
-          {/* Module 9: Domains & TRAI DLT */}
-          {activeTab === 'domains' && <DomainsView currentUser={currentUser} activeTenantId={activeTenantId} />}
-
-          {/* Module 10: Abuse Quarantine & Killswitch */}
-          {activeTab === 'abuse' && (
-            <AbuseView
+              abuseCount={abuseCount}
               onRefreshBadge={() => setAbuseCount((prev) => Math.max(0, prev - 1))}
-              currentUser={currentUser}
+              onSubTabChange={(subTab) => handleNavigate(subTab as ActiveModule)}
             />
           )}
 
-          {/* Module 11: Developer API Keys */}
-          {activeTab === 'apikeys' && (
-            <ApiKeysView
-              onOpenCreateKeyModal={() => setIsCreateApiKeyModalOpen(true)}
-              onNavigateToDocs={() => handleNavigate('docs')}
-              currentUser={currentUser}
-            />
-          )}
-
-          {/* Module 12: Help & TRAI Knowledge Base */}
+          {/* Module: Help & TRAI Knowledge Base */}
           {activeTab === 'help' && <HelpGuideView />}
-
-          {/* Module 13: Dedicated Developer API Documentation */}
-          {activeTab === 'docs' && (
-            <ApiDocsView
-              onNavigateToApiKeys={() => handleNavigate('apikeys')}
-              currentUser={currentUser}
-            />
-          )}
 
           {/* Module 14: Operator Account & Security Profile */}
           {activeTab === 'profile' && (
@@ -1012,23 +888,6 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
           }
           loadData();
         }}
-      />
-
-      <InviteUserModal
-        isOpen={isInviteUserModalOpen}
-        onClose={() => setIsInviteUserModalOpen(false)}
-        onUserInvited={() => {
-          loadData();
-        }}
-        currentUser={currentUser}
-        activeTenantId={activeTenantId}
-        tenants={tenants}
-      />
-
-      <CreateApiKeyModal
-        isOpen={isCreateApiKeyModalOpen}
-        onClose={() => setIsCreateApiKeyModalOpen(false)}
-        onKeyCreated={() => {}}
       />
 
       {/* 5. Zoho Destructive Action Confirm Dialog */}
