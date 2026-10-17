@@ -28,9 +28,11 @@ import { TableSkeleton } from '../ui/Skeleton';
 
 interface AnalyticsViewProps {
   links: LinkItem[];
+  activeTenantId?: string;
+  activeTenantName?: string;
 }
 
-export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
+export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links, activeTenantId, activeTenantName }) => {
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d' | '90d' | 'all'>('30d');
@@ -64,7 +66,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
         startDate = toLocalDateString(d);
       }
 
-      const data = await api.getAnalyticsSummary(startDate, endDate);
+      const targetTenant = activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined;
+      const data = await api.getAnalyticsSummary(startDate, endDate, targetTenant);
       if (data) setSummary(data);
     } catch (err) {
       console.error('Failed to load analytics summary:', err);
@@ -75,7 +78,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ links }) => {
 
   useEffect(() => {
     loadData(timeRange);
-  }, [timeRange]);
+  }, [timeRange, activeTenantId]);
 
   const totalClicks = Number(
     summary?.total_clicks ?? links.reduce((s, l) => s + Number(l.click_count || 0), 0)

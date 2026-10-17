@@ -27,6 +27,8 @@ interface DashboardViewProps {
   onSelectDrawerLink: (link: LinkItem) => void;
   onOpenCreateModal: () => void;
   currentUser?: any;
+  activeTenantId?: string;
+  activeTenantName?: string;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -37,6 +39,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectDrawerLink,
   onOpenCreateModal,
   currentUser,
+  activeTenantId,
+  activeTenantName,
 }) => {
   const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d' | 'ytd'>('30d');
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -67,13 +71,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       startDate = `${now.getFullYear()}-01-01`;
     }
 
+    const targetTenant = activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined;
     api
-      .getAnalyticsSummary(startDate, endDate)
+      .getAnalyticsSummary(startDate, endDate, targetTenant)
       .then((data) => {
         if (data) setSummary(data);
       })
       .catch(() => {});
-  }, [timeRange]);
+  }, [timeRange, activeTenantId]);
 
   const isLinkExpired = (link: LinkItem) => {
     if (link.status === 'expired') return true;
@@ -118,6 +123,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <h1 className="text-sm font-semibold text-slate-900">
             Dashboard
           </h1>
+          {activeTenantName && activeTenantId !== 'all' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+              {activeTenantName}
+            </span>
+          )}
         </div>
 
         {/* Time Segmented Selector */}

@@ -123,40 +123,63 @@ export class OutcomeService {
    */
   public static async getAttributionReport(
     client: PoolClient,
-    tenantId: string,
+    tenantId?: string,
     linkId?: string
   ): Promise<any> {
     if (linkId) {
-      const res = await client.query(
-        `SELECT 
-          l.id AS link_id,
-          l.short_code,
-          l.external_ref,
-          l.click_count,
-          COUNT(o.id) AS outcome_count,
-          COALESCE(SUM(o.value), 0) AS total_revenue_attributed,
-          (SELECT COUNT(*) FROM outcomes WHERE tenant_id = $1 AND link_id IS NULL) AS unmatched_outcomes
-         FROM links l
-         LEFT JOIN outcomes o ON l.id = o.link_id
-         WHERE l.tenant_id = $1 AND l.id = $2
-         GROUP BY l.id, l.short_code, l.external_ref, l.click_count`,
-        [tenantId, linkId]
-      );
+      const query = tenantId
+        ? `SELECT 
+            l.id AS link_id,
+            l.short_code,
+            l.external_ref,
+            l.click_count,
+            COUNT(o.id) AS outcome_count,
+            COALESCE(SUM(o.value), 0) AS total_revenue_attributed,
+            (SELECT COUNT(*) FROM outcomes WHERE tenant_id = $1 AND link_id IS NULL) AS unmatched_outcomes
+           FROM links l
+           LEFT JOIN outcomes o ON l.id = o.link_id
+           WHERE l.tenant_id = $1 AND l.id = $2
+           GROUP BY l.id, l.short_code, l.external_ref, l.click_count`
+        : `SELECT 
+            l.id AS link_id,
+            l.short_code,
+            l.external_ref,
+            l.click_count,
+            COUNT(o.id) AS outcome_count,
+            COALESCE(SUM(o.value), 0) AS total_revenue_attributed,
+            (SELECT COUNT(*) FROM outcomes WHERE link_id IS NULL) AS unmatched_outcomes
+           FROM links l
+           LEFT JOIN outcomes o ON l.id = o.link_id
+           WHERE l.id = $1
+           GROUP BY l.id, l.short_code, l.external_ref, l.click_count`;
+      const params = tenantId ? [tenantId, linkId] : [linkId];
+      const res = await client.query(query, params);
       return res.rows[0] || null;
     }
 
-    // Tenant aggregate attribution without JOIN fan-out (Fix 22 & Fix 29)
-    const res = await client.query(
-      `SELECT 
-        (SELECT COUNT(*) FROM links WHERE tenant_id = $1) AS total_links,
-        (SELECT COALESCE(SUM(click_count), 0) FROM links WHERE tenant_id = $1) AS total_clicks,
-        (SELECT COUNT(*) FROM outcomes WHERE tenant_id = $1) AS total_outcomes,
-        (SELECT COUNT(*) FROM outcomes WHERE tenant_id = $1 AND link_id IS NOT NULL) AS matched_outcomes,
-        (SELECT COUNT(*) FROM outcomes WHERE tenant_id = $1 AND link_id IS NULL) AS unmatched_outcomes,
-        (SELECT COALESCE(SUM(value), 0) FROM outcomes WHERE tenant_id = $1 AND link_id IS NOT NULL) AS total_revenue_attributed,
-        (SELECT COALESCE(SUM(value), 0) FROM outcomes WHERE tenant_id = $1) AS total_outcome_revenue`,
-      [tenantId]
-    );
+    // Tenant aggregate attribution or platform global aggregate
+    const res = tenantId
+      ? await client.query(
+          `SELECT 
+            (SELECT COUNT(*) FROM links WHERE tenant_id = $1) AS total_links,
+            (SELECT COALESCE(SUM(click_count), 0) FROM links WHERE tenant_id = $1) AS total_clicks,
+            (SELECT COUNT(*) FROM outcomes WHERE tenant_id = $1) AS total_outcomes,
+            (SELECT COUNT(*) FROM outcomes WHERE tenant_id = $1 AND link_id IS NOT NULL) AS matched_outcomes,
+            (SELECT COUNT(*) FROM outcomes WHERE tenant_id = $1 AND link_id IS NULL) AS unmatched_outcomes,
+            (SELECT COALESCE(SUM(value), 0) FROM outcomes WHERE tenant_id = $1 AND link_id IS NOT NULL) AS total_revenue_attributed,
+            (SELECT COALESCE(SUM(value), 0) FROM outcomes WHERE tenant_id = $1) AS total_outcome_revenue`,
+          [tenantId]
+        )
+      : await client.query(
+          `SELECT 
+            (SELECT COUNT(*) FROM links) AS total_links,
+            (SELECT COALESCE(SUM(click_count), 0) FROM links) AS total_clicks,
+            (SELECT COUNT(*) FROM outcomes) AS total_outcomes,
+            (SELECT COUNT(*) FROM outcomes WHERE link_id IS NOT NULL) AS matched_outcomes,
+            (SELECT COUNT(*) FROM outcomes WHERE link_id IS NULL) AS unmatched_outcomes,
+            (SELECT COALESCE(SUM(value), 0) FROM outcomes WHERE link_id IS NOT NULL) AS total_revenue_attributed,
+            (SELECT COALESCE(SUM(value), 0) FROM outcomes) AS total_outcome_revenue`
+        );
 
     return res.rows[0];
   }

@@ -462,10 +462,14 @@ export const api = {
   },
 
   // Outcomes
-  async getOutcomesReport() {
-    return dedupeGet(`${API_BASE_URL}/outcomes/report`, async () => {
+  async getOutcomesReport(tenantId?: string) {
+    const params = new URLSearchParams();
+    if (tenantId && tenantId !== 'all') params.set('tenantId', tenantId);
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const url = `${API_BASE_URL}/outcomes/report${queryString}`;
+    return dedupeGet(url, async () => {
       try {
-        const res = await secureFetch(`${API_BASE_URL}/outcomes/report`, { headers });
+        const res = await secureFetch(url, { headers });
         const json = await res.json();
         return json.success ? json.data : null;
       } catch {
@@ -490,7 +494,7 @@ export const api = {
     });
   },
 
-  async recordOutcome(data: { externalRef: string; outcomeType: string; value: number }) {
+  async recordOutcome(data: { externalRef: string; outcomeType: string; value: number; tenantId?: string }) {
     clearApiCache('outcomes');
     const res = await secureFetch(`${API_BASE_URL}/outcomes`, {
       method: 'POST',

@@ -19,6 +19,7 @@ const outcomeEventSchema = z
     value: z.number().nonnegative().optional(),
     occurredAt: z.string().datetime().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
+    tenantId: z.string().uuid().optional(),
   })
   .refine((data) => data.linkId || data.externalRef, {
     message: 'Either linkId or externalRef must be provided',
@@ -39,7 +40,11 @@ export class OutcomesController {
     const dto = outcomeEventSchema.parse(req.body);
     const auth = (req as any).auth;
     const geoUa = getGeoUa(req);
-    const tenantId = auth.tenantId;
+    const isSuperAdmin =
+      auth.role === 'super_admin' ||
+      auth.scopes?.includes('*') ||
+      auth.scopes?.includes('super_admin');
+    const tenantId = isSuperAdmin && dto.tenantId ? dto.tenantId : auth.tenantId;
 
     const result = await this.db.withTenantContext(tenantId, async (client) => {
       const recorded = await OutcomeService.recordOutcome(client, tenantId, dto);
@@ -120,19 +125,43 @@ export class OutcomesController {
 
   @Get('report')
   @RequireScope(ApiScopes.ANALYTICS_READ)
-  async getReport(@Query('linkId') linkId: string, @Req() req: FastifyRequest, @Res() reply: FastifyReply) {
+  async getReport(
+    @Query('linkId') linkId: string,
+    @Query('tenantId') queryTenantId: string,
+    @Req() req: FastifyRequest,
+    @Res() reply: FastifyReply
+  ) {
     const auth = (req as any).auth;
+    const isSuperAdmin =
+      auth.role === 'super_admin' ||
+      auth.scopes?.includes('*') ||
+      auth.scopes?.includes('super_admin');
     const tenantId = auth.tenantId;
 
-    const cacheKey = `outcomes:report:${tenantId}:${linkId || 'all'}`;
+    let targetTenantId: string | undefined;
+    if (isSuperAdmin) {
+      if (queryTenantId && queryTenantId !== 'all') {
+        targetTenantId = queryTenantId;
+      } else {
+        targetTenantId = undefined;
+      }
+    } else {
+      targetTenantId = tenantId;
+    }
+
+    const cacheKey = `outcomes:report:${targetTenantId || 'global'}:${linkId || 'all'}`;
     const cached = await this.redis.client.get(cacheKey);
     if (cached) {
       return reply.send({ success: true, data: JSON.parse(cached) });
     }
 
-    const report = await this.db.withTenantContext(tenantId, async (client) => {
-      return OutcomeService.getAttributionReport(client, tenantId, linkId);
-    });
+    const report = isSuperAdmin && !targetTenantId
+      ? await this.db.withSuperAdminContext(async (client) => {
+          return OutcomeService.getAttributionReport(client, undefined, linkId);
+        })
+      : await this.db.withTenantContext(targetTenantId || tenantId, async (client) => {
+          return OutcomeService.getAttributionReport(client, targetTenantId || tenantId, linkId);
+        });
 
     if (report) {
       await this.redis.client.setex(cacheKey, 60, JSON.stringify(report));

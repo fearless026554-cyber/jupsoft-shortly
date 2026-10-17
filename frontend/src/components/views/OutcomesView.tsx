@@ -23,9 +23,16 @@ import { Permissions } from '../../utils/rbac';
 interface OutcomesViewProps {
   links: LinkItem[];
   currentUser?: any;
+  activeTenantId?: string;
+  activeTenantName?: string;
 }
 
-export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }) => {
+export const OutcomesView: React.FC<OutcomesViewProps> = ({
+  links,
+  currentUser,
+  activeTenantId,
+  activeTenantName,
+}) => {
   const [report, setReport] = useState<{
     total_links: string | number;
     total_clicks: string | number;
@@ -53,10 +60,12 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
   const pagination = usePagination(ledgerEvents, 10);
   const [highlightedOutcomeId, setHighlightedOutcomeId] = useState<string | null>(null);
 
+  const targetTenant = activeTenantId && activeTenantId !== 'all' ? activeTenantId : undefined;
+
   const loadReport = async () => {
     setLoading(true);
     try {
-      const data = await api.getOutcomesReport();
+      const data = await api.getOutcomesReport(targetTenant);
       if (data) {
         setReport(data);
       }
@@ -69,7 +78,7 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
 
   const loadOutcomes = async () => {
     try {
-      const data = await api.getOutcomes();
+      const data = await api.getOutcomes(50, targetTenant);
       const formatted = (Array.isArray(data) ? data : []).map((d: any) => ({
         id: d.id,
         externalRef: d.external_ref,
@@ -93,7 +102,7 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
   useEffect(() => {
     loadReport();
     loadOutcomes();
-  }, []);
+  }, [activeTenantId]);
 
   const handleRecordOutcome = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,6 +116,7 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
         externalRef: externalRef.trim(),
         outcomeType,
         value: Number(value),
+        tenantId: targetTenant,
       });
 
       if (res.success) {
@@ -171,7 +181,15 @@ export const OutcomesView: React.FC<OutcomesViewProps> = ({ links, currentUser }
     <div className="space-y-4 w-full">
       {/* Header */}
       <div className="bg-white px-4 py-3 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-base font-semibold text-slate-900">Outcomes</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-base font-semibold text-slate-900">Outcomes</h1>
+          {activeTenantName && activeTenantId !== 'all' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+              {activeTenantName}
+            </span>
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
           <button

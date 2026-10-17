@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { api, clearApiCache, LinkItem, TenantItem, getAuthToken, setAuthToken, getStoredUser, setStoredUser } from '../api';
 
 // Layout Components
@@ -121,6 +121,11 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
       localStorage.setItem('jlmp_active_tenant_id', id);
     }
   };
+
+  const activeTenantName = useMemo(() => {
+    if (activeTenantId === 'all') return 'All Tenants';
+    return tenants.find((t) => t.id === activeTenantId)?.name;
+  }, [tenants, activeTenantId]);
 
   // Core Data State
   const [links, setLinks] = useState<LinkItem[]>([]);
@@ -840,6 +845,8 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
               onSelectDrawerLink={(link) => setDrawerLink(link)}
               onOpenCreateModal={() => setIsCreateLinkModalOpen(true)}
               currentUser={currentUser}
+              activeTenantId={activeTenantId}
+              activeTenantName={activeTenantName}
             />
           )}
 
@@ -871,7 +878,14 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
           {activeTab === 'bulk' && <BulkStudioView currentUser={currentUser} activeTenantId={activeTenantId} />}
 
           {/* Module 4: Outcomes & Fee Ledger */}
-          {activeTab === 'outcomes' && <OutcomesView links={links} currentUser={currentUser} />}
+          {activeTab === 'outcomes' && (
+            <OutcomesView
+              links={links}
+              currentUser={currentUser}
+              activeTenantId={activeTenantId}
+              activeTenantName={activeTenantName}
+            />
+          )}
 
           {/* Module 5: QR Code Studio */}
           {activeTab === 'qr' && (
@@ -883,7 +897,13 @@ export function ConsoleApp({ initialTab }: ConsoleAppProps) {
           )}
 
           {/* Module 6: Traffic Analytics & DPDP */}
-          {activeTab === 'analytics' && <AnalyticsView links={links} />}
+          {activeTab === 'analytics' && (
+            <AnalyticsView
+              links={links}
+              activeTenantId={activeTenantId}
+              activeTenantName={activeTenantName}
+            />
+          )}
 
           {/* Module 7: Super Admin Tenants Directory */}
           {activeTab === 'tenants' && (
